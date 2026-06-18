@@ -374,226 +374,135 @@ export default function InspectorPanel({
 
           <div className="flex-1 overflow-y-auto p-3.5 space-y-4 scrollbar-thin scrollbar-thumb-slate-800">
             {/* Details Tab */}
-            <Tabs.Content value="info" className="space-y-3 outline-hidden">
-              {/* Item type change */}
+            <Tabs.Content value="info" className="space-y-4 outline-hidden select-text">
+              {/* Item Type */}
               <div>
-                <label className="block text-[10px] font-mono text-slate-500 mb-1">Item Type</label>
-                <Select.Root
-                  value={item.itemType}
-                  onValueChange={val => handleFieldChange('itemType', val as ItemType)}
-                >
-                  <Select.Trigger className={`w-full flex items-center justify-between rounded border py-1 px-2 text-xs cursor-pointer outline-hidden ${getInputClass()}`}>
-                    <Select.Value />
-                    <Select.Icon>
-                      <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-                    </Select.Icon>
-                  </Select.Trigger>
-                  <Select.Portal>
-                    <Select.Content className={`z-50 rounded shadow-xl p-1 text-xs min-w-[140px] focus:outline-hidden border ${
-                      theme === 'code-light' ? 'bg-white border-[#e4e4e7] text-slate-850' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32] text-[#f8f8f2]' : 'bg-slate-900 border-slate-805 text-slate-300'
-                    }`}>
-                      <Select.Viewport>
-                        {(Object.keys(ITEM_TYPE_LABELS) as ItemType[]).map(key => (
-                          <Select.Item
-                            key={key}
-                            value={key}
-                            className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
-                              theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
-                            }`}
-                          >
-                            <Select.ItemText>{ITEM_TYPE_LABELS[key]}</Select.ItemText>
-                            <Select.ItemIndicator>
-                              <Check className="h-3 w-3 text-emerald-400" />
-                            </Select.ItemIndicator>
-                          </Select.Item>
-                        ))}
-                      </Select.Viewport>
-                    </Select.Content>
-                  </Select.Portal>
-                </Select.Root>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
+                <div className={`text-xs py-1 px-1.5 rounded font-medium ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
+                </div>
               </div>
 
               {/* Title */}
               <div>
-                <label className="block text-[10px] font-mono text-slate-500 mb-1">Title</label>
-                <textarea
-                  value={item.title}
-                  onChange={e => handleFieldChange('title', e.target.value)}
-                  rows={2}
-                  className={`w-full text-xs font-semibold rounded border py-1 px-2 focus:outline-hidden resize-none leading-normal ${getInputClass()}`}
-                />
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Title</label>
+                <div className={`text-xs font-semibold leading-relaxed break-words py-1.5 px-2 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-900' : 'bg-slate-950/65 text-slate-100'}`}>
+                  {item.title || 'Untitled'}
+                </div>
               </div>
 
               {/* Citekey section with conflict alert */}
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-mono text-slate-500">Citation Key</label>
+                  <label className="text-[10px] font-mono text-slate-550 mb-0.5">Citation Key</label>
                   {citekeyConflict && (
-                    <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1 border border-amber-500/20 rounded animate-pulse">
+                    <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1 border border-amber-500/20 rounded">
                       Conflict Detected!
                     </span>
                   )}
                 </div>
-                <input
-                  type="text"
-                  value={item.citekey || ''}
-                  onChange={e => handleFieldChange('citekey', e.target.value)}
-                  placeholder="e.g. author_title_year"
-                  className={`w-full rounded border font-mono text-[11px] py-1 px-1.5 focus:outline-hidden ${
-                    citekeyConflict 
-                      ? 'border-amber-500 text-amber-300 bg-slate-950/20' 
-                      : (theme === 'code-light' ? 'border-[#e4e4e7] bg-white text-slate-800 focus:border-blue-600' : theme === 'monokai' ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2] focus:border-[#a6e22e]' : 'border-slate-800 bg-slate-950 text-slate-350 focus:border-blue-600')
-                  }`}
-                />
+                <div className={`font-mono text-xs py-1 px-1.5 rounded ${citekeyConflict ? 'bg-amber-500/10 text-amber-300' : (theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-sky-400')}`}>
+                  {item.citekey || '—'}
+                </div>
               </div>
 
               {/* Creator / Authors Section */}
               <div>
-                <label className="block text-[10px] font-mono text-slate-500 mb-1">Creators / Authors</label>
-                <input
-                  type="text"
-                  value={creatorsText}
-                  onFocus={() => setIsEditingCreators(true)}
-                  onChange={e => setCreatorsText(e.target.value)}
-                  onBlur={() => {
-                    setIsEditingCreators(false);
-                    const parsed = deserializeCreators(creatorsText);
-                    handleFieldChange('creators', parsed);
-                  }}
-                  placeholder="LastName, FirstName; LastName, FirstName; ..."
-                  className={`w-full rounded border py-1.5 px-2 focus:outline-hidden font-sans text-xs ${getInputClass()}`}
-                />
-                <span className="text-[9px] font-mono text-slate-650 mt-1 block">
-                  Format: Last, First; Last, First
-                </span>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Creators / Authors</label>
+                <div className={`text-xs py-1.5 px-2 rounded break-words ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  {creatorsText || '—'}
+                </div>
               </div>
 
               {/* Standard Zotero bibliographic metadata boxes */}
-              <div className={`space-y-2 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
+              <div className={`space-y-3 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Publication Journal / Book</label>
-                  <input
-                    type="text"
-                    value={item.publicationTitle || ''}
-                    onChange={e => handleFieldChange('publicationTitle', e.target.value)}
-                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Date / Year</label>
-                    <input
-                      type="text"
-                      value={item.date || ''}
-                      onChange={e => handleFieldChange('date', e.target.value)}
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Pages</label>
-                    <input
-                      type="text"
-                      value={item.pages || ''}
-                      onChange={e => handleFieldChange('pages', e.target.value)}
-                      placeholder="e.g. 10-25"
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publication Journal / Book</label>
+                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    {item.publicationTitle || '—'}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Volume</label>
-                    <input
-                      type="text"
-                      value={item.volume || ''}
-                      onChange={e => handleFieldChange('volume', e.target.value)}
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Date / Year</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.date || '—'}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Issue</label>
-                    <input
-                      type="text"
-                      value={item.issue || ''}
-                      onChange={e => handleFieldChange('issue', e.target.value)}
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Pages</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.pages || '—'}
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">DOI</label>
-                  <input
-                    type="text"
-                    value={item.doi || ''}
-                    onChange={e => handleFieldChange('doi', e.target.value)}
-                    placeholder="e.g. 10.1000/xyz123"
-                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden font-mono text-[11px] ${getInputClass()}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">URL</label>
-                  <input
-                    type="text"
-                    value={item.url || ''}
-                    onChange={e => handleFieldChange('url', e.target.value)}
-                    placeholder="https://..."
-                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Publisher</label>
-                    <input
-                      type="text"
-                      value={item.publisher || ''}
-                      onChange={e => handleFieldChange('publisher', e.target.value)}
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Volume</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.volume || '—'}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Place</label>
-                    <input
-                      type="text"
-                      value={item.place || ''}
-                      onChange={e => handleFieldChange('place', e.target.value)}
-                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                    />
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Issue</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.issue || '—'}
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">ISBN / ISSN</label>
-                  <input
-                    type="text"
-                    value={item.isbn || item.issn || ''}
-                    onChange={e => handleFieldChange('isbn', e.target.value)}
-                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                  />
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">DOI</label>
+                  <div className={`font-mono text-[11px] py-1 px-1.5 rounded break-all ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    {item.doi || '—'}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Language</label>
-                  <input
-                    type="text"
-                    value={item.language || ''}
-                    onChange={e => handleFieldChange('language', e.target.value)}
-                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                  />
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">URL</label>
+                  <div className={`text-xs py-1 px-1.5 rounded break-all ${theme === 'code-light' ? 'bg-zinc-100 text-sky-600' : 'bg-slate-950/65 text-sky-400'}`}>
+                    {item.url ? (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.url}</a>
+                    ) : '—'}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publisher</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.publisher || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Place</label>
+                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                      {item.place || '—'}
+                    </div>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Abstract / Description Notes</label>
-                  <textarea
-                    value={item.abstractNote || ''}
-                    onChange={e => handleFieldChange('abstractNote', e.target.value)}
-                    rows={4}
-                    className={`w-full rounded border py-1 px-2 focus:outline-hidden leading-normal text-xs ${getInputClass()}`}
-                  />
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">ISBN / ISSN</label>
+                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    {item.isbn || item.issn || '—'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Language</label>
+                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    {item.language || '—'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Abstract / Description Notes</label>
+                  <div className={`text-xs py-1.5 px-2 rounded leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'bg-zinc-100 text-slate-700' : 'bg-slate-950/65 text-slate-300'}`}>
+                    {item.abstractNote || '—'}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-slate-650 pt-2 border-t border-slate-800">
@@ -604,31 +513,10 @@ export default function InspectorPanel({
             </Tabs.Content>
 
             {/* Notes Tab */}
-            <Tabs.Content value="notes" className="space-y-4 outline-hidden">
-              <div className="space-y-1">
-                <label className="block text-[10px] font-semibold text-slate-400">Add Bibliographical Note</label>
-                <div className="space-y-2">
-                  <textarea
-                    value={newNoteText}
-                    onChange={e => setNewNoteText(e.target.value)}
-                    placeholder="Record summary details, qualitative takeaways, experimental outcomes, or literature quotes..."
-                    rows={3}
-                    className={`w-full rounded border py-1.5 px-2 focus:outline-hidden leading-normal text-xs ${getInputClass()}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddNote}
-                    className="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-500 font-semibold text-white flex items-center justify-center gap-1 shadow-sm text-xs cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Attach New Note</span>
-                  </button>
-                </div>
-              </div>
-
+            <Tabs.Content value="notes" className="space-y-4 outline-hidden select-text">
               {/* Note lists */}
-              <div className="space-y-3 pt-2">
-                <h4 className="text-[10px] font-mono text-slate-500 border-b border-slate-850 pb-1 uppercase tracking-wider">
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-mono text-slate-550 border-b border-slate-850 pb-1 uppercase tracking-wider">
                   Attached Notes ({item.notes.length})
                 </h4>
                 {item.notes.length === 0 ? (
@@ -637,93 +525,31 @@ export default function InspectorPanel({
                   </div>
                 ) : (
                   item.notes.map(note => {
-                    const isEditing = editingNoteId === note.id;
                     return (
                       <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
                         theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
                       }`}>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editingNoteText}
-                              onChange={e => setEditingNoteText(e.target.value)}
-                              rows={3}
-                              className="w-full rounded border border-slate-800 bg-slate-900 text-slate-100 p-1.5 text-xs focus:ring-0 focus:outline-hidden leading-normal"
-                            />
-                            <div className="flex justify-end gap-1.5 text-[10px]">
-                              <button
-                                onClick={() => setEditingNoteId(null)}
-                                className="px-2 py-1 text-slate-450 hover:text-slate-100 cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={() => handleSaveEditNote(note.id)}
-                                className="px-2.5 py-1 text-white bg-blue-600 hover:bg-blue-500 rounded-sm cursor-pointer"
-                              >
-                                Save
-                              </button>
-                            </div>
+                        <div>
+                          <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
+                            theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
+                          }`}>
+                            {note.note}
+                          </p>
+                          <div className="flex items-center justify-between border-t border-slate-900/60 mt-2.5 pt-2 text-[9px] text-slate-550">
+                            <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
                           </div>
-                        ) : (
-                          <div>
-                            <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
-                              theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
-                            }`}>
-                              {note.note}
-                            </p>
-                            <div className="flex items-center justify-between border-t border-slate-900/60 mt-2.5 pt-2 text-[9px] text-slate-550">
-                              <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
-                              <div className="flex gap-1.5">
-                                <button
-                                  onClick={() => handleStartEditNote(note.id, note.note)}
-                                  className="text-sky-400 hover:underline cursor-pointer"
-                                >
-                                  Edit
-                                </button>
-                                <span className="text-slate-800">|</span>
-                                <button
-                                  onClick={() => handleDeleteNote(note.id)}
-                                  className="text-red-405 hover:underline cursor-pointer"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })
                 )}
               </div>
             </Tabs.Content>
-
             {/* Tags Tab */}
-            <Tabs.Content value="tags" className="space-y-4 outline-hidden">
-              {/* Form */}
-              <form onSubmit={handleAddTag} className="space-y-1.5">
-                <label className="block text-[10px] font-semibold text-slate-400">Add Index Tag</label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={newTag}
-                    onChange={e => setNewTag(e.target.value)}
-                    placeholder="e.g. CRISPR, Transformer, NLP..."
-                    className={`flex-1 rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
-                  />
-                  <button
-                    type="submit"
-                    className="px-2.5 bg-blue-600 hover:bg-sky-500 text-white rounded shrink-0 cursor-pointer"
-                  >
-                    Add
-                  </button>
-                </div>
-              </form>
-
+            <Tabs.Content value="tags" className="space-y-4 outline-hidden select-text">
               {/* List */}
               <div className="space-y-2.5">
-                <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest border-b border-slate-850 pb-1">
+                <h4 className="text-[10px] font-mono text-slate-550 uppercase tracking-widest border-b border-slate-850 pb-1">
                   Document Tags ({item.tags.length})
                 </h4>
                 {item.tags.length === 0 ? (
@@ -733,7 +559,7 @@ export default function InspectorPanel({
                     {item.tags.map(t => (
                       <span
                         key={t}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] ${
+                        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] ${
                           theme === 'code-light' 
                             ? 'border-blue-200 bg-blue-50 text-blue-650 font-medium' 
                             : theme === 'monokai' 
@@ -742,49 +568,23 @@ export default function InspectorPanel({
                         }`}
                       >
                         <span>{t}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(t)}
-                          className="p-0.5 text-blue-500 hover:text-red-400 shrink-0 font-bold cursor-pointer"
-                        >
-                          ✕
-                        </button>
                       </span>
                     ))}
                   </div>
                 )}
               </div>
             </Tabs.Content>
-
+ 
             {/* Attachments Tab */}
-            <Tabs.Content value="attachments" className="space-y-4 outline-hidden">
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-semibold text-slate-400">Link File Attachment</label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={newAttachTitle}
-                    onChange={e => setNewAttachTitle(e.target.value)}
-                    placeholder="e.g. vaswani_supplementary_2017.pdf"
-                    className={`flex-1 rounded border py-1 px-1.5 text-xs focus:ring-0 focus:outline-hidden ${getInputClass()}`}
-                  />
-                  <button
-                    onClick={handleAddAttachment}
-                    className="px-3 bg-blue-600 hover:bg-blue-550 text-white rounded font-semibold text-xs py-1 cursor-pointer"
-                  >
-                    Link
-                  </button>
-                </div>
-              </div>
-
+            <Tabs.Content value="attachments" className="space-y-4 outline-hidden select-text">
               {/* PDF attachment listing */}
               <div className="space-y-2">
-                <h4 className="text-[10px] font-mono text-slate-500 border-b border-slate-850 pb-1 uppercase tracking-wider">
+                <h4 className="text-[10px] font-mono text-slate-550 border-b border-slate-850 pb-1 uppercase tracking-wider">
                   Files linked ({item.attachments.length})
                 </h4>
                 {item.attachments.length === 0 ? (
                   <div className="text-center py-6 border border-dashed border-slate-800 rounded-md text-slate-555 text-[10px] p-4 leading-relaxed">
-                    No linked PDFs, datasets, or manuscript attachments. Click link to index local materials.
+                    No linked PDFs, datasets, or manuscript attachments.
                   </div>
                 ) : (
                   item.attachments.map(a => (
@@ -795,7 +595,7 @@ export default function InspectorPanel({
                         <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
                         <div className="min-w-0">
                           <p className={`font-semibold truncate text-[11px] max-w-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>{a.title}</p>
-                          <p className="text-[9px] text-slate-550 truncate font-mono uppercase mt-0.5">{a.mimeType}</p>
+                          <p className="text-[9px] text-slate-555 truncate font-mono uppercase mt-0.5">{a.mimeType}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -804,12 +604,6 @@ export default function InspectorPanel({
                           className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
                         >
                           Read
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAttachment(a.id)}
-                          className="text-slate-500 hover:text-red-400 p-0.5 cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
