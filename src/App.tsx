@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Layers, Terminal, ChevronUp, ChevronDown, ChevronRight,
-  Eye, RotateCcw
-} from 'lucide-react';
-import * as ContextMenu from '@radix-ui/react-context-menu';
-import { ZoteroItem, ColumnDefinition, AdvancedSearchSettings } from './types';
+import { Terminal } from 'lucide-react';
+import { ColumnDefinition, AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
 import { formatCreatorsCompact } from './utils/fuzzy';
@@ -18,6 +14,7 @@ import InspectorPanel from './components/InspectorPanel';
 import CommandPalette from './components/CommandPalette';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
 import AddByIdentifierModal from './components/AddByIdentifierModal';
+import LibraryTable from './components/LibraryTable';
 
 export default function App() {
   // --- Core Library State (loaded from live Zotero DB via /api/library) ---
@@ -428,298 +425,34 @@ export default function App() {
             </div>
           </div>
 
-          {/* Core scrollable table viewport */}
-          <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-slate-800">
-            <ContextMenu.Root>
-              <table className={`w-full text-left border-collapse text-xs select-none ${getTableClass()}`}>
-                
-                {/* Dynamic Headers mapping */}
-                <ContextMenu.Trigger asChild>
-                  <thead
-                    className={`sticky top-0 z-10 shadow-xs border-b ${theme === 'code-dark' ? 'bg-[#252526] text-[#808080] border-[#2b2b2b]' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
-                  >
-                <tr>
-                  {columns
-                    .filter(c => c.visible)
-                    .map(col => {
-                      const isSorting = sortKey === col.key;
-                      return (
-                        <th
-                          key={col.key}
-                          draggable={true}
-                          onDragStart={(e) => handleColumnDragStart(e, col.key as string)}
-                          onDragOver={(e) => handleColumnDragOver(e, col.key as string)}
-                          onDrop={(e) => handleColumnDrop(e, col.key as string)}
-                          onClick={() => handleHeaderSort(col.key)}
-                          className={`relative px-3.5 py-2.5 cursor-grab active:cursor-grabbing font-medium border-r whitespace-nowrap ${
-                            theme === 'code-dark' 
-                              ? 'border-[#2b2b2b] hover:bg-[#323233] text-[#808080]' 
-                              : theme === 'monokai'
-                              ? 'border-[#3e3d32] hover:bg-[#3e3d32] text-[#f8f8f2]'
-                              : 'border-slate-850/30 hover:bg-slate-200 text-slate-700 font-mono text-[10px] uppercase tracking-wider'
-                          } ${draggedColKey === col.key ? 'opacity-40' : ''}`}
-                          style={{ width: col.width ? `${col.width}px` : 'auto', minWidth: col.width ? `${col.width}px` : 'auto', maxWidth: col.width ? `${col.width}px` : 'none' }}
-                        >
-                          <div className="flex items-center gap-1.5 justify-between pr-2">
-                            <span className="truncate">{col.label}</span>
-                            {isSorting && (
-                              <span>{sortDesc ? <ChevronDown className="h-3.5 w-3.5 text-blue-400 shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 text-blue-400 shrink-0" />}</span>
-                            )}
-                          </div>
-                          <div
-                            onMouseDown={(e) => {
-                              e.stopPropagation(); // Avoid triggering drag on resize handle drag
-                              handleResizeStart(e, col.key as string, col.width || 150);
-                            }}
-                            className={`absolute right-0 top-0 bottom-0 w-2 cursor-col-resize ${resizingCol === col.key ? 'bg-sky-500' : 'hover:bg-sky-500/50'}`}
-                            style={{ touchAction: 'none' }}
-                          />
-                        </th>
-                      );
-                    })}
-                </tr>
-              </thead>
-            </ContextMenu.Trigger>
-
-              {/* Row Body renders */}
-              <tbody className={`divide-y ${theme === 'code-dark' ? 'divide-[#2b2b2b]' : ''}`}>
-                {filteredLibraryItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.filter(c => c.visible).length} className="py-20 text-center text-slate-500 font-sans">
-                      <Layers className="h-10 w-10 text-slate-800 mx-auto mb-2" />
-                      <p className="text-xs font-semibold text-slate-400">Library is empty or filter returned zero matches.</p>
-                      <button
-                        onClick={() => {
-                          setSearchSettings({ ...searchSettings, query: '' });
-                          setSelectedTag(null);
-                        }}
-                        className="mt-3 px-3 py-1 bg-sky-600/20 text-sky-400 border border-sky-500/20 rounded hover:bg-sky-500/10 text-[10px] font-mono"
-                      >
-                        Reset Active Filters
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredLibraryItems.map(item => {
-                    const isSelected = selectedItemId === item.id;
-                    const hasChildren = (item.attachments && item.attachments.length > 0) || (item.notes && item.notes.length > 0);
-                    const isExpanded = expandedItems.has(item.id);
-                    
-                    return (
-                      <React.Fragment key={item.id}>
-                      <tr
-                        onClick={() => setSelectedItemId(item.id)}
-                        className={`cursor-default transition-colors border-b ${
-                          theme === 'code-dark'
-                            ? isSelected
-                              ? 'bg-[#37373d] text-white font-medium border-[#2b2b2b]'
-                              : 'even:bg-[#1e1e1e] hover:bg-[#2a2d2e] border-[#2b2b2b] text-[#cccccc]'
-                            : isSelected
-                              ? 'bg-blue-600/15 text-slate-100 font-medium border-slate-900/40'
-                              : 'even:bg-slate-900/15 hover:bg-slate-850/40 border-slate-900/40'
-                        }`}
-                      >
-                        {columns
-                          .filter(c => c.visible)
-                          .map(col => {
-                            let cellVal = '';
-                            
-                            if (col.key === 'creators_compact') {
-                                cellVal = formatCreatorsCompact(item.creators);
-                            } else if (col.key === 'tags') {
-                                cellVal = item.tags.join(', ');
-                            } else if (col.key === 'notes') {
-                                cellVal = item.notes.map(n => n.note).join('; ');
-                            } else {
-                              const value = item[col.key];
-                              if (Array.isArray(value)) {
-                                cellVal = value
-                                  .map(entry => typeof entry === 'string' ? entry : JSON.stringify(entry))
-                                  .join(', ');
-                              } else if (typeof value === 'boolean') {
-                                cellVal = value ? 'Yes' : 'No';
-                              } else {
-                                cellVal = value ? String(value) : '';
-                              }
-                            }
-
-                            return (
-                              <td
-                                key={col.key}
-                                className={`px-3.5 py-2 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`}
-                                style={{ maxWidth: col.width ? `${col.width}px` : '20rem' }}
-                              >
-                                {col.key === 'title' ? (
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="w-4 flex justify-center items-center shrink-0">
-                                      {hasChildren && (
-                                        <div onClick={(e) => toggleExpand(item.id, e)} className="cursor-pointer hover:bg-white/10 rounded">
-                                          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <span className="shrink-0 bg-transparent">
-                                      {item.itemType === 'book' && '📚'}
-                                      {item.itemType === 'journalArticle' && '📄'}
-                                      {item.itemType === 'conferencePaper' && '🎤'}
-                                      {item.itemType !== 'book' && item.itemType !== 'journalArticle' && item.itemType !== 'conferencePaper' && '📝'}
-                                    </span>
-                                    <span className={`truncate font-medium ${theme === 'code-dark' ? (isSelected ? 'text-white' : 'text-[#cccccc]') : 'text-slate-100'}`} title={item.title}>
-                                      {item.title || 'Untitled Record'}
-                                    </span>
-                                  </div>
-                                ) : col.key === 'itemType' ? (
-                                  <span className="capitalize text-[10px] opacity-80">
-                                    {item.itemType.replace(/([A-Z])/g, ' $1')}
-                                  </span>
-                                ) : col.key === 'doi' && cellVal ? (
-                                  <span className="font-mono text-[10.5px] text-sky-450 hover:underline cursor-pointer" onClick={(e) => { e.stopPropagation(); window.open(`https://doi.org/${cellVal}`, '_blank') }}>
-                                    {cellVal}
-                                  </span>
-                                ) : col.key === 'url' && cellVal ? (
-                                  <span className="font-mono text-emerald-400/80 text-[10px] hover:underline cursor-pointer" onClick={(e) => { e.stopPropagation(); window.open(cellVal, '_blank') }}>
-                                    {cellVal}
-                                  </span>
-                                ) : (
-                                  <span className={col.key === 'citekey' ? `font-mono text-[10.5px] p-0.5 px-1 border rounded-sm ${theme === 'code-dark' ? 'bg-[#1e1e1e] border-[#2b2b2b] text-sky-400' : 'bg-slate-950/60 border-slate-900 text-slate-400'}` : ''}>
-                                    {cellVal || '—'}
-                                  </span>
-                                )}
-                              </td>
-                            );
-                          })}
-                      </tr>
-                      {isExpanded && item.attachments.map(att => (
-                        <tr key={att.id} className={`cursor-default border-b ${theme === 'code-dark' ? 'bg-[#1e1e1e] border-[#2b2b2b] text-[#cccccc]' : 'bg-slate-900/5 border-slate-900/40 text-slate-100'}`}>
-                          {columns.filter(c => c.visible).map(col => (
-                            <td key={col.key} className={`px-3.5 py-1.5 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`} style={{ maxWidth: col.width ? `${col.width}px` : '20rem' }}>
-                              {col.key === 'title' ? (
-                                <div className="flex items-center gap-2 pl-6">
-                                  <span className="shrink-0 text-emerald-500">📎</span>
-                                  <span className="truncate opacity-80" title={att.title}>{att.title}</span>
-                                </div>
-                              ) : null}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                      {isExpanded && item.notes.map(note => (
-                        <tr key={note.id} className={`cursor-default border-b ${theme === 'code-dark' ? 'bg-[#1e1e1e] border-[#2b2b2b] text-[#cccccc]' : 'bg-slate-900/5 border-slate-900/40 text-slate-100'}`}>
-                          {columns.filter(c => c.visible).map(col => (
-                            <td key={col.key} className={`px-3.5 py-1.5 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`} style={{ maxWidth: col.width ? `${col.width}px` : '20rem' }}>
-                              {col.key === 'title' ? (
-                                <div className="flex items-center gap-2 pl-6">
-                                  <span className="shrink-0 text-amber-500">🗒️</span>
-                                  <span className="truncate opacity-80" title={note.note}>{note.note}</span>
-                                </div>
-                              ) : null}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-
-            <ContextMenu.Portal>
-              <ContextMenu.Content className="z-50 w-64 rounded-md border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl p-3 text-xs">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 font-semibold">
-                  <div className="flex items-center gap-1.5 text-slate-300">
-                    <Eye className="h-4 w-4 text-sky-400" />
-                    <span>Visible Columns</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-1 mb-2.5 pb-1 border-b border-slate-800/50 text-[10px]">
-                  <button
-                    onClick={() => setAllColumns(true)}
-                    className="text-sky-400 hover:underline"
-                  >
-                    Select All
-                  </button>
-                  <span className="text-slate-700">|</span>
-                  <button
-                    onClick={() => setAllColumns(false)}
-                    className="text-sky-400 hover:underline"
-                  >
-                    Clear (Hide)
-                  </button>
-                  <span className="text-slate-700">|</span>
-                  <button
-                    onClick={resetColumns}
-                    className="text-amber-400 hover:underline flex items-center gap-0.5"
-                  >
-                    <RotateCcw className="h-2.5 w-2.5" />
-                    <span>Reset</span>
-                  </button>
-                </div>
-
-                <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
-                  {columns.map((col, index) => {
-                    const isTitle = col.key === 'title';
-                    return (
-                      <div
-                        key={col.key}
-                        className={`flex items-center justify-between px-1.5 py-1 rounded-sm hover:bg-slate-800/50 select-none ${
-                          isTitle ? 'opacity-80 text-slate-400' : 'text-slate-300'
-                        }`}
-                      >
-                        <label className={`flex items-center gap-2 cursor-pointer flex-1 min-w-0 ${isTitle ? 'cursor-not-allowed' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={col.visible}
-                            disabled={isTitle}
-                            onChange={() => toggleColumn(col.key as string)}
-                            className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5 cursor-pointer"
-                          />
-                          <span className="truncate">{col.label}</span>
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <button
-                              disabled={index === 0}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                moveColumn(index, 'up');
-                              }}
-                              className={`p-0.5 rounded hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent ${
-                                index === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
-                              }`}
-                              title="Move column left (up)"
-                            >
-                              <ChevronUp className="h-3 w-3 text-slate-400 hover:text-sky-400" />
-                            </button>
-                            <button
-                              disabled={index === columns.length - 1}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                moveColumn(index, 'down');
-                              }}
-                              className={`p-0.5 rounded hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent ${
-                                index === columns.length - 1 ? 'cursor-not-allowed' : 'cursor-pointer'
-                              }`}
-                              title="Move column right (down)"
-                            >
-                              <ChevronDown className="h-3 w-3 text-slate-400 hover:text-sky-400" />
-                            </button>
-                          </div>
-                          <span className="font-mono text-[9px] text-slate-500 uppercase shrink-0">
-                            {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </ContextMenu.Content>
-            </ContextMenu.Portal>
-          </ContextMenu.Root>
-        </div>
+          <LibraryTable
+            columns={columns}
+            items={filteredLibraryItems}
+            theme={theme}
+            tableClass={getTableClass()}
+            selectedItemId={selectedItemId}
+            expandedItems={expandedItems}
+            sortKey={sortKey}
+            sortDesc={sortDesc}
+            draggedColKey={draggedColKey}
+            resizingCol={resizingCol}
+            searchSettings={searchSettings}
+            onSelectItem={setSelectedItemId}
+            onResetFilters={(settings) => {
+              setSearchSettings(settings);
+              setSelectedTag(null);
+            }}
+            onToggleExpand={toggleExpand}
+            onColumnDragStart={handleColumnDragStart}
+            onColumnDragOver={handleColumnDragOver}
+            onColumnDrop={handleColumnDrop}
+            onHeaderSort={handleHeaderSort}
+            onResizeStart={handleResizeStart}
+            onToggleColumn={toggleColumn}
+            onSetAllColumns={setAllColumns}
+            onResetColumns={resetColumns}
+            onMoveColumn={moveColumn}
+          />
         </div>
 
         {/* 4. Right side Inspector detail panel */}
