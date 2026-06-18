@@ -888,3 +888,495 @@ Once that contract is validated, the implementation should become less defensive
 
 The target is not graceful degradation.
 The target is correct failure before startup and simple code afterward.
+
+## Design/Layout/Aesthetic Audit: `zotero-gui`
+
+This is based on code inspection, not a rendered screenshot.
+The visual risk is still clear from the component code: the app is trying to look like a polished desktop bibliographic IDE, but most of the design system is hand-rolled inside JSX class strings.
+That is the main source of "slop look."
+
+The strongest recommendation is not "make it prettier."
+It is: stop owning low-level visual and interaction primitives unless they are genuinely Zotero-specific.
+
+### The App Has No Real Design System
+
+`src/index.css` is only:
+
+```css
+@import "tailwindcss";
+```
+
+There is no token layer for color, spacing, font scale, radius, shadows, density, interaction states, or semantic roles.
+Yet the app uses hundreds of raw classes like:
+
+```tsx
+bg-[#1e1e1e]
+text-[#cccccc]
+border-[#2b2b2b]
+bg-slate-950
+bg-slate-900
+text-slate-550
+border-slate-805
+bg-slate-955
+text-red-505
+text-sky-450
+text-stone-250
+py-0.2
+```
+
+Some of these look like nonstandard Tailwind utilities.
+Since the project has no `@theme` block defining custom token namespaces, many such classes are likely inert or accidental.
+Tailwind's current theme system expects custom tokens to be declared explicitly with `@theme`, and those variables drive which utility classes exist; it also documents standard token namespaces for color, font, spacing, radius, shadow, breakpoints, etc. [Tailwind CSS][tailwind-theme]
+
+Professional fix: introduce a minimal token system immediately.
+
+Example target:
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg: #1e1e1e;
+  --color-app-panel: #252526;
+  --color-app-panel-raised: #323233;
+  --color-app-border: #2b2b2b;
+  --color-app-text: #cccccc;
+  --color-app-muted: #808080;
+  --color-app-accent: #0e639c;
+
+  --spacing-density-row: 1.75rem;
+  --radius-control: 0.25rem;
+}
+```
+
+Then JSX should use semantic utilities or component variants, not raw one-off colors.
+Better still: use Radix Themes or shadcn/ui as the design foundation and only override tokens.
+
+Radix Themes is specifically a pre-styled React component library with theme configuration, layout primitives, typography, dark mode, color scales, table, dialog, select, tooltip, etc. [Radix UI][radix-themes]
+
+### The App Uses Radix Primitives but Ignores the Higher-Level Design Layer
+
+The repo already depends on Radix primitives:
+
+```json
+@radix-ui/react-accordion
+@radix-ui/react-context-menu
+@radix-ui/react-dialog
+@radix-ui/react-dropdown-menu
+@radix-ui/react-select
+@radix-ui/react-tabs
+@radix-ui/react-tooltip
+```
+
+But the components then hand-style every menu, select, tooltip, dialog, and modal.
+This is the worst middle ground: the app owns a huge amount of styling surface while still depending on primitives.
+
+Professional fix: choose one of these two paths.
+
+Path A: use Radix Themes.
+Replace most hand-styled buttons, dialogs, select menus, tooltips, table wrappers, text, headings, badges, cards, callouts, scroll areas, separators, and icons with Radix Themes components.
+Radix Themes provides the theme root, color scales, dark mode, typography, layout primitives, and many pre-styled components out of the box.
+[Radix UI][radix-themes]
+
+Path B: use shadcn/ui.
+This keeps Tailwind ownership but standardizes component recipes.
+It has established components for buttons, command palettes, context menus, dialogs, dropdowns, inputs, sidebars, sheets, tables, tooltips, toasts, resizable panels, etc.; its data-table guide is built around TanStack Table.
+[Shadcn][shadcn-data-table]
+
+Do not continue manually styling every primitive in every feature component.
+
+### The Table Is Hand-Rolled Despite Being the App's Central UI
+
+The core app is a dense bibliographic table.
+It currently owns:
+
+```text
+sorting,
+column visibility,
+column ordering,
+drag/drop,
+column resizing,
+cell formatting,
+row expansion,
+attachment/note child rows,
+empty states,
+selection state,
+context menu,
+manual widths,
+manual sticky headers.
+```
+
+This is exactly the domain where hand-rolling is least defensible.
+
+`App.tsx` manually renders a `<table>` and mutates table state through local React state.
+That will become increasingly fragile as the app needs pinning, row virtualization, keyboard navigation, multi-select, persistent column state, grouping, collection-filter facets, author/date sorting semantics, and item-specific row actions.
+
+Professional fix: replace the hand-rolled table state machine with TanStack Table or AG Grid.
+
+For a headless, bespoke Zotero-like table, TanStack Table is the natural fit.
+Its docs explicitly center column definitions as the data model for sorting, filtering, grouping, display columns, action columns, and formatting; it also has guides for column ordering, sizing, visibility, sorting, filtering, expanding, row selection, and virtualization.
+[TanStack Table][tanstack-table-columns]
+
+For a heavier "desktop-grid" replacement with less owned behavior, AG Grid is also reasonable.
+Its React grid has built-in modules for column definitions, sizing, moving, pinning, sorting, filtering, row selection, tree data, master/detail, keyboard navigation, accessibility, export, and theming.
+[AG Grid][ag-grid-react]
+
+Current hand-rolled table code should be considered prototype code, not a maintainable product foundation.
+
+### The Layout Shell Is Custom When It Should Use a Proven App-Shell Pattern
+
+The app manually constructs:
+
+```text
+top fake window bar,
+toolbar,
+left sidebar,
+main table,
+right inspector,
+modal overlays,
+toast,
+command palette.
+```
+
+The result is visually inconsistent because each region defines its own background, borders, typography, spacing, and theme logic.
+
+Professional fix: adopt an app-shell layout primitive:
+
+For shadcn/ui: `Sidebar`, `Resizable`, `Command`, `Dialog`, `Sheet`, `DropdownMenu`, `ContextMenu`, `Tooltip`, `Sonner`, `Table`.
+
+For Radix Themes: `Theme`, `Flex`, `Grid`, `Box`, `Container`, `Text`, `Heading`, `Button`, `IconButton`, `Card`, `DataList`, `Table`, `Dialog`, `DropdownMenu`, `Tooltip`, `Separator`, `Badge`.
+
+For Zotero specifically, the layout should be specified as a stable shell:
+
+```text
+AppShell
+  TopMenuBar
+  Toolbar
+  ResizablePanelGroup
+    CollectionSidebar
+    LibraryGrid
+    InspectorPanel
+  StatusBar / ToastViewport
+```
+
+The app should not encode the shell ad hoc inside `App.tsx`.
+
+### Theme Handling Is Scattered and Unprofessional
+
+Theme logic appears inside multiple components:
+
+```ts
+getThemeClass()
+getSubpanelClass()
+getTableClass()
+getSidebarBg()
+getFolderSelectedClass()
+getCounterClass()
+getPanelBg()
+getSubpanelHeaderBg()
+getInputClass()
+```
+
+This means every component owns its own interpretation of "dark," "light," and "monokai."
+That guarantees visual drift.
+
+Radix Themes already provides an appearance model, color scales, gray scales, and dark-mode handling.
+Its docs recommend using a theme provider/class switching strategy for system appearance rather than manually threading theme strings everywhere.
+[Radix UI][radix-dark-mode]
+
+Professional fix: make theme a root-level concern.
+Components should consume semantic variants, not switch on theme names.
+
+Bad pattern:
+
+```ts
+theme === 'code-dark' ? 'bg-[#252526]' : 'bg-slate-950/40'
+```
+
+Better pattern:
+
+```tsx
+<Panel variant="sidebar" />
+<TableRow data-selected={isSelected} />
+<Button variant="ghost" size="sm" />
+```
+
+Then the visual mapping lives in one place.
+
+### The App Has Fake Desktop Chrome
+
+The top bar renders macOS-style dots and menu labels:
+
+```tsx
+File Edit View Tools Help
+```
+
+But these menu items are inert spans:
+
+```tsx
+<span className="hover:text-white cursor-default">File</span>
+```
+
+This is unprofessional because it mimics a native application affordance without behavior.
+It reads as demo scaffolding.
+A bespoke Zotero replacement can have desktop-like density, but fake chrome is not acceptable in a serious app.
+
+Professional fix: either remove it or make it real.
+
+If the app is web-only, use a real toolbar and command menu.
+
+If it is intended to become a desktop app, use Tauri/Electron native menu integration or a real menubar component.
+shadcn has a `Menubar`; Radix has a menubar primitive; React Aria also has menu primitives with accessibility behavior.
+
+### Icons and Emojis Are Mixed Inconsistently
+
+The app uses `lucide-react` icons for many controls but also uses emojis for item types:
+
+```tsx
+📚
+📄
+🎤
+📝
+📎
+🗒️
+⚠️
+```
+
+This creates a nonprofessional visual language.
+Emoji rendering varies by OS, size, font fallback, color style, and accessibility output.
+It also clashes with the VSCode-style/lucide aesthetic.
+
+Professional fix: use one icon system.
+Since the repo already uses `lucide-react`, define an `ItemTypeIcon` component mapping Zotero item types to Lucide icons or a small custom SVG set.
+Use badges for item type labels where needed.
+
+### Accessibility Is Inconsistent Because Interaction Behavior Is Hand-Owned
+
+The app uses accessible primitives in places, but then undermines them with manual buttons, clickable spans, custom keyboard handlers, and table rows that behave like selectable controls.
+
+Examples:
+
+Clickable table rows use `onClick` on `<tr>`, but there is no obvious keyboard selection model.
+
+The DOI and URL cells use `<span onClick>` instead of anchors/buttons.
+
+Column headers are draggable, clickable for sorting, and contain resize handles, all manually composed.
+
+The command palette maintains `selectedIndex` manually on top of `cmdk`, mixing two selection systems.
+
+React Aria's value proposition is precisely that components provide built-in behavior, adaptive interactions, accessibility, keyboard support, focus management, and internationalization while allowing custom styles.
+[React Spectrum][react-aria]
+
+Professional fix: do not hand-own complex interaction semantics.
+Use table/grid libraries and accessible component systems for rows, menus, comboboxes, dialogs, resize handles, drag/drop, and keyboard navigation.
+WCAG 2.2 also makes focus visibility and target sizing explicit concerns; the current app leaves those to scattered classes and manual behavior.
+[W3C][wcag-quickref]
+
+### Forms Are Hand-Rolled and Weakly Validated
+
+`AddByIdentifierModal`, `AdvancedSearchModal`, and the collection-create form are manually controlled.
+Validation is mostly `required`, `trim()`, and local booleans.
+Error display is ad hoc.
+
+Professional fix: use a form library plus schema validation.
+The obvious stack is React Hook Form plus Zod.
+Zod is TypeScript-first, supports static type inference, and explicitly expects TypeScript `strict` mode; it is suited for the "assert data shape once, then trust it" model discussed in the previous addendum.
+[Zod][zod]
+
+For this app, schemas should define:
+
+```text
+resolver plugin form,
+BibTeX ingestion form,
+advanced search settings,
+column layout persistence,
+JSON import payload,
+doctor report,
+library API payload.
+```
+
+### Toasts Are Hand-Rolled
+
+The app has:
+
+```tsx
+{toast && (
+  <div className="fixed bottom-10 right-4 ...">
+    ...
+  </div>
+)}
+```
+
+This owns timing, stacking, motion, accessibility, placement, dismissal, reduced-motion behavior, and live-region semantics.
+That is unnecessary.
+
+Professional fix: use Sonner or a design-system toast.
+shadcn directly includes Sonner in its component list; Sonner is a dedicated toast library.
+[Shadcn][shadcn-data-table]
+
+### Server-State Handling Is Hand-Rolled
+
+`App.tsx` owns loading, fetch, error, reload, and after-create refresh logic:
+
+```ts
+const [isLoading, setIsLoading] = useState(true);
+const [libraryLoadError, setLibraryLoadError] = useState<Error | null>(null);
+
+const loadFromApi = () => {
+  setIsLoading(true);
+  fetchLibraryPayload()
+    .then(...)
+    .catch(...)
+};
+```
+
+This is not just logic slop; it affects UI polish.
+Loading states, stale data, refresh behavior, resolver mutations, retry, cancellation, and optimistic updates will become visible UX problems.
+
+Professional fix: use TanStack Query for server state.
+TanStack Query exists specifically to manage fetching, caching, synchronization, stale data, deduping, retries, mutation updates, and async server-state complexity.
+[TanStack Query][tanstack-query]
+
+The app should have:
+
+```ts
+useLibraryQuery()
+useResolverPluginsQuery()
+useCreateItemFromIdentifierMutation()
+useCreateItemFromBibTeXMutation()
+```
+
+Then UI states become standard: pending, error, success, invalidated, refetching.
+
+### The Command Palette Partially Reinvents Command Infrastructure
+
+The app uses `cmdk`, but then wraps it in custom filtering, manual `selectedIndex`, manual keyboard handling, and manually constructed command arrays inside `App.tsx`.
+
+This creates multiple risks: inconsistent keyboard behavior, hard-to-test commands, commands coupled to component closures, and command names/shortcuts not derived from a central registry.
+
+Professional fix: use `cmdk` or shadcn `Command`, but create a real command registry:
+
+```ts
+type AppCommand = {
+  id: CommandID;
+  label: string;
+  section: 'Library' | 'View' | 'Columns' | 'Resolver';
+  shortcut?: Shortcut;
+  enabled: (state: AppState) => boolean;
+  run: (ctx: CommandContext) => void | Promise<void>;
+};
+```
+
+Then the palette renders the registry.
+Menus, toolbar buttons, and shortcuts should reuse the same command objects.
+
+### The Inspector Panel Is Too Bespoke and Too Visually Dense
+
+`InspectorPanel.tsx` manually renders every metadata field as repeated blocks:
+
+```tsx
+<label>Title</label>
+<div>{item.title || 'Untitled'}</div>
+...
+<label>DOI</label>
+<div>{item.doi || '-'}</div>
+```
+
+This creates a lot of owned markup, inconsistent spacing, and hardcoded typography.
+It also makes future field additions tedious.
+
+Professional fix: use a `DataList`/description-list pattern or a field-rendering registry.
+
+For example:
+
+```ts
+const inspectorFields = [
+  { key: 'itemType', label: 'Item Type', render: renderItemType },
+  { key: 'title', label: 'Title', render: renderTitle },
+  { key: 'citekey', label: 'Citation Key', render: renderCitekey },
+  ...
+];
+```
+
+Then render with a standard `MetadataSection` and `MetadataField`. Radix Themes has `DataList`, `Text`, `Badge`, `Code`, `Separator`, and layout primitives that fit this directly.
+[Radix UI][radix-themes]
+
+### The App Uses "VSCode Aesthetic" as Styling Copy, Not Design Discipline
+
+A VSCode-like interface can be appropriate: dense, keyboard-first, sidebar/tree/table/inspector, command palette, dark theme.
+But the code copies surface traits: dark grays, tiny fonts, faux top bar, palette, dense table.
+
+Professional implementation would instead copy the deeper system:
+
+```text
+one command registry,
+real keyboard navigation,
+real menu actions,
+real status bar,
+consistent density scale,
+real focus model,
+real split panels,
+centralized theme tokens,
+extension/plugin architecture,
+diagnostics panel,
+settings schema,
+view state persistence.
+```
+
+Right now, "VSCode style" is mostly arbitrary Tailwind strings.
+
+### Recommended Professional Stack
+
+For this specific app, I would not use a heavy general design system like Material unless the goal is a generic web-app look.
+The product is closer to a desktop data-management tool.
+
+Recommended stack:
+
+```text
+React + Vite
+Tailwind v4 with explicit @theme tokens
+shadcn/ui or Radix Themes for components
+TanStack Table for the central library grid
+TanStack Query for server state
+Zod for runtime schemas and config/import validation
+React Hook Form for forms
+Sonner for toasts
+cmdk/shadcn Command for command palette
+Resizable panels from shadcn or react-resizable-panels
+Lucide icons only; remove emoji icons
+```
+
+If the grid becomes the core product and needs spreadsheet-grade interactions, replace TanStack Table with AG Grid Community/Enterprise depending on licensing needs.
+
+### Highest-Value Cleanup Sequence
+
+First: create a real token/theme layer and remove impossible Tailwind classes.
+This immediately reduces visual inconsistency.
+
+Second: replace the hand-rolled table with TanStack Table or AG Grid.
+This removes the largest design and logic ownership burden.
+
+Third: replace custom toasts, dialogs, buttons, menus, selects, metadata fields, and sidebars with one component system.
+
+Fourth: move commands into a registry used by toolbar, menu, hotkeys, and command palette.
+
+Fifth: move server-state loading/mutation into TanStack Query.
+
+Sixth: replace form ad hoc state with schema-backed forms.
+
+Seventh: remove fake chrome and demo residue: inert menu labels, macOS dots, AI Studio title, Gemini env vars, placeholder "Mock PDF Viewer," and emoji item icons.
+
+The standard is not "make it look less ugly."
+The standard is: every repeated visual or interaction pattern must either come from a mature library or from a small local design-system component.
+Right now the app owns too much low-level UI behavior and too many raw visual decisions.
+
+[tailwind-theme]: https://tailwindcss.com/docs/theme "Theme variables - Core concepts - Tailwind CSS"
+[radix-themes]: https://www.radix-ui.com/themes/docs/overview/getting-started "Getting started - Radix Themes"
+[shadcn-data-table]: https://ui.shadcn.com/docs/components/data-table "Data Table - shadcn/ui"
+[tanstack-table-columns]: https://tanstack.com/table/latest/docs/guide/column-defs "Columns Guide | TanStack Table Docs"
+[ag-grid-react]: https://www.ag-grid.com/react-data-grid/ "React Grid: Quick Start | AG Grid"
+[radix-dark-mode]: https://www.radix-ui.com/themes/docs/theme/dark-mode "Dark mode - Radix Themes"
+[react-aria]: https://react-spectrum.adobe.com/react-aria/index.html "React Aria"
+[wcag-quickref]: https://www.w3.org/WAI/WCAG22/quickref/ "How to Meet WCAG (Quickref Reference)"
+[zod]: https://zod.dev/ "Intro | Zod"
+[tanstack-query]: https://tanstack.com/query/latest/docs/framework/react/overview "Overview | TanStack Query React Docs"
