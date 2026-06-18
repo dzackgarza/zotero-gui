@@ -578,18 +578,6 @@ export default function App() {
     }
   };
 
-  const getStatusBarClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-zinc-200 text-slate-600 border-t border-zinc-300';
-      case 'monokai':
-        return 'bg-stone-950 border-t border-stone-900 text-yellow-500';
-      case 'code-dark':
-      default:
-        return 'bg-[#007acc] text-white border-t border-[#007acc]';
-    }
-  };
-
   const activeSelectedItem = items.find(it => it.id === selectedItemId) || null;
 
   return (
@@ -874,32 +862,6 @@ export default function App() {
             />
           </div>
         )}
-      </div>
-
-      {/* 5. Base Task/Status bar */}
-      <div className={`h-6.5 flex items-center justify-between px-3.5 border-t text-[10.5px] font-mono shrink-0 select-none ${getStatusBarClass()}`}>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-emerald-400'}`} />
-            <span>{isLoading ? 'DB: Loading…' : 'DB: Live Zotero'}</span>
-          </span>
-          <span>•</span>
-          <span>Indexed Total: <strong>{items.length} items</strong></span>
-          <span>•</span>
-          <span>Trash size: <strong>{items.filter(it => it.inTrash).length}</strong></span>
-        </div>
-
-        <div className="flex items-center gap-4.5">
-          {activeSelectedItem && (
-            <span className="text-blue-400 hidden sm:inline">
-              Selected Item: <strong className="font-semibold">{activeSelectedItem.citekey || activeSelectedItem.id}</strong>
-            </span>
-          )}
-          <span>Active Pane: explorer</span>
-          <span className="bg-sky-500/10 px-1 border border-sky-500/20 rounded-xs text-sky-400 text-[9.5px]">
-            {theme.replace('-', ' ').toUpperCase()}
-          </span>
-        </div>
       </div>
 
       {/* Ctrl+P palette overlay portal */}
