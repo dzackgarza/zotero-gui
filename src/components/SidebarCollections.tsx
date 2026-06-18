@@ -27,6 +27,10 @@ export default function SidebarCollections({
   const [newColName, setNewColName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newColParent, setNewColParent] = useState<string>('');
+  
+  const [collectionsExpanded, setCollectionsExpanded] = useState(true);
+  const [viewsExpanded, setViewsExpanded] = useState(true);
+  const [tagsExpanded, setTagsExpanded] = useState(true);
 
   // Calculate item counters for each collection safely
   const getItemCount = (collectionId: string) => {
@@ -149,12 +153,19 @@ export default function SidebarCollections({
   const tagCloud = getActiveTagCloud();
 
   return (
-    <div className="h-full flex flex-col bg-slate-900 border-r border-slate-800 text-xs font-sans p-3 space-y-4 overflow-y-auto select-none scrollbar-thin scrollbar-thumb-slate-800">
+    <div className="h-full flex flex-col bg-slate-900 border-r border-slate-800 text-xs font-sans p-3 space-y-4 select-none scrollbar-thin scrollbar-thumb-slate-800">
       
       {/* Search/Collection Folder Creator */}
       <div className="flex items-center justify-between border-b border-slate-850 pb-2 shrink-0">
-        <span className="font-semibold text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-          <Layers className="h-4 w-4 text-sky-400" />
+        <span
+          onClick={() => setCollectionsExpanded(!collectionsExpanded)}
+          className="font-semibold text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1.5 cursor-pointer hover:text-slate-200"
+        >
+          {collectionsExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          )}
           <span>Collections</span>
         </span>
         <button
@@ -214,152 +225,172 @@ export default function SidebarCollections({
       )}
 
       {/* Main Folders list */}
-      <div className="space-y-0.5 shrink-0">
-        {/* Core 'All items' folder */}
-        <div
-          onClick={() => {
-            onSelectCollection('all');
-            onSelectTag(null);
-          }}
-          className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-            selectedCollectionId === 'all' && !selectedTag
-              ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-              : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <FolderOpen className="h-3.5 w-3.5 text-blue-400" />
-            <span className="font-semibold text-xs">My Library (All)</span>
+      {collectionsExpanded && (
+        <div className="space-y-0.5 shrink-0 max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+          {/* Core 'All items' folder */}
+          <div
+            onClick={() => {
+              onSelectCollection('all');
+              onSelectTag(null);
+            }}
+            className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+              selectedCollectionId === 'all' && !selectedTag
+                ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <FolderOpen className="h-3.5 w-3.5 text-blue-400" />
+              <span className="font-semibold text-xs">My Library (All)</span>
+            </div>
+            <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+              {getItemCount('all')}
+            </span>
           </div>
-          <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
-            {getItemCount('all')}
-          </span>
-        </div>
 
-        {/* Nested user collections */}
-        {rootCollections.map(rootItem => renderCollectionNode(rootItem))}
-      </div>
+          {/* Nested user collections */}
+          {rootCollections.map(rootItem => renderCollectionNode(rootItem))}
+        </div>
+      )}
 
       {/* Specialized smart folders */}
       <div className="space-y-0.5 pt-2 border-t border-slate-850 shrink-0">
-        <h4 className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1.5 pl-2 leading-none">
-          Smart Buckets
+        <h4
+          onClick={() => setViewsExpanded(!viewsExpanded)}
+          className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest pl-2 mb-2 flex items-center gap-1.5 cursor-pointer select-none hover:text-slate-205"
+        >
+          {viewsExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          )}
+          <span>Views</span>
         </h4>
 
-        {/* Duplicate Items */}
-        <div
-          onClick={() => {
-            onSelectCollection('duplicates');
-            onSelectTag(null);
-          }}
-          className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-            selectedCollectionId === 'duplicates'
-              ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-              : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Layers className="h-3.5 w-3.5 text-amber-500" />
-            <span>Duplicate Items</span>
-          </div>
-          <span className="text-[10.5px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
-            {getDuplicateCount()}
-          </span>
-        </div>
+        {viewsExpanded && (
+          <div className="space-y-0.5">
+            {/* Duplicate Items */}
+            <div
+              onClick={() => {
+                onSelectCollection('duplicates');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'duplicates'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-amber-500" />
+                <span>Duplicate Items</span>
+              </div>
+              <span className="text-[10.5px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                {getDuplicateCount()}
+              </span>
+            </div>
 
-        {/* Unfiled Items */}
-        <div
-          onClick={() => {
-            onSelectCollection('unfiled');
-            onSelectTag(null);
-          }}
-          className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-            selectedCollectionId === 'unfiled'
-              ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-              : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <PackageMinus className="h-3.5 w-3.5 text-orange-400" />
-            <span>Unfiled Items</span>
-          </div>
-          <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500 font-semibold text-sky-400">
-            {getUnfiledCount()}
-          </span>
-        </div>
+            {/* Unfiled Items */}
+            <div
+              onClick={() => {
+                onSelectCollection('unfiled');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'unfiled'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <PackageMinus className="h-3.5 w-3.5 text-orange-400" />
+                <span>Unfiled Items</span>
+              </div>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500 font-semibold text-sky-400">
+                {getUnfiledCount()}
+              </span>
+            </div>
 
-        {/* Trash */}
-        <div
-          onClick={() => {
-            onSelectCollection('trash');
-            onSelectTag(null);
-          }}
-          className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-            selectedCollectionId === 'trash'
-              ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-              : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-250'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Trash2 className="h-3.5 w-3.5 text-red-400" />
-            <span>Trash bin</span>
+            {/* Trash */}
+            <div
+              onClick={() => {
+                onSelectCollection('trash');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'trash'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-250'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                <span>Trash bin</span>
+              </div>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                {getTrashCount()}
+              </span>
+            </div>
           </div>
-          <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
-            {getTrashCount()}
-          </span>
-        </div>
+        )}
       </div>
 
       {/* Tag filtering Cloud widget */}
-      <div className="flex-1 flex flex-col min-h-[160px] pt-3 border-t border-slate-850">
-        <div className="flex items-center gap-1.5 text-slate-400 font-semibold text-[10px] uppercase tracking-widest pl-2 mb-2">
+      <div className="flex-1 flex flex-col min-h-[160px] pt-3 border-t border-slate-850 min-h-0 overflow-hidden">
+        <div
+          onClick={() => setTagsExpanded(!tagsExpanded)}
+          className="flex items-center gap-1.5 text-slate-400 font-semibold text-[10px] uppercase tracking-widest pl-2 mb-2 cursor-pointer select-none hover:text-slate-200"
+        >
+          {tagsExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          )}
           <Tag className="h-3.5 w-3.5 text-sky-400 shrink-0" />
           <span>Active Tag Filter</span>
         </div>
 
-        {selectedTag && (
-          <div className="flex items-center justify-between bg-blue-600/10 border border-blue-500/20 rounded p-1.5 mb-2.5 text-xs text-sky-400">
-            <span className="truncate font-semibold">Active: {selectedTag}</span>
-            <button
-              onClick={() => onSelectTag(null)}
-              className="font-bold text-[10px] hover:text-red-400 cursor-pointer"
-            >
-              ✕ Clear
-            </button>
+        {tagsExpanded && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {selectedTag && (
+              <div className="flex items-center justify-between bg-blue-600/10 border border-blue-500/20 rounded p-1.5 mb-2.5 text-xs text-sky-400 shrink-0">
+                <span className="truncate font-semibold">Active: {selectedTag}</span>
+                <button
+                  onClick={() => onSelectTag(null)}
+                  className="font-bold text-[10px] hover:text-red-400 cursor-pointer"
+                >
+                  ✕ Clear
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto pr-1.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
+              {tagCloud.length === 0 ? (
+                <p className="text-[10px] text-slate-500 text-center italic py-2">No tags detected.</p>
+              ) : (
+                tagCloud.map(([tag, count]) => {
+                  const isTagSelected = selectedTag === tag;
+                  return (
+                    <div
+                      key={tag}
+                      onClick={() => onSelectTag(isTagSelected ? null : tag)}
+                      className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer text-[11px] transition ${
+                        isTagSelected
+                          ? 'bg-sky-600 text-white font-medium'
+                          : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className="truncate pr-1.5">{tag}</span>
+                      <span className={`text-[9px] font-mono px-1 rounded-xs ${isTagSelected ? 'bg-sky-700 text-white' : 'bg-slate-950/40 text-slate-500'}`}>
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
-
-        <div className="flex-1 overflow-y-auto max-h-56 pr-1.5 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
-          {tagCloud.length === 0 ? (
-            <p className="text-[10px] text-slate-500 text-center italic py-2">No tags detected.</p>
-          ) : (
-            tagCloud.map(([tag, count]) => {
-              const isTagSelected = selectedTag === tag;
-              return (
-                <div
-                  key={tag}
-                  onClick={() => onSelectTag(isTagSelected ? null : tag)}
-                  className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer text-[11px] transition ${
-                    isTagSelected
-                      ? 'bg-sky-600 text-white font-medium'
-                      : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span className="truncate pr-1.5">{tag}</span>
-                  <span className={`text-[9px] font-mono px-1 rounded-xs ${isTagSelected ? 'bg-sky-700 text-white' : 'bg-slate-950/40 text-slate-500'}`}>
-                    {count}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Keyboard palette hint footer box */}
-      <div className="rounded bg-slate-950 p-2.5 border border-slate-805 shrink-0 text-[10px] text-slate-520 leading-relaxed text-center font-mono">
-        <HelpCircle className="h-4 w-4 text-sky-400 mx-auto mb-1" />
-        <span>Press <kbd className="bg-slate-850 px-1 rounded text-slate-300">Ctrl + P</kbd> to launch Command Palette</span>
       </div>
     </div>
   );
