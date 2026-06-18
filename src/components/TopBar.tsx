@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search, Sliders, Eye, Plus, Info, Check, RefreshCw, Sparkles, Command
 } from 'lucide-react';
@@ -26,6 +26,25 @@ export default function TopBar({
   setTheme
 }: TopBarProps) {
   const isScopingApplied = Object.values(searchSettings.searchFields).some(v => !v);
+
+  const [isThemeOpen, setIsThemeOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+
+  const themeRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (themeRef.current && !themeRef.current.contains(event.target as Node)) {
+        setIsThemeOpen(false);
+      }
+      if (addRef.current && !addRef.current.contains(event.target as Node)) {
+        setIsAddOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="h-12 border-b border-slate-800 bg-slate-950 flex items-center justify-between px-3 shrink-0 font-sans text-xs select-none">
@@ -81,53 +100,73 @@ export default function TopBar({
       <div className="flex items-center gap-1.5">
         
         {/* Add items button dropdown quick-links */}
-        <div className="relative group">
-          <button className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition">
+        <div ref={addRef} className="relative">
+          <button
+            onClick={() => setIsAddOpen(!isAddOpen)}
+            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition"
+          >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Item</span>
           </button>
           
-          <div className="absolute right-0 top-7.5 z-40 hidden group-hover:block w-40 rounded bg-slate-900 border border-slate-800 p-1 text-xs shadow-xl animate-fade-in text-slate-200">
-            <button
-              onClick={() => onOpenAddItem('journalArticle')}
-              className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
-            >
-              Journal Article
-            </button>
-            <button
-              onClick={() => onOpenAddItem('book')}
-              className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
-            >
-              Book
-            </button>
-            <button
-              onClick={() => onOpenAddItem('conferencePaper')}
-              className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
-            >
-              Conference Paper
-            </button>
-          </div>
+          {isAddOpen && (
+            <div className="absolute right-0 top-8.5 z-40 w-40 rounded bg-slate-900 border border-slate-800 p-1 text-xs shadow-xl text-slate-200">
+              <button
+                onClick={() => {
+                  onOpenAddItem('journalArticle');
+                  setIsAddOpen(false);
+                }}
+                className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
+              >
+                Journal Article
+              </button>
+              <button
+                onClick={() => {
+                  onOpenAddItem('book');
+                  setIsAddOpen(false);
+                }}
+                className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
+              >
+                Book
+              </button>
+              <button
+                onClick={() => {
+                  onOpenAddItem('conferencePaper');
+                  setIsAddOpen(false);
+                }}
+                className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm"
+              >
+                Conference Paper
+              </button>
+            </div>
+          )}
         </div>
 
-
-
         {/* VSCode Themes Selector */}
-        <div className="relative group">
-          <button className="p-1 px-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] rounded text-slate-350 hover:text-slate-100 font-mono">
+        <div ref={themeRef} className="relative">
+          <button
+            onClick={() => setIsThemeOpen(!isThemeOpen)}
+            className="p-1 px-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-[10px] rounded text-slate-350 hover:text-slate-100 font-mono"
+          >
             {theme === 'code-dark' ? 'VS Dark' : theme === 'code-light' ? 'VS Light' : 'Monokai'}
           </button>
-          <div className="absolute right-0 top-7.5 z-40 hidden group-hover:block w-32 rounded bg-slate-900 border border-slate-800 p-0.5 text-[10px] font-mono shadow-xl text-slate-300">
-            {['code-dark', 'code-light', 'monokai'].map(t => (
-              <button
-                key={t}
-                onClick={() => setTheme(t)}
-                className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm flex items-center justify-between"
-              >
-                <span>{t === 'code-dark' ? 'VSCode Dark' : t === 'code-light' ? 'VSCode Light' : 'Monokai Redux'}</span>
-                {theme === t && <Check className="h-3 w-3 text-emerald-400" />}
-              </button>
-            ))}
-          </div>
+          {isThemeOpen && (
+            <div className="absolute right-0 top-8.5 z-40 w-32 rounded bg-slate-900 border border-slate-800 p-0.5 text-[10px] font-mono shadow-xl text-slate-300">
+              {['code-dark', 'code-light', 'monokai'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => {
+                    setTheme(t);
+                    setIsThemeOpen(false);
+                  }}
+                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm flex items-center justify-between"
+                >
+                  <span>{t === 'code-dark' ? 'VSCode Dark' : t === 'code-light' ? 'VSCode Light' : 'Monokai Redux'}</span>
+                  {theme === t && <Check className="h-3 w-3 text-emerald-400" />}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
