@@ -22,24 +22,12 @@ export default function AddByIdentifierModal({
   const [selectedPluginId, setSelectedPluginId] = useState<string>('auto');
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detectedPlugin, setDetectedPlugin] = useState<MetadataResolverPlugin | null>(null);
-
   const plugins = registry.getAllPlugins();
 
-  // Handle auto-detection
-  useEffect(() => {
-    if (selectedPluginId === 'auto') {
-      const matches = registry.getMatchingPlugins(input);
-      if (matches.length > 0) {
-        setDetectedPlugin(matches[0]);
-      } else {
-        setDetectedPlugin(null);
-      }
-    } else {
-      const plugin = registry.getPluginById(selectedPluginId);
-      setDetectedPlugin(plugin || null);
-    }
-  }, [input, selectedPluginId]);
+  // Compute matching plugin synchronously during render
+  const detectedPlugin = selectedPluginId === 'auto'
+    ? (registry.getMatchingPlugins(input)[0] || null)
+    : (registry.getPluginById(selectedPluginId) || null);
 
   const handleResolve = async (e: React.FormEvent) => {
     e.preventDefault();

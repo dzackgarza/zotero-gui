@@ -56,28 +56,7 @@ export default function InspectorPanel({
   theme
 }: InspectorPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [citekeyConflict, setCitekeyConflict] = useState(false);
-
-  const [creatorsText, setCreatorsText] = useState('');
-  const [isEditingCreators, setIsEditingCreators] = useState(false);
-
-  useEffect(() => {
-    if (item && !isEditingCreators) {
-      setCreatorsText(serializeCreators(item.creators));
-    }
-  }, [item, isEditingCreators]);
-
-  // Notes state
-  const [newNoteText, setNewNoteText] = useState('');
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editingNoteText, setEditingNoteText] = useState('');
-
-  // Attachments state
-  const [newAttachTitle, setNewAttachTitle] = useState('');
   const [pdfReaderUrl, setPdfReaderUrl] = useState<string | null>(null);
-
-  // New Tag state
-  const [newTag, setNewTag] = useState('');
 
   // Styles dynamically based on the VS theme
   const getPanelBg = () => {
@@ -116,18 +95,6 @@ export default function InspectorPanel({
     }
   };
 
-  // Validate citekey unique matches
-  useEffect(() => {
-    if (item && item.citekey) {
-      const conflict = allItems.some(
-        other => other.id !== item.id && other.citekey?.trim().toLowerCase() === item.citekey?.trim().toLowerCase()
-      );
-      setCitekeyConflict(conflict);
-    } else {
-      setCitekeyConflict(false);
-    }
-  }, [item, allItems]);
-
   if (!item) {
     const isLight = theme === 'code-light';
     const isMonokai = theme === 'monokai';
@@ -142,87 +109,11 @@ export default function InspectorPanel({
     );
   }
 
-  // Handle generic text/input updates
-  const handleFieldChange = (key: keyof ZoteroItem, value: any) => {
-    onUpdateItem({
-      ...item,
-      [key]: value,
-      dateModified: new Date().toISOString()
-    });
-  };
-
-  // Notes management
-  const handleAddNote = () => {
-    if (!newNoteText.trim()) return;
-    const now = new Date().toISOString();
-    const newNote = {
-      id: `note-${Date.now()}`,
-      note: newNoteText.trim(),
-      dateAdded: now,
-      dateModified: now
-    };
-    handleFieldChange('notes', [...item.notes, newNote]);
-    setNewNoteText('');
-  };
-
-  const handleStartEditNote = (noteId: string, text: string) => {
-    setEditingNoteId(noteId);
-    setEditingNoteText(text);
-  };
-
-  const handleSaveEditNote = (noteId: string) => {
-    const updatedNotes = item.notes.map(n => {
-      if (n.id === noteId) {
-        return {
-          ...n,
-          note: editingNoteText.trim(),
-          dateModified: new Date().toISOString()
-        };
-      }
-      return n;
-    });
-    handleFieldChange('notes', updatedNotes);
-    setEditingNoteId(null);
-  };
-
-  const handleDeleteNote = (noteId: string) => {
-    const updatedNotes = item.notes.filter(n => n.id !== noteId);
-    handleFieldChange('notes', updatedNotes);
-  };
-
-  // Tags management
-  const handleAddTag = (e: React.FormEvent) => {
-    e.preventDefault();
-    const tag = newTag.trim();
-    if (!tag) return;
-    if (item.tags.includes(tag)) {
-      setNewTag('');
-      return;
-    }
-    handleFieldChange('tags', [...item.tags, tag]);
-    setNewTag('');
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    handleFieldChange('tags', item.tags.filter(t => t !== tagToRemove));
-  };
-
-  // Attachments management
-  const handleAddAttachment = () => {
-    if (!newAttachTitle.trim()) return;
-    const newAttach = {
-      id: `attach-${Date.now()}`,
-      title: newAttachTitle.trim(),
-      mimeType: 'application/pdf',
-      path: `/local/${newAttachTitle.trim().replace(/\s+/g, '_')}.pdf`
-    };
-    handleFieldChange('attachments', [...item.attachments, newAttach]);
-    setNewAttachTitle('');
-  };
-
-  const handleDeleteAttachment = (attachId: string) => {
-    handleFieldChange('attachments', item.attachments.filter(a => a.id !== attachId));
-  };
+  // Compute read-only representations synchronously during render
+  const creatorsText = serializeCreators(item.creators);
+  const citekeyConflict = !!item.citekey && allItems.some(
+    other => other.id !== item.id && other.citekey?.trim().toLowerCase() === item.citekey?.trim().toLowerCase()
+  );
 
   // Clipboard citation formatting (simplified BibTeX)
   const copyBibtex = () => {

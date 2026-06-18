@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Terminal, Search, BookOpen, Settings, Eye, RefreshCw } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ZoteroItem, Command } from '../types';
@@ -26,7 +26,6 @@ export default function CommandPalette({
   const [input, setInput] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const fuseRef = useRef<Fuse<ZoteroItem> | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -36,8 +35,9 @@ export default function CommandPalette({
     }
   }, [isOpen, initialInput]);
 
-  useEffect(() => {
-    fuseRef.current = new Fuse(items.filter(item => !item.inTrash), {
+  // Index items for fuzzy searching synchronously with useMemo
+  const fuse = useMemo(() => {
+    return new Fuse(items.filter(item => !item.inTrash), {
       keys: [
         { name: 'title', weight: 0.5 },
         { name: 'creators.lastName', weight: 0.3 },
@@ -71,8 +71,8 @@ export default function CommandPalette({
   const isCommandMode = input.startsWith('>');
   const searchString = isCommandMode ? input.slice(1).trim() : input.trim();
 
-  // Filter lists based on type of entry
-  const getFilteredList = () => {
+  // Filter lists based on type of entry synchronously with useMemo
+  const filteredList = useMemo(() => {
     if (isCommandMode) {
       const q = searchString.toLowerCase();
       return commands
@@ -84,13 +84,10 @@ export default function CommandPalette({
           .filter(item => !item.inTrash)
           .map(item => ({ type: 'item' as const, data: item, key: `item-${item.id}` }));
       }
-      if (!fuseRef.current) return [];
-      const results = fuseRef.current.search(searchString);
+      const results = fuse.search(searchString);
       return results.map(r => ({ type: 'item' as const, data: r.item, key: `item-${r.item.id}` }));
     }
-  };
-
-  const filteredList = getFilteredList();
+  }, [isCommandMode, searchString, commands, items, fuse]);
 
   const handleExecute = (entry: { type: 'command'; data: Command } | { type: 'item'; data: ZoteroItem }) => {
     if (entry.type === 'command') {
