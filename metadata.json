@@ -1,0 +1,6 @@
+{
+  "name": "Zotero Database Explorer",
+  "description": "A modern VSCode-style frontend client for Zotero bibliographic databases, featuring selectable metadata columns, quick fuzzy search, advanced query scoping, and a Ctrl+P command palette.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
