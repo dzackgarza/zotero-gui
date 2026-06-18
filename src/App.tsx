@@ -320,47 +320,21 @@ export default function App() {
     if (resolved.citekey) zoteroItem.citationKey = resolved.citekey;
 
     let response: Response | null = null;
-    let usedLocal = false;
+    showToast('Adding item directly to Zotero (Local API)...');
 
-    showToast('Adding item directly to Zotero...');
+    // Post directly to Local Zotero API
+    response = await fetch('http://127.0.0.1:23119/api/users/0/items', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(zoteroConfig?.apiKey ? { 'Zotero-API-Key': zoteroConfig.apiKey } : {})
+      },
+      body: JSON.stringify([zoteroItem])
+    });
 
-    // 1. Try Local Zotero API first (workstation local)
-    try {
-      response = await fetch('http://127.0.0.1:23119/api/users/0/items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(zoteroConfig?.apiKey ? { 'Zotero-API-Key': zoteroConfig.apiKey } : {})
-        },
-        body: JSON.stringify([zoteroItem])
-      });
-      if (response.ok) {
-        usedLocal = true;
-      }
-    } catch (e) {
-      console.warn('Local Zotero API not reachable, falling back to Web API', e);
-    }
-
-    // 2. Try Zotero Web API directly from the browser (no proxy)
-    if (!usedLocal) {
-      if (!zoteroConfig || !zoteroConfig.apiKey || !zoteroConfig.userId) {
-        throw new Error('Zotero Web API credentials are not loaded yet or missing.');
-      }
-      const url = `https://api.zotero.org/users/${zoteroConfig.userId}/items`;
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Zotero-API-Key': zoteroConfig.apiKey,
-          'Zotero-API-Version': '3',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([zoteroItem])
-      });
-    }
-
-    if (!response || !response.ok) {
-      const errorText = response ? await response.text() : 'No response from Zotero API';
-      throw new Error(`Zotero API error: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Local Zotero API error (HTTP ${response.status}): ${errorText}`);
     }
 
     const result: any = await response.json();
@@ -420,7 +394,7 @@ export default function App() {
 
     setItems(prev => [createdItem, ...prev]);
     setSelectedItemId(createdItem.id);
-    showToast(`Successfully added item directly to Zotero${usedLocal ? ' (Local)' : ' (Web)'}!`);
+    showToast('Successfully added item directly to Zotero (Local API)!');
   };
 
   const handleUpdateItem = (updated: ZoteroItem) => {
