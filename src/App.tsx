@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Folder, FolderOpen, Layers, Trash2, Tag, Upload, Download,
-  LayoutGrid, RefreshCw, Sparkles, Terminal, FileText, HelpCircle, Columns, Filter, Info, ChevronUp, ChevronDown, ChevronRight
+  LayoutGrid, RefreshCw, Sparkles, Terminal, FileText, HelpCircle, Columns, Filter, Info, ChevronUp, ChevronDown, ChevronRight,
+  Eye, X, RotateCcw
 } from 'lucide-react';
 import {
   ZoteroItem, Collection, ColumnDefinition, AdvancedSearchSettings, Command, ItemType
@@ -15,7 +16,7 @@ import SidebarCollections from './components/SidebarCollections';
 import InspectorPanel from './components/InspectorPanel';
 import CommandPalette from './components/CommandPalette';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
-import ColumnsSelector from './components/ColumnsSelector';
+
 
 export default function App() {
   // --- Core Library State (loaded from live Zotero DB via /api/library) ---
@@ -45,7 +46,8 @@ export default function App() {
 
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
-  const [isColumnsSelectorOpen, setIsColumnsSelectorOpen] = useState(false);
+  const [headerContextMenu, setHeaderContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
 
   // Sorting
   const [sortKey, setSortKey] = useState<keyof ZoteroItem | 'creators_compact'>('title');
@@ -101,6 +103,21 @@ export default function App() {
     localStorage.setItem('zotero_theme', theme);
   }, [theme]);
 
+  // Click outside handler for header context menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setHeaderContextMenu(null);
+      }
+    }
+    if (headerContextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [headerContextMenu]);
+
   // Global Keydown Hotkeys for Ctrl+P / Cmd+P
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
@@ -114,12 +131,32 @@ export default function App() {
       if (e.key === 'Escape') {
         setIsPaletteOpen(false);
         setIsAdvancedSearchOpen(false);
-        setIsColumnsSelectorOpen(false);
+        setHeaderContextMenu(null);
       }
     };
     window.addEventListener('keydown', handleGlobalKeys);
     return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, []);
+
+  const toggleColumn = (key: string) => {
+    setColumns(prev => prev.map(col => {
+      if (col.key === key) {
+        return { ...col, visible: !col.visible };
+      }
+      return col;
+    }));
+  };
+
+  const setAllColumns = (visible: boolean) => {
+    setColumns(prev => prev.map(col => {
+      if (col.key === 'title') return { ...col, visible: true };
+      return { ...col, visible };
+    }));
+  };
+
+  const resetColumns = () => {
+    setColumns(DEFAULT_COLUMNS);
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -554,7 +591,6 @@ export default function App() {
         onOpenAdvancedSearch={() => setIsAdvancedSearchOpen(true)}
         onOpenPalette={() => setIsPaletteOpen(true)}
         activeCollectionName={getCollectionName()}
-        onToggleColumnsSelector={() => setIsColumnsSelectorOpen(prev => !prev)}
         onOpenAddItem={handleAddNewItem}
         theme={theme}
         setTheme={setTheme}
@@ -563,15 +599,6 @@ export default function App() {
       {/* Main Workspace Frame split */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         
-        {/* Core Column Select Popover */}
-        <ColumnsSelector
-          isOpen={isColumnsSelectorOpen}
-          onClose={() => setIsColumnsSelectorOpen(false)}
-          columns={columns}
-          onChangeColumns={setColumns}
-          onReset={() => setColumns(DEFAULT_COLUMNS)}
-        />
-
         {/* 2. Left Activity rail & Sidebar Explorer */}
         <div className={`w-60 flex flex-col shrink-0 ${getSubpanelClass()}`}>
           <SidebarCollections
@@ -649,7 +676,13 @@ export default function App() {
             <table className={`w-full text-left border-collapse text-xs select-none ${getTableClass()}`}>
               
               {/* Dynamic Headers mapping */}
-              <thead className={`sticky top-0 z-10 shadow-xs border-b ${theme === 'code-dark' ? 'bg-[#252526] text-[#808080] border-[#2b2b2b]' : 'bg-slate-900 text-slate-400 border-slate-800'}`}>
+              <thead
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setHeaderContextMenu({ x: e.clientX, y: e.clientY });
+                }}
+                className={`sticky top-0 z-10 shadow-xs border-b ${theme === 'code-dark' ? 'bg-[#252526] text-[#808080] border-[#2b2b2b]' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
+              >
                 <tr>
                   {columns
                     .filter(c => c.visible)
@@ -879,6 +912,80 @@ export default function App() {
         <div className="fixed bottom-10 right-4 z-49 bg-blue-600 text-white font-semibold text-xs px-4 py-2.5 rounded-md shadow-2xl border border-blue-500 animate-slide-up flex items-center gap-2">
           <Terminal className="h-4 w-4" />
           <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Header Context Menu */}
+      {headerContextMenu && (
+        <div
+          ref={headerMenuRef}
+          style={{ top: `${headerContextMenu.y}px`, left: `${headerContextMenu.x}px` }}
+          className="fixed z-50 w-64 rounded-md border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl p-3 text-xs"
+        >
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 font-semibold">
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <Eye className="h-4 w-4 text-sky-400" />
+              <span>Visible Columns</span>
+            </div>
+            <button
+              onClick={() => setHeaderContextMenu(null)}
+              className="rounded-sm p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-1 mb-2.5 pb-1 border-b border-slate-800/50 text-[10px]">
+            <button
+              onClick={() => setAllColumns(true)}
+              className="text-sky-400 hover:underline"
+            >
+              Select All
+            </button>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={() => setAllColumns(false)}
+              className="text-sky-400 hover:underline"
+            >
+              Clear (Hide)
+            </button>
+            <span className="text-slate-700">|</span>
+            <button
+              onClick={resetColumns}
+              className="text-amber-400 hover:underline flex items-center gap-0.5"
+            >
+              <RotateCcw className="h-2.5 w-2.5" />
+              <span>Reset</span>
+            </button>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+            {columns.map(col => {
+              const isTitle = col.key === 'title';
+              return (
+                <label
+                  key={col.key}
+                  className={`flex items-center justify-between px-1.5 py-1 rounded-sm cursor-pointer hover:bg-slate-800/50 select-none ${
+                    isTitle ? 'opacity-80 cursor-not-allowed text-slate-400' : 'text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={col.visible}
+                      disabled={isTitle}
+                      onChange={() => toggleColumn(col.key as string)}
+                      className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5"
+                    />
+                    <span className="truncate">{col.label}</span>
+                  </div>
+                  <span className="font-mono text-[9px] text-slate-500 uppercase">
+                    {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

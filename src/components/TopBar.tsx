@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Search, Sliders, Eye, Plus, Columns, Info, Check, RefreshCw, Sparkles, Command
+  Search, Sliders, Eye, Plus, Info, Check, RefreshCw, Sparkles, Command
 } from 'lucide-react';
 import { AdvancedSearchSettings, ColumnDefinition } from '../types';
 
@@ -10,7 +10,6 @@ interface TopBarProps {
   onOpenAdvancedSearch: () => void;
   onOpenPalette: () => void;
   activeCollectionName: string;
-  onToggleColumnsSelector: () => void;
   onOpenAddItem: (type: 'journalArticle' | 'book' | 'conferencePaper') => void;
   theme: string;
   setTheme: (t: string) => void;
@@ -22,7 +21,6 @@ export default function TopBar({
   onOpenAdvancedSearch,
   onOpenPalette,
   activeCollectionName,
-  onToggleColumnsSelector,
   onOpenAddItem,
   theme,
   setTheme
@@ -120,15 +118,7 @@ export default function TopBar({
           </div>
         </div>
 
-        {/* View Columns Picker */}
-        <button
-          onClick={onToggleColumnsSelector}
-          title="Customize Columns"
-          className="flex items-center gap-1.5 p-1.5 px-2 rounded hover:bg-slate-900 border border-transparent text-slate-400 hover:text-sky-400 transition"
-        >
-          <Columns className="h-4 w-4" />
-          <span className="text-xs font-semibold tracking-wide">Columns</span>
-        </button>
+
 
         {/* VSCode Themes Selector */}
         <div className="relative group">
