@@ -449,3 +449,442 @@ Fix: use an abortable effect with `loading`, `error`, and cleanup.
 - Enable strict TypeScript and add runtime schemas at the DB/API/import boundaries.
 
 [node-sqlite]: https://nodejs.org/api/sqlite.html "SQLite | Node.js v26.3.1 Documentation"
+
+## Addendum: Weak Typing, Timid Data Handling, and the Need for Hard Zotero Preflight Assertions
+
+The earlier audit should be corrected in one important respect: close coupling to Zotero's SQLite schema is not itself a design flaw.
+For this project, it is the premise.
+This is a replacement GUI for Zotero, so it necessarily depends on Zotero's local database schema, item tables, EAV layout, collection structure, attachment representation, note representation, and deleted-item conventions.
+
+The actual flaw is not schema coupling.
+The flaw is unasserted schema coupling.
+
+The code currently depends on very specific Zotero database facts while writing as if those facts are merely tentative.
+It queries deep internal tables, casts the result to `any[]`, conditionally fills gaps with defaults, and then lets the frontend operate on supposedly well-formed `ZoteroItem` objects.
+That is backwards.
+If the application requires a known Zotero database shape, it should prove that shape up front, fail immediately if it is absent, and then let the rest of the program assume the database satisfies the declared contract.
+
+The app should not "gracefully handle" an unexpected Zotero schema by returning partial data, fake defaults, empty arrays, or generic 500s. It should reject the environment before the GUI starts.
+
+### Replace Timid Probing with an Explicit Zotero Compatibility Contract
+
+The server should have a startup preflight, for example:
+
+```ts
+assertSupportedNodeRuntime();
+assertReadableZoteroDatabase(dbPath);
+assertZoteroSchemaVersion(db, SUPPORTED_ZOTERO_SCHEMA_RANGE);
+assertRequiredTablesExist(db, [
+  'items',
+  'itemTypes',
+  'libraries',
+  'itemData',
+  'itemDataValues',
+  'fields',
+  'itemCreators',
+  'creators',
+  'creatorTypes',
+  'itemTags',
+  'tags',
+  'collectionItems',
+  'itemNotes',
+  'itemAttachments',
+  'collections',
+  'deletedItems',
+  'deletedCollections',
+]);
+assertRequiredColumnsExist(db, REQUIRED_ZOTERO_COLUMNS);
+assertRequiredFieldNamesExist(db, REQUIRED_FIELD_NAMES);
+assertRequiredItemTypesExist(db, REQUIRED_ITEM_TYPES);
+assertNoUnsupportedLibraryModes(db);
+assertCanRunRepresentativeLibraryQuery(db);
+assertCanMapRepresentativeRows(db);
+```
+
+After this preflight passes, ordinary code should not keep asking "maybe this table exists," "maybe this field exists," "maybe this row has the expected shape."
+Those facts should be established once and treated as invariants.
+
+The contract should be versioned.
+The app can declare compatibility with specific Zotero database schema versions or specific Zotero desktop versions.
+A startup failure like this is appropriate:
+
+```text
+Unsupported Zotero database schema.
+
+Expected:
+  schema version: 143-146
+  required table: itemAttachments(parentItemID, path, contentType)
+  required field names: title, DOI, url, date, publicationTitle, abstractNote, citationKey
+
+Observed:
+  schema version: 147
+  missing field: citationKey
+
+Refusing to start. Update the compatibility contract or migration layer.
+```
+
+This is better than a GUI that loads and then quietly lies.
+
+### The Type Problem Is Not Just "Missing Strict Mode"; It Is Missing Domain Confidence
+
+The code currently weakens the program at the exact boundaries where it should be strongest.
+
+Examples:
+
+```ts
+.all() as any[]
+row.itemType as any
+payload.items as ZoteroItem[]
+payload.collections as Collection[]
+DEFAULT_COLUMNS as any[]
+ref={inputRef as any}
+handleExecute(entry as any)
+```
+
+These casts say: "the program does not know what it has."
+But this app should know exactly what it has, because it is reading a declared Zotero schema after a hard compatibility check.
+
+The desired model is:
+
+```ts
+type ZoteroItemRow = {
+  itemID: number;
+  id: ZoteroKey;
+  itemType: ZoteroItemType;
+  dateAdded: ZoteroTimestamp;
+  dateModified: ZoteroTimestamp;
+  title: string;
+  inTrash: 0 | 1;
+  doi: string | null;
+  url: string | null;
+  date: string | null;
+  // ...
+};
+
+function assertZoteroItemRow(row: unknown): asserts row is ZoteroItemRow {
+  assertRecord(row);
+  assertInteger(row.itemID);
+  assertZoteroKey(row.id);
+  assertKnownZoteroItemType(row.itemType);
+  assertZoteroTimestamp(row.dateAdded);
+  assertZoteroTimestamp(row.dateModified);
+  assertString(row.title);
+  assertOneOf(row.inTrash, [0, 1]);
+}
+```
+
+Then the mapper can be simple:
+
+```ts
+function mapItemRow(row: ZoteroItemRow, related: RelatedItemData): ZoteroItem {
+  return {
+    id: row.id,
+    itemType: row.itemType,
+    title: row.title,
+    creators: related.creatorsByItemID.mustGet(row.itemID),
+    tags: related.tagsByItemID.mustGet(row.itemID),
+    notes: related.notesByItemID.mustGet(row.itemID),
+    attachments: related.attachmentsByItemID.mustGet(row.itemID),
+    collections: related.collectionsByItemID.mustGet(row.itemID),
+    dateAdded: row.dateAdded,
+    dateModified: row.dateModified,
+    inTrash: row.inTrash === 1,
+    doi: nullable(row.doi),
+    url: nullable(row.url),
+    date: nullable(cleanZoteroDate(row.date)),
+    // ...
+  };
+}
+```
+
+No `any`. No "best effort."
+No accidental undefined paths.
+The hard part is establishing the contract; after that, the code should exploit it.
+
+### Stop Injecting Fake Domain Values
+
+The BibTeX parser currently falls back to:
+
+```ts
+[{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }]
+```
+
+This is the wrong instinct.
+It turns missing data into false data.
+Zotero supports items without creators.
+If an item has no creators, the value should be `[]`. If the application requires creators for a specific operation, that operation should assert that requirement and fail there.
+
+Likewise:
+
+```ts
+title: row.title ?? 'Untitled'
+title: row.title ?? row.path ?? 'Attachment'
+formatCreatorsFull(...) => 'No Authors'
+formatCreatorsCompact(...) => '-'
+```
+
+There is a distinction between display placeholders and domain data.
+The domain layer should not invent bibliographic facts.
+If a title is required by the app's compatibility contract, assert it.
+If Zotero allows titleless items and the GUI supports them, represent absence as absence.
+Render placeholders only in the view layer.
+
+Correct split:
+
+```ts
+// domain
+title: ZoteroTitle | null;
+
+// view
+renderTitle(item.title ?? 'Untitled');
+```
+
+The current code blurs these layers.
+
+### Move Uncertainty to the Boundary; Keep the Core Code Assertive
+
+The current system spreads uncertainty everywhere: optional chaining, `?? []`, `?? undefined`, casts, shallow payload checks, and generic error recovery.
+This makes the code longer and less reliable.
+
+A better architecture is:
+
+```text
+startup
+  load config
+  open DB
+  run doctor
+  construct typed repository
+
+repository
+  issue known SQL
+  assert row shapes
+  return typed domain objects
+
+domain/selectors
+  assume valid ZoteroItem objects
+  compute views deterministically
+
+frontend
+  parse API payload strictly once
+  render typed data
+```
+
+Then the central code becomes substantially simpler.
+For example, after asserting that every `ZoteroItem` always has `tags: string[]`, `collections: string[]`, `attachments: Attachment[]`, and `notes: ItemNote[]`, UI code does not need this pattern:
+
+```ts
+item.collections && item.collections.some(...)
+item.attachments && item.attachments.some(...)
+item.tags && item.tags.includes(...)
+```
+
+It can say:
+
+```ts
+item.collections.some(...)
+item.attachments.some(...)
+item.tags.includes(...)
+```
+
+That is not cosmetic.
+It means the program has a real model.
+
+### The Doctor Should Be a First-Class Subsystem, Not a Few Startup Checks
+
+The app needs an extensive `zotero doctor` layer.
+It should be runnable independently, and the server should refuse to start unless it passes.
+
+The doctor should check at least:
+
+Database location and access:
+
+```text
+DB path exists
+DB opens read-only
+DB is not WAL-inconsistent
+DB is a Zotero database, not merely a SQLite database
+DB schema version is in the supported range
+```
+
+Schema structure:
+
+```text
+required tables exist
+required columns exist with expected affinity/nullability where relevant
+required indexes or join keys exist
+required field names exist in fields
+required item types exist in itemTypes
+creator type table contains expected creator types
+deleted item/collection tables exist
+collection parent links are structurally sane
+```
+
+Data assumptions:
+
+```text
+item keys are nonempty
+library rows exclude feeds as expected
+parent/child item relationships are coherent
+child attachments have parentItemID
+child notes have parentItemID
+collectionItems references existing items and collections
+creator links reference existing creators and creator types
+tag links reference existing tags
+```
+
+Query assumptions:
+
+```text
+main item query compiles
+creator query compiles
+tag query compiles
+collection-membership query compiles
+notes query compiles
+attachments query compiles
+collections query compiles
+all representative rows validate against typed row parsers
+```
+
+Application-specific assumptions:
+
+```text
+the app's supported item-type set matches observed data, or unknown item types are explicitly modeled
+date normalization policy is declared
+citation-key source is declared
+trash semantics are declared
+attachment-path semantics are declared
+collection-recursion semantics are declared
+```
+
+The doctor should produce a structured report, not an incidental thrown error.
+But startup should still fail hard if any required assertion fails.
+
+### Make Impossible States Unrepresentable
+
+Current types allow invalid states too easily.
+
+For example, `ItemType` ends with `| string`, which destroys most of the value of the union.
+If unknown Zotero item types are allowed, model that explicitly:
+
+```ts
+type KnownZoteroItemType =
+  | 'journalArticle'
+  | 'book'
+  | 'bookSection'
+  | 'conferencePaper'
+  | 'thesis'
+  | 'report'
+  | 'webpage';
+
+type ZoteroItemType =
+  | { kind: 'known'; value: KnownZoteroItemType }
+  | { kind: 'unknown'; value: string };
+```
+
+Or, if the doctor rejects unknown item types for now, keep the literal union and assert up front that the database contains only supported item types.
+
+Similarly, collections should not be plain strings everywhere.
+Use branded IDs:
+
+```ts
+type ItemID = Brand<number, 'ItemID'>;
+type CollectionID = Brand<number, 'CollectionID'>;
+type ZoteroKey = Brand<string, 'ZoteroKey'>;
+type ZoteroTimestamp = Brand<string, 'ZoteroTimestamp'>;
+```
+
+Then this kind of accidental mixing becomes harder:
+
+```ts
+collections: string[];
+id: string;
+parentId?: string;
+```
+
+Zotero has database integer IDs, Zotero keys, collection IDs, and synthetic UI IDs like `'all'`, `'trash'`, `'duplicates'`. Those should not all be undifferentiated strings.
+
+Use separate types:
+
+```ts
+type RealCollectionID = Brand<number, 'RealCollectionID'>;
+
+type VirtualCollectionID =
+  | 'all'
+  | 'duplicates'
+  | 'unfiled'
+  | 'trash'
+  | 'no-pdf'
+  | 'no-extraction'
+  | 'nonstandard-citekey';
+
+type SelectedCollectionID = RealCollectionID | VirtualCollectionID;
+```
+
+That would prevent large classes of bugs.
+
+### Replace Shallow API Validation with Exact Payload Parsing
+
+The client currently checks only that `items` and `collections` are arrays, then trusts everything inside.
+That is not enough.
+The API boundary should be just as assertive as the DB boundary.
+
+The client should parse:
+
+```ts
+const payload = LibraryPayloadSchema.parse(await response.json());
+```
+
+or with hand-written assertion functions:
+
+```ts
+const payload = parseLibraryPayloadStrict(await response.json());
+```
+
+That parser should validate every item field the frontend assumes.
+If an item reaches React, React should not need to defend against malformed `tags`, missing `attachments`, or absent `collections`.
+
+A render error boundary is not a substitute for payload validation.
+The boundary should catch programmer errors, not routine malformed data.
+
+### Testing Should Prove the Invariants, Not Mock Around Them
+
+The test suite should be reorganized around contracts.
+
+Needed tests:
+
+```text
+doctor accepts fixture DB matching supported Zotero schema
+doctor rejects DB missing required table
+doctor rejects DB missing required field name
+doctor rejects unsupported schema version
+doctor rejects broken parent attachment links
+main query returns rows accepted by row parser
+row parser rejects malformed SQL row
+domain mapper preserves null/missing bibliographic values without fake defaults
+selectors assume well-formed items and do not defensively probe
+frontend rejects malformed /api/library payload before rendering
+```
+
+This is more valuable than smoke tests that mock `fetch` and only check that one item title renders.
+
+The project should also have live resolver tests, but those should be opt-in.
+The core proof should be local and deterministic.
+
+### Revised Principle for the Project
+
+The intended design principle should be:
+
+```text
+Be maximally strict at the Zotero/database/API boundaries.
+Be maximally simple inside the application core.
+Do not recover from violated invariants.
+Do not invent bibliographic data.
+Do not represent unknown states as ordinary optional fields.
+Do not let React components perform schema discovery.
+```
+
+The app should treat the Zotero database as a declared foreign schema with a formal compatibility contract.
+Once that contract is validated, the implementation should become less defensive, not more defensive.
+
+The target is not graceful degradation.
+The target is correct failure before startup and simple code afterward.
