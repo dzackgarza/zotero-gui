@@ -4,6 +4,7 @@ import {
   LayoutGrid, RefreshCw, Sparkles, Terminal, FileText, HelpCircle, Columns, Filter, Info, ChevronUp, ChevronDown, ChevronRight,
   Eye, X, RotateCcw
 } from 'lucide-react';
+import * as ContextMenu from '@radix-ui/react-context-menu';
 import {
   ZoteroItem, Collection, ColumnDefinition, AdvancedSearchSettings, Command, ItemType
 } from './types';
@@ -58,8 +59,6 @@ export default function App() {
 
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
-  const [headerContextMenu, setHeaderContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const headerMenuRef = useRef<HTMLDivElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sorting
@@ -112,21 +111,6 @@ export default function App() {
     localStorage.setItem('zotero_theme', theme);
   }, [theme]);
 
-  // Click outside handler for header context menu
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
-        setHeaderContextMenu(null);
-      }
-    }
-    if (headerContextMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [headerContextMenu]);
-
   const [paletteInitialInput, setPaletteInitialInput] = useState('');
 
   // Global Keydown Hotkeys for Ctrl+P / Cmd+P / Ctrl+Shift+P
@@ -149,7 +133,6 @@ export default function App() {
       if (e.key === 'Escape') {
         setIsPaletteOpen(false);
         setIsAdvancedSearchOpen(false);
-        setHeaderContextMenu(null);
       }
     };
     window.addEventListener('keydown', handleGlobalKeys);
@@ -674,16 +657,14 @@ export default function App() {
 
           {/* Core scrollable table viewport */}
           <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-slate-800">
-            <table className={`w-full text-left border-collapse text-xs select-none ${getTableClass()}`}>
-              
-              {/* Dynamic Headers mapping */}
-              <thead
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setHeaderContextMenu({ x: e.clientX, y: e.clientY });
-                }}
-                className={`sticky top-0 z-10 shadow-xs border-b ${theme === 'code-dark' ? 'bg-[#252526] text-[#808080] border-[#2b2b2b]' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
-              >
+            <ContextMenu.Root>
+              <table className={`w-full text-left border-collapse text-xs select-none ${getTableClass()}`}>
+                
+                {/* Dynamic Headers mapping */}
+                <ContextMenu.Trigger asChild>
+                  <thead
+                    className={`sticky top-0 z-10 shadow-xs border-b ${theme === 'code-dark' ? 'bg-[#252526] text-[#808080] border-[#2b2b2b]' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
+                  >
                 <tr>
                   {columns
                     .filter(c => c.visible)
@@ -712,6 +693,7 @@ export default function App() {
                     })}
                 </tr>
               </thead>
+            </ContextMenu.Trigger>
 
               {/* Row Body renders */}
               <tbody className={`divide-y ${theme === 'code-dark' ? 'divide-[#2b2b2b]' : ''}`}>
@@ -846,7 +828,71 @@ export default function App() {
                 )}
               </tbody>
             </table>
-          </div>
+
+            <ContextMenu.Portal>
+              <ContextMenu.Content className="z-50 w-64 rounded-md border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl p-3 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 font-semibold">
+                  <div className="flex items-center gap-1.5 text-slate-300">
+                    <Eye className="h-4 w-4 text-sky-400" />
+                    <span>Visible Columns</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-1 mb-2.5 pb-1 border-b border-slate-800/50 text-[10px]">
+                  <button
+                    onClick={() => setAllColumns(true)}
+                    className="text-sky-400 hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-slate-700">|</span>
+                  <button
+                    onClick={() => setAllColumns(false)}
+                    className="text-sky-400 hover:underline"
+                  >
+                    Clear (Hide)
+                  </button>
+                  <span className="text-slate-700">|</span>
+                  <button
+                    onClick={resetColumns}
+                    className="text-amber-400 hover:underline flex items-center gap-0.5"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                  {columns.map(col => {
+                    const isTitle = col.key === 'title';
+                    return (
+                      <label
+                        key={col.key}
+                        className={`flex items-center justify-between px-1.5 py-1 rounded-sm cursor-pointer hover:bg-slate-800/50 select-none ${
+                          isTitle ? 'opacity-80 cursor-not-allowed text-slate-400' : 'text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={col.visible}
+                            disabled={isTitle}
+                            onChange={() => toggleColumn(col.key as string)}
+                            className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5"
+                          />
+                          <span className="truncate">{col.label}</span>
+                        </div>
+                        <span className="font-mono text-[9px] text-slate-500 uppercase">
+                          {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </ContextMenu.Content>
+            </ContextMenu.Portal>
+          </ContextMenu.Root>
+        </div>
         </div>
 
         {/* 4. Right side Inspector detail panel */}
@@ -898,79 +944,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Header Context Menu */}
-      {headerContextMenu && (
-        <div
-          ref={headerMenuRef}
-          style={{ top: `${headerContextMenu.y}px`, left: `${headerContextMenu.x}px` }}
-          className="fixed z-50 w-64 rounded-md border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl p-3 text-xs"
-        >
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2 font-semibold">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <Eye className="h-4 w-4 text-sky-400" />
-              <span>Visible Columns</span>
-            </div>
-            <button
-              onClick={() => setHeaderContextMenu(null)}
-              className="rounded-sm p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between gap-1 mb-2.5 pb-1 border-b border-slate-800/50 text-[10px]">
-            <button
-              onClick={() => setAllColumns(true)}
-              className="text-sky-400 hover:underline"
-            >
-              Select All
-            </button>
-            <span className="text-slate-700">|</span>
-            <button
-              onClick={() => setAllColumns(false)}
-              className="text-sky-400 hover:underline"
-            >
-              Clear (Hide)
-            </button>
-            <span className="text-slate-700">|</span>
-            <button
-              onClick={resetColumns}
-              className="text-amber-400 hover:underline flex items-center gap-0.5"
-            >
-              <RotateCcw className="h-2.5 w-2.5" />
-              <span>Reset</span>
-            </button>
-          </div>
-
-          <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
-            {columns.map(col => {
-              const isTitle = col.key === 'title';
-              return (
-                <label
-                  key={col.key}
-                  className={`flex items-center justify-between px-1.5 py-1 rounded-sm cursor-pointer hover:bg-slate-800/50 select-none ${
-                    isTitle ? 'opacity-80 cursor-not-allowed text-slate-400' : 'text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={col.visible}
-                      disabled={isTitle}
-                      onChange={() => toggleColumn(col.key as string)}
-                      className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5"
-                    />
-                    <span className="truncate">{col.label}</span>
-                  </div>
-                  <span className="font-mono text-[9px] text-slate-500 uppercase">
-                    {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
