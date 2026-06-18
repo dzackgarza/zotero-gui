@@ -19,12 +19,46 @@ import CommandPalette from './components/CommandPalette';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
 import AddByIdentifierModal from './components/AddByIdentifierModal';
 
+interface LibraryPayload {
+  items: ZoteroItem[];
+  collections: Collection[];
+}
+
+function assertLibraryPayload(condition: boolean, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseLibraryPayload(payload: unknown): LibraryPayload {
+  assertLibraryPayload(isRecord(payload), 'Library API payload must be an object');
+  assertLibraryPayload(Array.isArray(payload.items), 'Library API payload must contain an items array');
+  assertLibraryPayload(Array.isArray(payload.collections), 'Library API payload must contain a collections array');
+
+  return {
+    items: payload.items as ZoteroItem[],
+    collections: payload.collections as Collection[],
+  };
+}
+
+async function fetchLibraryPayload(): Promise<LibraryPayload> {
+  const response = await fetch('/api/library');
+  if (!response.ok) {
+    throw new Error(`Library API failed with HTTP ${response.status}`);
+  }
+  return parseLibraryPayload(await response.json() as unknown);
+}
 
 export default function App() {
   // --- Core Library State (loaded from live Zotero DB via /api/library) ---
   const [items, setItems] = useState<ZoteroItem[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [libraryLoadError, setLibraryLoadError] = useState<Error | null>(null);
 
   const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
     const savedStr = localStorage.getItem('zotero_columns');
@@ -132,16 +166,14 @@ export default function App() {
   // Load live library from the Zotero DB API server.
   const loadFromApi = () => {
     setIsLoading(true);
-    fetch('/api/library')
-      .then(r => r.json())
-      .then(({ items: apiItems, collections: apiCollections }) => {
-        setItems(apiItems);
-        setCollections(apiCollections);
+    fetchLibraryPayload()
+      .then((payload) => {
+        setItems(payload.items);
+        setCollections(payload.collections);
         setIsLoading(false);
       })
-      .catch(err => {
-        console.error('Failed to load library from API:', err);
-        throw err; // fail loudly
+      .catch((error: Error) => {
+        setLibraryLoadError(error);
       });
   };
 
@@ -473,6 +505,10 @@ export default function App() {
       return 0;
     });
   };
+
+  if (libraryLoadError) {
+    throw libraryLoadError;
+  }
 
   const filteredLibraryItems = getCategorizedItems();
 
