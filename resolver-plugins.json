@@ -23,6 +23,14 @@
         "node",
         "resolver-plugins/arxiv.mjs"
       ]
+    },
+    {
+      "id": "zbmath",
+      "name": "ZBMath Resolver",
+      "command": [
+        "node",
+        "resolver-plugins/zbmath.mjs"
+      ]
     }
   ]
 }

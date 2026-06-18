@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseBibTeXToItem } from '../utils/bibtexParser';
 import { buildZoteroItemPayload, loadResolverPlugins, parseZoteroCreateResult, runResolverPlugin } from './resolverPlugins';
+import type { ResolverPluginConfig } from './resolverPlugins';
 
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
@@ -31,6 +32,16 @@ describe('server-owned resolver plugin execution', () => {
     }]);
   });
 
+  it('declares the ZBMath resolver as a configured plugin', () => {
+    const plugins = loadResolverPlugins(path.join(thisDir, '..', '..', 'resolver-plugins.json'));
+
+    expect(plugins.find(plugin => plugin.id === 'zbmath')).toEqual({
+      id: 'zbmath',
+      name: 'ZBMath Resolver',
+      command: ['node', 'resolver-plugins/zbmath.mjs'],
+    });
+  });
+
   it('feeds a source string to an external script and receives BibTeX', async () => {
     const bibtex = await runResolverPlugin({
       id: 'fixture',
@@ -47,6 +58,34 @@ describe('server-owned resolver plugin execution', () => {
     ]);
     expect(item.publisher).toBe('Independent Resolver Press');
     expect(item.isbn).toBe('9780262033848');
+  });
+
+  it('runs the ZBMath plugin from both accepted user inputs to canonical BibTeX', async () => {
+    const plugin = {
+      id: 'zbmath',
+      name: 'ZBMath Resolver',
+      command: [process.execPath, path.join(thisDir, '..', '..', 'resolver-plugins', 'zbmath.mjs')],
+    } satisfies ResolverPluginConfig;
+    const urlBibtex = await runResolverPlugin(plugin, 'https://zbmath.org/?q=an:0125.10303');
+    const rawBibtex = await runResolverPlugin(plugin, '0125.10303');
+
+    expect(rawBibtex).toBe(urlBibtex);
+
+    const item = parseBibTeXToItem(urlBibtex);
+
+    expect(item).toMatchObject({
+      itemType: 'journalArticle',
+      title: 'Kriterien für die Projektivität vollständiger abstrakter algebraischer Mannigfaltigkeiten',
+      publicationTitle: 'Izvestiya Akademii Nauk SSSR. Seriya Matematicheskaya',
+      volume: '28',
+      pages: '179-224',
+      date: '1964',
+    });
+    expect(item.creators).toEqual([
+      { firstName: 'B. G.', lastName: 'Moĭshezon', creatorType: 'author' },
+    ]);
+    expect(urlBibtex).toContain('zblnumber = {0125.10303}');
+    expect(urlBibtex).toContain('zbmath = {3202953}');
   });
 });
 
