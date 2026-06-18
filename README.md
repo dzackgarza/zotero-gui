@@ -1,20 +1,39 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Zotero GUI
 
-# Run and deploy your AI Studio app
+A local web application for viewing your Zotero libraries and resolving/importing research papers directly to Zotero using custom resolver plugins.
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/e8f7e85f-0f0f-431f-8da6-af09b3b8c66f
+- **Node.js**: Version 18 or higher (uses `node:sqlite`).
+- **Zotero**: A local Zotero installation with a database located at `~/Zotero/zotero.sqlite`.
 
-## Run Locally
+## Installation
 
-**Prerequisites:**  Node.js
+Install the dependencies:
 
+```bash
+npm install
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Usage
+
+Start both the API backend and Vite frontend concurrently:
+
+```bash
+npm run dev:full
+```
+
+Open your browser and navigate to `http://localhost:3000` to interact with the GUI.
+
+To run the components separately:
+- API server: `npm run api` (starts on port 3001)
+- Frontend: `npm run dev` (starts on port 3000)
+
+## Configuration
+
+- **Database Path**: The server reads from `file:///home/dzack/Zotero/zotero.sqlite?immutable=1` by default.
+- **Resolvers**: Plugins are configured in `resolver-plugins.json` and defined in the `resolver-plugins/` directory (e.g., arXiv, DOI, ISBN, and zbMATH).
+
+## License
+
+MIT
