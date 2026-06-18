@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import {
   Folder, FolderOpen, ChevronRight, ChevronDown, Trash2, Tag,
-  Layers, PackageMinus, RefreshCw, FolderPlus, HelpCircle
+  Layers, PackageMinus, RefreshCw, FolderPlus, HelpCircle,
+  FileMinus, FileText, Key
 } from 'lucide-react';
 import { Collection, ZoteroItem } from '../types';
+import { getStandardCitekey } from '../utils/fuzzy';
 
 interface SidebarCollectionsProps {
   collections: Collection[];
@@ -77,6 +79,40 @@ export default function SidebarCollections({
   // Trash count
   const getTrashCount = () => {
     return items.filter(item => item.inTrash).length;
+  };
+
+  // No PDF Attachment count
+  const getNoPdfCount = () => {
+    return items.filter(item => {
+      if (item.inTrash) return false;
+      const hasPdf = item.attachments && item.attachments.some(att => 
+        (att.path && att.path.toLowerCase().endsWith('.pdf')) ||
+        (att.title && att.title.toLowerCase().includes('.pdf')) ||
+        (att.mimeType && att.mimeType === 'application/pdf')
+      );
+      return !hasPdf;
+    }).length;
+  };
+
+  // No Extraction count
+  const getNoExtractionCount = () => {
+    return items.filter(item => {
+      if (item.inTrash) return false;
+      const hasExtraction = item.attachments && item.attachments.some(att => 
+        (att.title && att.title.toLowerCase().includes('extracted.md')) ||
+        (att.path && att.path.toLowerCase().includes('extracted.md'))
+      );
+      return !hasExtraction;
+    }).length;
+  };
+
+  // Nonstandard Citation Key count
+  const getNonstandardCitekeyCount = () => {
+    return items.filter(item => {
+      if (item.inTrash) return false;
+      const standard = getStandardCitekey(item);
+      return !item.citekey || item.citekey !== standard;
+    }).length;
   };
 
   // Collect active tag list to display alongside counts
@@ -308,6 +344,69 @@ export default function SidebarCollections({
               </div>
               <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500 font-semibold text-sky-400">
                 {getUnfiledCount()}
+              </span>
+            </div>
+
+            {/* No PDF Attachment */}
+            <div
+              onClick={() => {
+                onSelectCollection('no-pdf');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'no-pdf'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileMinus className="h-3.5 w-3.5 text-red-400" />
+                <span>No PDF Attachment</span>
+              </div>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                {getNoPdfCount()}
+              </span>
+            </div>
+
+            {/* No Extraction */}
+            <div
+              onClick={() => {
+                onSelectCollection('no-extraction');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'no-extraction'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5 text-yellow-500" />
+                <span>No Extraction</span>
+              </div>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                {getNoExtractionCount()}
+              </span>
+            </div>
+
+            {/* Nonstandard Citation Key */}
+            <div
+              onClick={() => {
+                onSelectCollection('nonstandard-citekey');
+                onSelectTag(null);
+              }}
+              className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
+                selectedCollectionId === 'nonstandard-citekey'
+                  ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
+                  : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Key className="h-3.5 w-3.5 text-purple-400" />
+                <span>Nonstandard Citation Key</span>
+              </div>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                {getNonstandardCitekeyCount()}
               </span>
             </div>
 

@@ -8,7 +8,7 @@ import {
   ZoteroItem, Collection, ColumnDefinition, AdvancedSearchSettings, Command, ItemType
 } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
-import { filterZoteroItems, formatCreatorsCompact, formatCreatorsFull } from './utils/fuzzy';
+import { filterZoteroItems, formatCreatorsCompact, formatCreatorsFull, getStandardCitekey } from './utils/fuzzy';
 
 // Top level components
 import TopBar from './components/TopBar';
@@ -55,22 +55,18 @@ export default function App() {
   const [sortDesc, setSortDesc] = useState(false);
 
   // Search setups
-  const [searchSettings, setSearchSettings] = useState<AdvancedSearchSettings>({
-    query: '',
-    matchCase: false,
-    fuzzyThreshold: 0.5,
-    matchType: 'all',
-    searchFields: {
-      title: true,
-      authors: true,
-      publication: true,
-      abstract: false,
-      doi: false,
-      tags: true,
-      notes: false,
-      year: true,
-      url: false
-    }
+  const [searchSettings, setSearchSettings] = useState<AdvancedSearchSettings>(() => {
+    const fields: Record<string, boolean> = {};
+    DEFAULT_COLUMNS.forEach(col => {
+      fields[col.key] = ['title', 'creators_compact', 'publicationTitle', 'date', 'citekey'].includes(col.key);
+    });
+    return {
+      query: '',
+      matchCase: false,
+      fuzzyThreshold: 0.5,
+      matchType: 'all',
+      searchFields: fields
+    };
   });
 
   // Notifications
@@ -119,12 +115,21 @@ export default function App() {
     };
   }, [headerContextMenu]);
 
-  // Global Keydown Hotkeys for Ctrl+P / Cmd+P
+  const [paletteInitialInput, setPaletteInitialInput] = useState('');
+
+  // Global Keydown Hotkeys for Ctrl+P / Cmd+P / Ctrl+Shift+P
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
-      // Ctrl+P / Cmd+P toggles command palette
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      // Ctrl+Shift+P / Cmd+Shift+P opens command palette in command mode
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
+        setPaletteInitialInput('>');
+        setIsPaletteOpen(true);
+      }
+      // Ctrl+P / Cmd+P toggles command palette
+      else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setPaletteInitialInput('');
         setIsPaletteOpen(prev => !prev);
       }
       
@@ -368,6 +373,28 @@ export default function App() {
         result = result.filter(it => titleCounts[it.title.trim().toLowerCase()] > 1);
       } else if (selectedCollectionId === 'unfiled') {
         result = result.filter(it => !it.collections || it.collections.length === 0);
+      } else if (selectedCollectionId === 'no-pdf') {
+        result = result.filter(item => {
+          const hasPdf = item.attachments && item.attachments.some(att => 
+            (att.path && att.path.toLowerCase().endsWith('.pdf')) ||
+            (att.title && att.title.toLowerCase().includes('.pdf')) ||
+            (att.mimeType && att.mimeType === 'application/pdf')
+          );
+          return !hasPdf;
+        });
+      } else if (selectedCollectionId === 'no-extraction') {
+        result = result.filter(item => {
+          const hasExtraction = item.attachments && item.attachments.some(att => 
+            (att.title && att.title.toLowerCase().includes('extracted.md')) ||
+            (att.path && att.path.toLowerCase().includes('extracted.md'))
+          );
+          return !hasExtraction;
+        });
+      } else if (selectedCollectionId === 'nonstandard-citekey') {
+        result = result.filter(item => {
+          const standard = getStandardCitekey(item);
+          return !item.citekey || item.citekey !== standard;
+        });
       } else if (selectedCollectionId !== 'all') {
         // Belonging to collection or subcollections
         const childCollectionIds = collections
@@ -418,6 +445,9 @@ export default function App() {
     if (selectedCollectionId === 'duplicates') return 'Duplicate Entries';
     if (selectedCollectionId === 'unfiled') return 'Unfiled Documents';
     if (selectedCollectionId === 'trash') return 'Trash Bin';
+    if (selectedCollectionId === 'no-pdf') return 'No PDF Attachment';
+    if (selectedCollectionId === 'no-extraction') return 'No Extraction';
+    if (selectedCollectionId === 'nonstandard-citekey') return 'Nonstandard Citation Key';
     const found = collections.find(c => c.id === selectedCollectionId);
     return found ? found.name : 'My Library';
   };
@@ -571,12 +601,6 @@ export default function App() {
           {isLoading ? 'Zotero Pro — Loading…' : `Zotero Pro — My Library (${items.length} items)`}
         </div>
         <div className="flex items-center space-x-3 text-[#969696]">
-          <span 
-            onClick={() => setIsPaletteOpen(true)}
-            className="text-[10px] bg-[#3c3c3c] px-1.5 py-0.5 rounded border border-[#454545] cursor-pointer hover:bg-[#454545] hover:text-white font-mono text-slate-300"
-          >
-            Ctrl+P
-          </span>
           <button 
             onClick={() => {
               showToast("Database synchronized successfully.");
@@ -734,6 +758,10 @@ export default function App() {
                             
                             if (col.key === 'creators_compact') {
                                 cellVal = formatCreatorsCompact(item.creators);
+                            } else if (col.key === 'tags') {
+                                cellVal = item.tags ? item.tags.join(', ') : '';
+                            } else if (col.key === 'notes') {
+                                cellVal = item.notes ? item.notes.map(n => n.note).join('; ') : '';
                             } else {
                               cellVal = item[col.key];
                             }
@@ -866,6 +894,7 @@ export default function App() {
       <CommandPalette
         isOpen={isPaletteOpen}
         onClose={() => setIsPaletteOpen(false)}
+        initialInput={paletteInitialInput}
         items={items}
         onSelectItem={(id) => {
           setSelectedItemId(id);
@@ -884,6 +913,7 @@ export default function App() {
         settings={searchSettings}
         onChangeSettings={setSearchSettings}
         allItems={items}
+        columns={columns}
       />
 
       {/* Toast Alert popup */}

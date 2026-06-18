@@ -23,6 +23,21 @@ export function fuzzyMatches(text: string, query: string, matchCase: boolean = f
 /**
  * Performs comprehensive scoped filtering on items based on search configs
  */
+export function getStandardCitekey(item: ZoteroItem): string {
+  if (!item.creators || item.creators.length === 0) return '';
+  const firstAuthor = item.creators.find(c => c.creatorType === 'author') || item.creators[0];
+  if (!firstAuthor || !firstAuthor.lastName) return '';
+  const authorsAlpha = firstAuthor.lastName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const dateStr = item.date || '';
+  const match = dateStr.match(/\d{4}/);
+  const year = match ? match[0] : '';
+  if (year.length < 4) return '';
+  const yearDigit = year.substring(3, 4); // index 3
+  return authorsAlpha + yearDigit;
+}
+
 export function filterZoteroItems(
   items: ZoteroItem[],
   settings: AdvancedSearchSettings
@@ -33,44 +48,35 @@ export function filterZoteroItems(
   return items.filter(item => {
     const fieldsToSearch: string[] = [];
 
-    if (settings.searchFields.title && item.title) {
-      fieldsToSearch.push(item.title);
-    }
+    Object.entries(settings.searchFields).forEach(([key, enabled]) => {
+      if (!enabled) return;
 
-    if (settings.searchFields.authors) {
-      item.creators.forEach(c => {
-        fieldsToSearch.push(`${c.firstName} ${c.lastName}`);
-        fieldsToSearch.push(c.lastName);
-      });
-    }
-
-    if (settings.searchFields.publication && item.publicationTitle) {
-      fieldsToSearch.push(item.publicationTitle);
-    }
-
-    if (settings.searchFields.abstract && item.abstractNote) {
-      fieldsToSearch.push(item.abstractNote);
-    }
-
-    if (settings.searchFields.doi && item.doi) {
-      fieldsToSearch.push(item.doi);
-    }
-
-    if (settings.searchFields.tags && item.tags) {
-      fieldsToSearch.push(...item.tags);
-    }
-
-    if (settings.searchFields.notes && item.notes) {
-      item.notes.forEach(n => fieldsToSearch.push(n.note));
-    }
-
-    if (settings.searchFields.year && item.date) {
-      fieldsToSearch.push(item.date);
-    }
-
-    if (settings.searchFields.url && item.url) {
-      fieldsToSearch.push(item.url);
-    }
+      if ((key === 'title') && item.title) {
+        fieldsToSearch.push(item.title);
+      } else if ((key === 'creators_compact' || key === 'authors') && item.creators) {
+        item.creators.forEach(c => {
+          fieldsToSearch.push(`${c.firstName} ${c.lastName}`);
+          fieldsToSearch.push(c.lastName);
+        });
+      } else if ((key === 'publicationTitle' || key === 'publication') && item.publicationTitle) {
+        fieldsToSearch.push(item.publicationTitle);
+      } else if ((key === 'abstractNote' || key === 'abstract') && item.abstractNote) {
+        fieldsToSearch.push(item.abstractNote);
+      } else if (key === 'tags' && item.tags) {
+        fieldsToSearch.push(...item.tags);
+      } else if (key === 'notes' && item.notes) {
+        item.notes.forEach(n => fieldsToSearch.push(n.note));
+      } else if ((key === 'date' || key === 'year') && item.date) {
+        fieldsToSearch.push(item.date);
+      } else {
+        const val = item[key as keyof ZoteroItem];
+        if (typeof val === 'string') {
+          fieldsToSearch.push(val);
+        } else if (typeof val === 'number') {
+          fieldsToSearch.push(String(val));
+        }
+      }
+    });
 
     // Evaluate match logic: 'all' (AND) vs 'any' (OR)
     if (settings.matchType === 'all') {

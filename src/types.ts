@@ -155,17 +155,7 @@ export interface AdvancedSearchSettings {
   matchCase: boolean;
   fuzzyThreshold: number; // 0 (strict) to 1 (very broad/fuzzy)
   matchType: 'all' | 'any'; // AND vs OR logic
-  searchFields: {
-    title: boolean;
-    authors: boolean;
-    publication: boolean;
-    abstract: boolean;
-    doi: boolean;
-    tags: boolean;
-    notes: boolean;
-    year: boolean;
-    url: boolean;
-  };
+  searchFields: Record<string, boolean>;
 }
 
 export interface Command {

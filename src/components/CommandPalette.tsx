@@ -7,6 +7,7 @@ import { formatCreatorsCompact } from '../utils/fuzzy';
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
+  initialInput?: string;
   items: ZoteroItem[];
   onSelectItem: (id: string) => void;
   commands: Command[];
@@ -15,6 +16,7 @@ interface CommandPaletteProps {
 export default function CommandPalette({
   isOpen,
   onClose,
+  initialInput,
   items,
   onSelectItem,
   commands
@@ -26,11 +28,11 @@ export default function CommandPalette({
 
   useEffect(() => {
     if (isOpen) {
-      setInput('');
+      setInput(initialInput || '');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isOpen, initialInput]);
 
   // Click outside to close
   useEffect(() => {
@@ -77,17 +79,11 @@ export default function CommandPalette({
         .filter(c => c.name.toLowerCase().includes(q) || (c.category && c.category.toLowerCase().includes(q)))
         .map(c => ({ type: 'command' as const, data: c, key: `cmd-${c.id}` }));
     } else {
-      if (!searchString) {
-        // Show recent / first 6 items
-        return items
-          .filter(item => !item.inTrash)
-          .slice(0, 6)
-          .map(item => ({ type: 'item' as const, data: item, key: `item-${item.id}` }));
-      }
       const q = searchString.toLowerCase();
       return items
         .filter(item => !item.inTrash)
         .filter(item => {
+          if (!q) return true;
           const authString = item.creators.map(c => `${c.firstName} ${c.lastName}`).join(' ');
           return (
             item.title.toLowerCase().includes(q) ||
@@ -96,7 +92,6 @@ export default function CommandPalette({
             (item.publicationTitle && item.publicationTitle.toLowerCase().includes(q))
           );
         })
-        .slice(0, 8)
         .map(item => ({ type: 'item' as const, data: item, key: `item-${item.id}` }));
     }
   };

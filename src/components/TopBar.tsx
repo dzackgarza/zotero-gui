@@ -75,15 +75,6 @@ export default function TopBar({
             </div>
           </div>
         </div>
-
-        {/* Ctrl+P triggers */}
-        <button
-          onClick={onOpenPalette}
-          className="p-1 px-2.5 rounded bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 hover:bg-slate-850 flex items-center gap-1.5 transition text-[11px]"
-        >
-          <Command className="h-3 w-3 text-sky-400" />
-          <kbd className="font-mono text-[9px] opacity-80 bg-slate-950 px-1 rounded-sm border border-slate-805">Ctrl+P</kbd>
-        </button>
       </div>
 
       {/* Column settings and Theme toggler */}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Filter, X, Sliders, CheckSquare, Square, Info } from 'lucide-react';
-import { AdvancedSearchSettings, ZoteroItem } from '../types';
+import { AdvancedSearchSettings, ZoteroItem, ColumnDefinition } from '../types';
 import { filterZoteroItems } from '../utils/fuzzy';
 
 interface AdvancedSearchModalProps {
@@ -10,6 +10,7 @@ interface AdvancedSearchModalProps {
   settings: AdvancedSearchSettings;
   onChangeSettings: (settings: AdvancedSearchSettings) => void;
   allItems: ZoteroItem[];
+  columns: ColumnDefinition[];
 }
 
 export default function AdvancedSearchModal({
@@ -17,7 +18,8 @@ export default function AdvancedSearchModal({
   onClose,
   settings,
   onChangeSettings,
-  allItems
+  allItems,
+  columns
 }: AdvancedSearchModalProps) {
 
   // Toggle dynamic fields
@@ -34,22 +36,22 @@ export default function AdvancedSearchModal({
   const setPreset = (preset: 'all' | 'author_title' | 'citation_indices') => {
     const updated = { ...settings.searchFields };
     if (preset === 'all') {
-      Object.keys(updated).forEach(k => {
-        (updated as any)[k] = true;
+      columns.forEach(col => {
+        updated[col.key] = true;
       });
     } else if (preset === 'author_title') {
-      Object.keys(updated).forEach(k => {
-        (updated as any)[k] = false;
+      columns.forEach(col => {
+        updated[col.key] = false;
       });
       updated.title = true;
-      updated.authors = true;
+      updated.creators_compact = true;
     } else if (preset === 'citation_indices') {
-      Object.keys(updated).forEach(k => {
-        (updated as any)[k] = false;
+      columns.forEach(col => {
+        updated[col.key] = false;
       });
       updated.title = true;
       updated.doi = true;
-      updated.year = true;
+      updated.date = true;
     }
     onChangeSettings({ ...settings, searchFields: updated });
   };
@@ -87,14 +89,18 @@ export default function AdvancedSearchModal({
             {/* Content Area */}
             <div className="space-y-4 p-4 text-xs">
               
-              {/* Query Mirror */}
+              {/* Query Input */}
               <div>
                 <label className="block font-semibold text-slate-400 mb-1">
                   Active Query String
                 </label>
-                <div className="flex items-center gap-1.5 rounded-sm border border-slate-800 bg-slate-950 px-2 py-1.5 text-slate-200">
-                  <span className="font-mono text-xs">{settings.query ? `"${settings.query}"` : 'None (displays all entries)'}</span>
-                </div>
+                <input
+                  type="text"
+                  value={settings.query}
+                  onChange={e => onChangeSettings({ ...settings, query: e.target.value })}
+                  placeholder="None (displays all entries)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-slate-205 placeholder:text-slate-550 outline-hidden focus:border-sky-500 hover:border-slate-700 text-xs transition-colors font-mono"
+                />
               </div>
 
               {/* Match Options */}
@@ -173,23 +179,29 @@ export default function AdvancedSearchModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-sm border border-slate-800/80 bg-slate-950/40 p-3">
-                  {(Object.keys(settings.searchFields) as Array<keyof AdvancedSearchSettings['searchFields']>).map(
-                    field => (
-                      <label
-                        key={field}
-                        className="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-slate-100"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={settings.searchFields[field]}
-                          onChange={() => handleToggleField(field)}
-                          className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0"
-                        />
-                        <span className="capitalize">{field === 'year' ? 'Date/Year' : field === 'doi' ? 'DOI' : field}</span>
-                      </label>
-                    )
-                  )}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-sm border border-slate-800/80 bg-slate-950/40 p-3 max-h-40 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                  {columns.map(col => (
+                    <label
+                      key={col.key}
+                      className="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-slate-100"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!settings.searchFields[col.key]}
+                        onChange={() => {
+                          onChangeSettings({
+                            ...settings,
+                            searchFields: {
+                              ...settings.searchFields,
+                              [col.key]: !settings.searchFields[col.key]
+                            }
+                          });
+                        }}
+                        className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0"
+                      />
+                      <span className="truncate">{col.label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
