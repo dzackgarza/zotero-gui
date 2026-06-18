@@ -1,15 +1,76 @@
 import path from 'node:path';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseBibTeXToItem } from '../utils/bibtexParser';
 import { buildZoteroItemPayload, loadResolverPlugins, parseZoteroCreateResult, runResolverPlugin } from './resolverPlugins';
 import type { ResolverPluginConfig } from './resolverPlugins';
 
+interface ZBMathCrossrefFixture {
+  zbl: string;
+  doi: string;
+  zbmath: ZBMathDocumentFixture;
+  crossrefBibtex: string;
+}
+
+interface ZBMathCrossrefFixtureCorpus {
+  records: ZBMathCrossrefFixture[];
+}
+
+interface ZBMathDocumentFixture {
+  id: number;
+  title: { title: string };
+  contributors: { authors: Array<{ name: string }> };
+  source: {
+    pages?: string;
+    serial?: ZBMathSourceFixture[];
+    series?: ZBMathSourceFixture[];
+  };
+  year: string;
+  links: Array<{ type: string; identifier: string }>;
+}
+
+interface ZBMathSourceFixture {
+  title: string;
+  volume?: string;
+  issue?: string;
+}
+
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
 const fixturePlugin = path.join(thisDir, 'test-fixtures', 'echo-resolver.mjs');
+
+function firstZBMathSource(document: ZBMathDocumentFixture): ZBMathSourceFixture {
+  const source = (document.source.serial ?? document.source.series)?.[0];
+  if (!source) {
+    throw new Error(`ZBMath fixture ${document.id} must contain a serial or series source`);
+  }
+  return source;
+}
+
+function zbmathDoi(document: ZBMathDocumentFixture): string {
+  const doi = document.links.find(link => link.type === 'doi')?.identifier;
+  if (!doi) {
+    throw new Error(`ZBMath fixture ${document.id} must contain a DOI link`);
+  }
+  return doi;
+}
+
+function bracedBibTeXField(bibtex: string, field: string): string {
+  const match = new RegExp(`${field}=\\{([^}]*)\\}`, 'i').exec(bibtex);
+  if (!match) {
+    throw new Error(`Crossref BibTeX fixture must contain ${field}`);
+  }
+  return match[1];
+}
+
+function normalizePageRange(value: string | undefined): string {
+  if (!value) {
+    throw new Error('page range must be present');
+  }
+  return value.replaceAll('–', '-');
+}
 
 describe('server-owned resolver plugin execution', () => {
   it('loads resolver commands from an explicit config file', () => {
@@ -86,6 +147,57 @@ describe('server-owned resolver plugin execution', () => {
     ]);
     expect(urlBibtex).toContain('zblnumber = {0125.10303}');
     expect(urlBibtex).toContain('zbmath = {3202953}');
+  });
+
+  it('reconstructs 15 DOI-backed ZBMath fixtures against source-owned metadata', async () => {
+    const fixturePath = path.join(thisDir, 'test-fixtures', 'zbmath-crossref-fixtures.json');
+    const corpus = JSON.parse(readFileSync(fixturePath, 'utf8')) as ZBMathCrossrefFixtureCorpus;
+    const { articleBibTeX } = await import(pathToFileURL(path.join(thisDir, '..', '..', 'resolver-plugins', 'zbmath-lib.mjs')).href) as {
+      articleBibTeX: (document: ZBMathDocumentFixture, zblNumber: string) => string;
+    };
+
+    expect(corpus.records.map(record => record.zbl)).toEqual([
+      '0139.24606',
+      '1092.91524',
+      '1154.94303',
+      '1368.05139',
+      '1226.05223',
+      '1051.81505',
+      '0914.53047',
+      '0661.17013',
+      '1417.37129',
+      '0202.55202',
+      '0219.65008',
+      '0990.94509',
+      '1306.81030',
+      '1205.82086',
+      '0914.53048',
+    ]);
+
+    for (const record of corpus.records) {
+      const bibtex = articleBibTeX(record.zbmath, record.zbl);
+      const item = parseBibTeXToItem(bibtex);
+      const source = firstZBMathSource(record.zbmath);
+      const zblDoi = zbmathDoi(record.zbmath);
+
+      expect(zblDoi.toLowerCase()).toBe(record.doi.toLowerCase());
+      expect(item.title).toBe(record.zbmath.title.title);
+      expect(item.publicationTitle).toBe(source.title);
+      expect(item.date).toBe(record.zbmath.year);
+      expect(item.doi?.toLowerCase()).toBe(record.doi.toLowerCase());
+      expect(bibtex).toContain(`zblnumber = {${record.zbl}}`);
+      expect(bibtex).toContain(`zbmath = {${record.zbmath.id}}`);
+
+      const crossrefDoi = bracedBibTeXField(record.crossrefBibtex, 'DOI');
+      const crossrefYear = bracedBibTeXField(record.crossrefBibtex, 'year');
+      const crossrefVolume = bracedBibTeXField(record.crossrefBibtex, 'volume');
+      const crossrefPages = bracedBibTeXField(record.crossrefBibtex, 'pages');
+
+      expect(crossrefDoi.toLowerCase()).toBe(record.doi.toLowerCase());
+      expect(crossrefYear).toBe(record.zbmath.year);
+      expect(item.volume).toBe(crossrefVolume);
+      expect(normalizePageRange(item.pages)).toContain(normalizePageRange(crossrefPages));
+    }
   });
 });
 
