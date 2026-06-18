@@ -17,6 +17,7 @@ import SidebarCollections from './components/SidebarCollections';
 import InspectorPanel from './components/InspectorPanel';
 import CommandPalette from './components/CommandPalette';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
+import AddByIdentifierModal from './components/AddByIdentifierModal';
 
 
 export default function App() {
@@ -101,6 +102,7 @@ export default function App() {
 
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
+  const [isAddByIdentifierOpen, setIsAddByIdentifierOpen] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sorting
@@ -266,6 +268,41 @@ export default function App() {
     setItems(prev => [newDoc, ...prev]);
     setSelectedItemId(newDoc.id);
     showToast(`Created new ${newDoc.itemType}!`);
+  };
+
+  const handleAddResolvedItem = (resolved: Partial<ZoteroItem>) => {
+    const now = new Date().toISOString();
+    const newDoc: ZoteroItem = {
+      id: `item-${Date.now()}`,
+      itemType: resolved.itemType || 'journalArticle',
+      title: resolved.title || 'Resolved Reference Document',
+      creators: resolved.creators || [{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }],
+      date: resolved.date || new Date().getFullYear().toString(),
+      publicationTitle: resolved.publicationTitle || '',
+      volume: resolved.volume || '',
+      issue: resolved.issue || '',
+      pages: resolved.pages || '',
+      doi: resolved.doi || '',
+      url: resolved.url || '',
+      isbn: resolved.isbn || '',
+      abstractNote: resolved.abstractNote || '',
+      citekey: resolved.citekey || '',
+      tags: resolved.tags || ['resolved'],
+      notes: [],
+      attachments: [],
+      collections: selectedCollectionId !== 'all' && selectedCollectionId !== 'duplicates' && selectedCollectionId !== 'unfiled' && selectedCollectionId !== 'trash' ? [selectedCollectionId] : [],
+      dateAdded: now,
+      dateModified: now
+    };
+
+    if (!newDoc.citekey) {
+      const stdKey = getStandardCitekey(newDoc);
+      newDoc.citekey = stdKey || `doc_${Date.now().toString().slice(-4)}`;
+    }
+
+    setItems(prev => [newDoc, ...prev]);
+    setSelectedItemId(newDoc.id);
+    showToast('Successfully resolved and added bibliography item!');
   };
 
   const handleUpdateItem = (updated: ZoteroItem) => {
@@ -648,6 +685,7 @@ export default function App() {
         onOpenPalette={() => setIsPaletteOpen(true)}
         activeCollectionName={getCollectionName()}
         onOpenAddItem={handleAddNewItem}
+        onOpenAddByIdentifier={() => setIsAddByIdentifierOpen(true)}
         theme={theme}
         setTheme={setTheme}
       />
@@ -1023,6 +1061,14 @@ export default function App() {
         onChangeSettings={setSearchSettings}
         allItems={items}
         columns={columns}
+      />
+
+      {/* Add by identifier modal portal */}
+      <AddByIdentifierModal
+        isOpen={isAddByIdentifierOpen}
+        onClose={() => setIsAddByIdentifierOpen(false)}
+        onAddResolvedItem={handleAddResolvedItem}
+        theme={theme}
       />
 
       {/* Toast Alert popup */}

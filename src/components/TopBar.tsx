@@ -11,6 +11,7 @@ interface TopBarProps {
   onOpenPalette: () => void;
   activeCollectionName: string;
   onOpenAddItem: (type: 'journalArticle' | 'book' | 'conferencePaper') => void;
+  onOpenAddByIdentifier: () => void;
   theme: string;
   setTheme: (t: string) => void;
 }
@@ -21,6 +22,7 @@ export default function TopBar({
   onOpenAdvancedSearch,
   activeCollectionName,
   onOpenAddItem,
+  onOpenAddByIdentifier,
   theme,
   setTheme
 }: TopBarProps) {
@@ -126,6 +128,13 @@ export default function TopBar({
                   className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none"
                 >
                   Conference Paper
+                </DropdownMenu.Item>
+                <div className="border-t border-slate-800 my-1"></div>
+                <DropdownMenu.Item
+                  onSelect={onOpenAddByIdentifier}
+                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none text-sky-400 font-semibold"
+                >
+                  Add Item by Identifier...
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
