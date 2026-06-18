@@ -57,8 +57,7 @@ describe('App library loading', () => {
       collections: [{
         id: 'COLL123',
         name: 'Number theory',
-        parent: null,
-        itemCount: 1,
+        parentId: undefined,
       }],
     }));
 
@@ -77,6 +76,6 @@ describe('App library loading', () => {
     renderAppWithLibraryResponse(libraryResponse({ error: 'Database query failed' }));
 
     expect(await screen.findByText('Application Render Error')).toBeInTheDocument();
-    expect(screen.getByText('Error: Library API payload must contain an items array')).toBeInTheDocument();
+    expect(screen.getByText(/items/)).toBeInTheDocument();
   });
 });

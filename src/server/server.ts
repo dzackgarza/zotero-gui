@@ -33,9 +33,81 @@ function parseItemType(value: unknown): ItemType {
   throw new Error(`Unsupported Zotero item type: ${String(value)}`);
 }
 
+const NullableStringSchema = z.string().nullable();
+
+const RawItemRowSchema = z.strictObject({
+  itemID: z.number(),
+  id: z.string(),
+  itemType: z.string(),
+  dateAdded: NullableStringSchema,
+  dateModified: NullableStringSchema,
+  title: NullableStringSchema,
+  doi: NullableStringSchema,
+  url: NullableStringSchema,
+  date: NullableStringSchema,
+  volume: NullableStringSchema,
+  issue: NullableStringSchema,
+  pages: NullableStringSchema,
+  publisher: NullableStringSchema,
+  place: NullableStringSchema,
+  publicationTitle: NullableStringSchema,
+  abstractNote: NullableStringSchema,
+  language: NullableStringSchema,
+  isbn: NullableStringSchema,
+  issn: NullableStringSchema,
+  extra: NullableStringSchema,
+  rights: NullableStringSchema,
+  archive: NullableStringSchema,
+  archiveLocation: NullableStringSchema,
+  callNumber: NullableStringSchema,
+  accessDate: NullableStringSchema,
+  citekey: NullableStringSchema,
+  inTrash: z.number(),
+});
+
+const CreatorRowSchema = z.strictObject({
+  itemID: z.number(),
+  firstName: NullableStringSchema,
+  lastName: NullableStringSchema,
+  creatorType: z.string(),
+});
+
+const TagRowSchema = z.strictObject({
+  itemID: z.number(),
+  name: z.string(),
+});
+
+const CollectionMembershipRowSchema = z.strictObject({
+  itemID: z.number(),
+  collectionID: z.number(),
+});
+
+const NoteRowSchema = z.strictObject({
+  parentItemID: z.number(),
+  itemID: z.number(),
+  note: NullableStringSchema,
+  dateAdded: NullableStringSchema,
+  dateModified: NullableStringSchema,
+});
+
+const AttachmentRowSchema = z.strictObject({
+  parentItemID: z.number(),
+  id: z.string(),
+  path: NullableStringSchema,
+  contentType: NullableStringSchema,
+  title: NullableStringSchema,
+  url: NullableStringSchema,
+});
+
+const RawCollectionRowSchema = z.strictObject({
+  collectionID: z.number(),
+  collectionName: z.string(),
+  parentCollectionID: z.number().nullable(),
+});
+
 export function queryLibrary(db: DatabaseSync): LibraryPayload {
   // 1. Main items — EAV pivot via conditional aggregation
-  const rawItems = db.prepare(`
+  const rawItems = z.array(RawItemRowSchema).parse(db.prepare(`
     SELECT
       i.itemID,
       i.key                                                                          AS id,
@@ -88,41 +160,41 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     AND l.type != 'feed'
     GROUP BY i.itemID
     ORDER BY i.dateAdded DESC
-  `).all() as any[];
+  `).all());
 
   // 2. All creators ordered by item and position
-  const allCreators = db.prepare(`
+  const allCreators = z.array(CreatorRowSchema).parse(db.prepare(`
     SELECT ic.itemID, c.firstName, c.lastName, ct.creatorType
     FROM itemCreators ic
     JOIN creators c ON ic.creatorID = c.creatorID
     JOIN creatorTypes ct ON ic.creatorTypeID = ct.creatorTypeID
     ORDER BY ic.itemID, ic.orderIndex
-  `).all() as any[];
+  `).all());
 
   // 3. All tags
-  const allTags = db.prepare(`
+  const allTags = z.array(TagRowSchema).parse(db.prepare(`
     SELECT it2.itemID, t.name
     FROM itemTags it2
     JOIN tags t ON it2.tagID = t.tagID
     ORDER BY it2.itemID
-  `).all() as any[];
+  `).all());
 
   // 4. Collection memberships
-  const allCollMemberships = db.prepare(`
+  const allCollMemberships = z.array(CollectionMembershipRowSchema).parse(db.prepare(`
     SELECT itemID, collectionID FROM collectionItems ORDER BY itemID
-  `).all() as any[];
+  `).all());
 
   // 5. Notes (child note items linked to parent)
-  const allNotes = db.prepare(`
+  const allNotes = z.array(NoteRowSchema).parse(db.prepare(`
     SELECT n.parentItemID, n.itemID, n.note, i.dateAdded, i.dateModified
     FROM itemNotes n
     JOIN items i ON n.itemID = i.itemID
     WHERE n.parentItemID IS NOT NULL
     ORDER BY n.parentItemID
-  `).all() as any[];
+  `).all());
 
   // 6. Attachments (child attachment items linked to parent)
-  const allAttachments = db.prepare(`
+  const allAttachments = z.array(AttachmentRowSchema).parse(db.prepare(`
     SELECT
       a.parentItemID,
       i.key                                                        AS id,
@@ -138,17 +210,17 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     WHERE a.parentItemID IS NOT NULL
     GROUP BY a.itemID
     ORDER BY a.parentItemID
-  `).all() as any[];
+  `).all());
 
   // 7. Collections tree
-  const rawCollections = db.prepare(`
+  const rawCollections = z.array(RawCollectionRowSchema).parse(db.prepare(`
     SELECT c.collectionID, c.collectionName, c.parentCollectionID
     FROM collections c
     JOIN libraries l ON c.libraryID = l.libraryID
     LEFT JOIN deletedCollections dc ON c.collectionID = dc.collectionID
     WHERE dc.collectionID IS NULL AND l.type != 'feed'
     ORDER BY c.collectionID
-  `).all() as any[];
+  `).all());
 
   // --- Build lookup maps indexed by itemID ---
 
@@ -200,7 +272,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
 
   // --- Assemble final ZoteroItem objects ---
 
-  const items: ZoteroItem[] = rawItems.map((row: any) => ({
+  const items: ZoteroItem[] = rawItems.map(row => ({
     id: row.id,
     itemType: parseItemType(row.itemType),
     title: row.title ?? 'Untitled',
@@ -237,7 +309,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
   // Add sentinel "My Library" root collection then real collections
   const collections: Collection[] = [
     { id: 'all', name: 'My Library' },
-    ...rawCollections.map((row: any) => ({
+    ...rawCollections.map(row => ({
       id: String(row.collectionID),
       name: row.collectionName,
       parentId: row.parentCollectionID != null ? String(row.parentCollectionID) : undefined,

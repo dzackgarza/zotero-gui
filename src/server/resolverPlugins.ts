@@ -6,7 +6,7 @@ import {
   ResolverPluginMetadataSchema,
 } from '../schemas';
 import type { ResolverPluginMetadata } from '../schemas';
-import { parseBibTeXToItem } from '../utils/bibtexParser';
+import { parseBibTeXToMetadata } from '../utils/bibtexParser';
 
 export type ResolverCommand = [string, ...string[]];
 
@@ -180,7 +180,7 @@ export async function runResolverPlugin(
         return;
       }
       try {
-        parseBibTeXToItem(bibtex);
+        parseBibTeXToMetadata(bibtex);
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)));
         return;
@@ -198,7 +198,7 @@ export async function importBibTeXToZotero(
   importEndpoint: string,
   fetchImpl: typeof fetch,
 ): Promise<ZoteroImportResult> {
-  parseBibTeXToItem(bibtex);
+  parseBibTeXToMetadata(bibtex);
   const response = await fetchImpl(importEndpoint, {
     method: 'POST',
     headers: {

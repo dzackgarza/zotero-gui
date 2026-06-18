@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseBibTeXToItem } from '../utils/bibtexParser';
+import { parseBibTeXToMetadata } from '../utils/bibtexParser';
 import {
   loadResolverPlugins,
   runResolverPlugin,
@@ -39,13 +39,30 @@ function plugin(command: [string, ...string[]]): ResolverPluginConfig {
   };
 }
 
-function execution(cwd: string, overrides: Partial<ResolverExecutionConfig> = {}): ResolverExecutionConfig {
+function execution(cwd: string): ResolverExecutionConfig {
   return {
     cwd,
     timeoutMs: 1000,
     stdoutByteLimit: 4096,
     stderrByteLimit: 4096,
-    ...overrides,
+  };
+}
+
+function timeoutExecution(cwd: string): ResolverExecutionConfig {
+  return {
+    cwd,
+    timeoutMs: 20,
+    stdoutByteLimit: 4096,
+    stderrByteLimit: 4096,
+  };
+}
+
+function stdoutLimitExecution(cwd: string): ResolverExecutionConfig {
+  return {
+    cwd,
+    timeoutMs: 1000,
+    stdoutByteLimit: 32,
+    stderrByteLimit: 4096,
   };
 }
 
@@ -123,7 +140,7 @@ process.stdout.write(\`@book{fixture,
       'ISBN 9780262033848',
       execution(dir),
     );
-    const item = parseBibTeXToItem(bibtex);
+    const item = parseBibTeXToMetadata(bibtex);
 
     expect(item).toMatchObject({
       itemType: 'book',
@@ -147,11 +164,11 @@ process.stdout.write(\`@book{fixture,
   it('rejects timeout, output-limit, empty, invalid, and multiple-entry output failures', async () => {
     const dir = tempDir();
     const slow = writeScript(dir, 'setTimeout(() => process.stdout.write("@book{late,title={Late}}"), 500);');
-    await expect(runResolverPlugin(plugin([process.execPath, slow]), 'ISBN 9780262033848', execution(dir, { timeoutMs: 20 })))
+    await expect(runResolverPlugin(plugin([process.execPath, slow]), 'ISBN 9780262033848', timeoutExecution(dir)))
       .rejects.toThrow(/timed out/);
 
     const noisy = writeScript(dir, 'process.stdout.write("@book{big,title={" + "x".repeat(200) + "}}");');
-    await expect(runResolverPlugin(plugin([process.execPath, noisy]), 'ISBN 9780262033848', execution(dir, { stdoutByteLimit: 32 })))
+    await expect(runResolverPlugin(plugin([process.execPath, noisy]), 'ISBN 9780262033848', stdoutLimitExecution(dir)))
       .rejects.toThrow(/stdout byte limit/);
 
     const empty = writeScript(dir, 'process.stdout.write("");');

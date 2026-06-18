@@ -117,7 +117,7 @@ export default function CommandPalette({
                 <Search className="h-5 w-5 text-slate-400" />
               )}
               <CmdK.Input
-                ref={inputRef as any}
+                ref={inputRef}
                 value={input}
                 onValueChange={(v) => {
                   setInput(v);
@@ -142,7 +142,7 @@ export default function CommandPalette({
                     <CmdK.Item
                       key={entry.key}
                       value={entry.key}
-                      onSelect={() => handleExecute(entry as any)}
+                      onSelect={() => handleExecute(entry)}
                       onMouseEnter={() => setSelectedIndex(index)}
                       className={`flex items-center justify-between gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors ${
                         isSelected

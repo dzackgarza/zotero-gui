@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Folder, FolderOpen, Layers, Trash2, Tag, Upload, Download,
-  LayoutGrid, RefreshCw, Sparkles, Terminal, FileText, HelpCircle, Columns, Filter, Info, ChevronUp, ChevronDown, ChevronRight,
-  Eye, X, RotateCcw
+  Layers, Terminal, ChevronUp, ChevronDown, ChevronRight,
+  Eye, RotateCcw
 } from 'lucide-react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import {
-  ZoteroItem, Collection, ColumnDefinition, AdvancedSearchSettings, Command, ItemType
-} from './types';
+import { ZoteroItem, ColumnDefinition, AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
-import { filterZoteroItems, formatCreatorsCompact, formatCreatorsFull, getStandardCitekey } from './utils/fuzzy';
+import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
+import { formatCreatorsCompact } from './utils/fuzzy';
+import { useLibraryApi } from './useLibraryApi';
+import { createAppCommands } from './appCommands';
 
 // Top level components
 import TopBar from './components/TopBar';
@@ -19,46 +19,15 @@ import CommandPalette from './components/CommandPalette';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
 import AddByIdentifierModal from './components/AddByIdentifierModal';
 
-interface LibraryPayload {
-  items: ZoteroItem[];
-  collections: Collection[];
-}
-
-function assertLibraryPayload(condition: boolean, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function parseLibraryPayload(payload: unknown): LibraryPayload {
-  assertLibraryPayload(isRecord(payload), 'Library API payload must be an object');
-  assertLibraryPayload(Array.isArray(payload.items), 'Library API payload must contain an items array');
-  assertLibraryPayload(Array.isArray(payload.collections), 'Library API payload must contain a collections array');
-
-  return {
-    items: payload.items as ZoteroItem[],
-    collections: payload.collections as Collection[],
-  };
-}
-
-async function fetchLibraryPayload(): Promise<LibraryPayload> {
-  const response = await fetch('/api/library');
-  if (!response.ok) {
-    throw new Error(`Library API failed with HTTP ${response.status}`);
-  }
-  return parseLibraryPayload(await response.json() as unknown);
-}
-
 export default function App() {
   // --- Core Library State (loaded from live Zotero DB via /api/library) ---
-  const [items, setItems] = useState<ZoteroItem[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [libraryLoadError, setLibraryLoadError] = useState<Error | null>(null);
+  const {
+    items,
+    collections,
+    isLoading,
+    libraryLoadError,
+    reloadLibrary,
+  } = useLibraryApi();
 
   const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
     const savedStr = localStorage.getItem('zotero_columns');
@@ -137,10 +106,9 @@ export default function App() {
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const [isAddByIdentifierOpen, setIsAddByIdentifierOpen] = useState(false);
-  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sorting
-  const [sortKey, setSortKey] = useState<keyof ZoteroItem | 'creators_compact'>('title');
+  const [sortKey, setSortKey] = useState<SortKey>('title');
   const [sortDesc, setSortDesc] = useState(false);
 
   // Search setups
@@ -160,24 +128,6 @@ export default function App() {
 
   // Notifications
   const [toast, setToast] = useState<string | null>(null);
-
-  // --- Effects ---
-
-  // Load live library from the Zotero DB API server.
-  const loadFromApi = () => {
-    setIsLoading(true);
-    fetchLibraryPayload()
-      .then((payload) => {
-        setItems(payload.items);
-        setCollections(payload.collections);
-        setIsLoading(false);
-      })
-      .catch((error: Error) => {
-        setLibraryLoadError(error);
-      });
-  };
-
-  useEffect(() => { loadFromApi(); }, []);
 
   useEffect(() => {
     localStorage.setItem('zotero_columns', JSON.stringify(columns));
@@ -276,93 +226,14 @@ export default function App() {
     };
   }, [resizingCol, startX, startWidth]);
 
-  // --- Database operations ---
-  const handleAddNewItem = (type: ItemType) => {
-    const now = new Date().toISOString();
-    const newDoc: ZoteroItem = {
-      id: `item-${Date.now()}`,
-      itemType: type,
-      title: `Draft New ${type.replace(/([A-Z])/g, ' $1')}`,
-      creators: [
-        { firstName: 'Draft_First', lastName: 'Draft_Last', creatorType: 'author' }
-      ],
-      date: new Date().getFullYear().toString(),
-      publicationTitle: 'Draft Journal proceedings',
-      citekey: `draft_${Date.now().toString().slice(-4)}`,
-      tags: ['draft'],
-      notes: [],
-      attachments: [],
-      collections: selectedCollectionId !== 'all' && selectedCollectionId !== 'duplicates' && selectedCollectionId !== 'unfiled' && selectedCollectionId !== 'trash' ? [selectedCollectionId] : [],
-      dateAdded: now,
-      dateModified: now
-    };
-    
-    setItems(prev => [newDoc, ...prev]);
-    setSelectedItemId(newDoc.id);
-    showToast(`Created new ${newDoc.itemType}!`);
-  };
-
   const handleAddResolvedItem = () => {
-    loadFromApi();
+    reloadLibrary();
     showToast('Successfully added item to Zotero.');
-  };
-
-  const handleUpdateItem = (updated: ZoteroItem) => {
-    setItems(prev => prev.map(it => (it.id === updated.id ? updated : it)));
-  };
-
-  const handleDeleteItem = (id: string) => {
-    const itemToDelete = items.find(it => it.id === id);
-    if (!itemToDelete) return;
-
-    if (itemToDelete.inTrash) {
-      // Permanent removal
-      setItems(prev => prev.filter(it => it.id !== id));
-      setSelectedItemId(null);
-      showToast('Permanently deleted record.');
-    } else {
-      // Move to Trash bin
-      handleUpdateItem({
-        ...itemToDelete,
-        inTrash: true,
-        dateModified: new Date().toISOString()
-      });
-      showToast('Moved item to Trash bin.');
-    }
-  };
-
-  const handleRestoreItem = (id: string) => {
-    const itemToRestore = items.find(it => it.id === id);
-    if (itemToRestore) {
-      handleUpdateItem({
-        ...itemToRestore,
-        inTrash: false,
-        dateModified: new Date().toISOString()
-      });
-      showToast('Restored library item.');
-    }
-  };
-
-  const handleDuplicateItem = (id: string) => {
-    const source = items.find(it => it.id === id);
-    if (!source) return;
-
-    const clone: ZoteroItem = {
-      ...source,
-      id: `clone-${Date.now()}`,
-      title: `${source.title} (Clone)`,
-      citekey: `${source.citekey}_clone`,
-      dateAdded: new Date().toISOString(),
-      dateModified: new Date().toISOString()
-    };
-    setItems(prev => [clone, ...prev]);
-    setSelectedItemId(clone.id);
-    showToast('Duplicated library record.');
   };
 
   // Reload from live DB
   const reloadFromDb = () => {
-    loadFromApi();
+    reloadLibrary();
     showToast('Reloading from Zotero DB…');
   };
 
@@ -381,34 +252,6 @@ export default function App() {
     showToast('Database backup exported to JSON!');
   };
 
-  // Import custom backup
-  const importDatabaseJson = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const parsed = JSON.parse(e.target?.result as string);
-        if (parsed.items && Array.isArray(parsed.items)) {
-          setItems(parsed.items);
-          if (parsed.collections && Array.isArray(parsed.collections)) {
-            setCollections(parsed.collections);
-          }
-          if (parsed.columns && Array.isArray(parsed.columns)) {
-            setColumns(parsed.columns);
-          }
-          showToast('Database imported successfully!');
-        } else {
-          showToast('Failed to import: missing core items table.');
-        }
-      } catch (err) {
-        showToast('Error parsing JSON backup file.');
-      }
-    };
-    reader.readAsText(file);
-  };
-
   // Generate citation formatting
   const copyCitationFormatted = () => {
     const selectedItem = items.find(it => it.id === selectedItemId);
@@ -423,96 +266,21 @@ export default function App() {
     });
   };
 
-  // Empty Trash
-  const handleEmptyTrash = () => {
-    setItems(prev => prev.filter(it => !it.inTrash));
-    showToast('Trash bin emptied.');
-  };
-
-  // --- Dynamic Filtering Logic ---
-  const getCategorizedItems = () => {
-    // 1. Initial category mapping
-    let result = [...items];
-
-    if (selectedCollectionId === 'trash') {
-      result = result.filter(item => item.inTrash);
-    } else {
-      // Filter out trash items from active library list
-      result = result.filter(item => !item.inTrash);
-
-      if (selectedCollectionId === 'duplicates') {
-        const titleCounts: Record<string, number> = {};
-        result.forEach(it => {
-          const t = it.title.trim().toLowerCase();
-          titleCounts[t] = (titleCounts[t] || 0) + 1;
-        });
-        result = result.filter(it => titleCounts[it.title.trim().toLowerCase()] > 1);
-      } else if (selectedCollectionId === 'unfiled') {
-        result = result.filter(it => !it.collections || it.collections.length === 0);
-      } else if (selectedCollectionId === 'no-pdf') {
-        result = result.filter(item => {
-          const hasPdf = item.attachments && item.attachments.some(att => 
-            (att.path && att.path.toLowerCase().endsWith('.pdf')) ||
-            (att.title && att.title.toLowerCase().includes('.pdf')) ||
-            (att.mimeType && att.mimeType === 'application/pdf')
-          );
-          return !hasPdf;
-        });
-      } else if (selectedCollectionId === 'no-extraction') {
-        result = result.filter(item => {
-          const hasExtraction = item.attachments && item.attachments.some(att => 
-            (att.title && att.title.toLowerCase().includes('extracted.md')) ||
-            (att.path && att.path.toLowerCase().includes('extracted.md'))
-          );
-          return !hasExtraction;
-        });
-      } else if (selectedCollectionId === 'nonstandard-citekey') {
-        result = result.filter(item => {
-          const standard = getStandardCitekey(item);
-          return !item.citekey || item.citekey.toLowerCase().trim() !== standard.toLowerCase().trim();
-        });
-      } else if (selectedCollectionId !== 'all') {
-        // Belonging to collection or subcollections
-        const childCollectionIds = collections
-          .filter(c => c.parentId === selectedCollectionId)
-          .map(c => c.id);
-        const folderSet = [selectedCollectionId, ...childCollectionIds];
-        
-        result = result.filter(
-          item => item.collections && item.collections.some(cId => folderSet.includes(cId))
-        );
-      }
-    }
-
-    // 2. Filter by selected index tag
-    if (selectedTag) {
-      result = result.filter(item => item.tags && item.tags.includes(selectedTag));
-    }
-
-    // 3. Apply Fuzzy search query matching
-    result = filterZoteroItems(result, searchSettings);
-
-    // 4. Custom sorting
-    return result.sort((a, b) => {
-      let valA: any = sortKey === 'creators_compact' ? formatCreatorsCompact(a.creators) : a[sortKey];
-      let valB: any = sortKey === 'creators_compact' ? formatCreatorsCompact(b.creators) : b[sortKey];
-
-      valA = valA ? valA.toString().toLowerCase() : '';
-      valB = valB ? valB.toString().toLowerCase() : '';
-
-      if (valA < valB) return sortDesc ? 1 : -1;
-      if (valA > valB) return sortDesc ? -1 : 1;
-      return 0;
-    });
-  };
-
   if (libraryLoadError) {
     throw libraryLoadError;
   }
 
-  const filteredLibraryItems = getCategorizedItems();
+  const filteredLibraryItems = selectVisibleLibraryItems({
+    items,
+    collections,
+    selectedCollectionId,
+    selectedTag,
+    searchSettings,
+    sortKey,
+    sortDesc,
+  });
 
-  const handleHeaderSort = (key: keyof ZoteroItem | 'creators_compact') => {
+  const handleHeaderSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDesc(prev => !prev);
     } else {
@@ -533,81 +301,14 @@ export default function App() {
   };
 
   // --- Commands List for Palette ---
-  const commandsList: Command[] = [
-    {
-      id: 'reload-db',
-      name: 'Reload Library from Zotero DB',
-      action: () => reloadFromDb(),
-      category: 'Database'
-    },
-    {
-      id: 'import-json',
-      name: 'Import JSON Library Backup',
-      action: () => importFileInputRef.current?.click(),
-      category: 'Database'
-    },
-    {
-      id: 'theme-dark',
-      name: 'Activate VSCode Slate Dark Mode',
-      action: () => setTheme('code-dark'),
-      category: 'System'
-    },
-    {
-      id: 'theme-light',
-      name: 'Activate VSCode Classic Light Mode',
-      action: () => setTheme('code-light'),
-      category: 'System'
-    },
-    {
-      id: 'theme-monokai',
-      name: 'Activate Monokai Terminal Mode',
-      action: () => setTheme('monokai'),
-      category: 'System'
-    },
-    {
-      id: 'add-journal',
-      name: 'Add New Journal Article',
-      action: () => handleAddNewItem('journalArticle'),
-      category: 'Command'
-    },
-    {
-      id: 'add-book',
-      name: 'Add New Book entry',
-      action: () => handleAddNewItem('book'),
-      category: 'Command'
-    },
-    {
-      id: 'export-json',
-      name: 'Export Stored Database Backup (JSON)',
-      shortcut: 'Ctrl+Shift+E',
-      action: () => exportDatabaseJson(),
-      category: 'Database'
-    },
-    {
-      id: 'citation-apa',
-      name: 'Copy Selected APA Citation',
-      action: () => copyCitationFormatted(),
-      category: 'Database'
-    },
-    {
-      id: 'cols-show-all',
-      name: 'Select All Optional Columns',
-      action: () => setColumns(columns.map(c => ({ ...c, visible: true }))),
-      category: 'Columns'
-    },
-    {
-      id: 'cols-reset',
-      name: 'Reset Columns to Default System Layout',
-      action: () => setColumns(DEFAULT_COLUMNS),
-      category: 'Columns'
-    },
-    {
-      id: 'clear-trash',
-      name: 'Empty Trash Bin Permanently',
-      action: () => handleEmptyTrash(),
-      category: 'Command'
-    }
-  ];
+  const commandsList = createAppCommands({
+    reloadFromDb,
+    setTheme,
+    exportDatabaseJson,
+    copyCitationFormatted,
+    showAllColumns: () => setAllColumns(true),
+    resetColumns,
+  });
 
   // Visual Theme mapping helper
   const getThemeClass = () => {
@@ -690,7 +391,6 @@ export default function App() {
         onOpenAdvancedSearch={() => setIsAdvancedSearchOpen(true)}
         onOpenPalette={() => setIsPaletteOpen(true)}
         activeCollectionName={getCollectionName()}
-        onOpenAddItem={handleAddNewItem}
         onOpenAddByIdentifier={() => setIsAddByIdentifierOpen(true)}
         theme={theme}
         setTheme={setTheme}
@@ -706,11 +406,6 @@ export default function App() {
             selectedCollectionId={selectedCollectionId}
             onSelectCollection={setSelectedCollectionId}
             items={items}
-            onAddCollection={(name, parentId) => {
-              const newCol: Collection = { id: `col-${Date.now()}`, name, parentId };
-              setCollections(prev => [...prev, newCol]);
-              showToast(`Created collection folder: "${name}"`);
-            }}
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
             theme={theme}
@@ -731,15 +426,6 @@ export default function App() {
                 </>
               )}
             </div>
-            
-            {/* Hidden Input for library JSON imports */}
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept="application/json"
-              onChange={importDatabaseJson}
-              className="hidden"
-            />
           </div>
 
           {/* Core scrollable table viewport */}
@@ -836,16 +522,25 @@ export default function App() {
                         {columns
                           .filter(c => c.visible)
                           .map(col => {
-                            let cellVal: any = '';
+                            let cellVal = '';
                             
                             if (col.key === 'creators_compact') {
                                 cellVal = formatCreatorsCompact(item.creators);
                             } else if (col.key === 'tags') {
-                                cellVal = item.tags ? item.tags.join(', ') : '';
+                                cellVal = item.tags.join(', ');
                             } else if (col.key === 'notes') {
-                                cellVal = item.notes ? item.notes.map(n => n.note).join('; ') : '';
+                                cellVal = item.notes.map(n => n.note).join('; ');
                             } else {
-                              cellVal = item[col.key];
+                              const value = item[col.key];
+                              if (Array.isArray(value)) {
+                                cellVal = value
+                                  .map(entry => typeof entry === 'string' ? entry : JSON.stringify(entry))
+                                  .join(', ');
+                              } else if (typeof value === 'boolean') {
+                                cellVal = value ? 'Yes' : 'No';
+                              } else {
+                                cellVal = value ? String(value) : '';
+                              }
                             }
 
                             return (
@@ -1033,9 +728,6 @@ export default function App() {
             <InspectorPanel
               item={activeSelectedItem}
               allItems={items}
-              onUpdateItem={handleUpdateItem}
-              onDeleteItem={handleDeleteItem}
-              onDuplicateItem={handleDuplicateItem}
               onClose={() => setSelectedItemId(null)}
               theme={theme}
             />
@@ -1074,7 +766,7 @@ export default function App() {
         isOpen={isAddByIdentifierOpen}
         onClose={() => setIsAddByIdentifierOpen(false)}
         onAddResolvedItem={handleAddResolvedItem}
-        collections={selectedCollectionId !== 'all' && selectedCollectionId !== 'duplicates' && selectedCollectionId !== 'unfiled' && selectedCollectionId !== 'trash' ? [selectedCollectionId] : []}
+        collections={collections.some(collection => collection.id === selectedCollectionId) ? [selectedCollectionId] : []}
         theme={theme}
       />
 

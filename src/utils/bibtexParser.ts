@@ -1,7 +1,24 @@
 import bibtexParse from 'bibtex-parse-js';
-import { ZoteroItem, ItemType } from '../types';
+import type { Creator, ItemType } from '../types';
 
-export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
+export interface BibTeXItemMetadata {
+  itemType: ItemType;
+  title: string;
+  creators: Creator[];
+  date?: string;
+  publicationTitle?: string;
+  publisher?: string;
+  doi?: string;
+  isbn?: string;
+  url?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  abstractNote?: string;
+  citekey?: string;
+}
+
+export function parseBibTeXToMetadata(bibtexStr: string): BibTeXItemMetadata {
   const parsed = bibtexParse.toJSON(bibtexStr);
   if (!parsed || parsed.length === 0) {
     throw new Error('Invalid BibTeX input or empty entry list.');
@@ -74,16 +91,16 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
     itemType,
     title,
     creators,
-    date,
-    publicationTitle,
-    publisher,
-    doi,
-    isbn,
-    url,
-    volume,
-    issue,
-    pages,
-    abstractNote,
+    date: date || undefined,
+    publicationTitle: publicationTitle || undefined,
+    publisher: publisher || undefined,
+    doi: doi || undefined,
+    isbn: isbn || undefined,
+    url: url || undefined,
+    volume: volume || undefined,
+    issue: issue || undefined,
+    pages: pages || undefined,
+    abstractNote: abstractNote || undefined,
     citekey: entry.citationKey || undefined,
   };
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, Plus, Info, Share2, Copy, Trash2, LayoutGrid, Check, ChevronDown
+  FileText, Info, Copy, LayoutGrid, Check, ChevronDown
 } from 'lucide-react';
 import * as Select from '@radix-ui/react-select';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -39,9 +39,6 @@ const deserializeCreators = (str: string): Creator[] => {
 interface InspectorPanelProps {
   item: ZoteroItem | null;
   allItems: ZoteroItem[];
-  onUpdateItem: (item: ZoteroItem) => void;
-  onDeleteItem: (id: string) => void;
-  onDuplicateItem: (id: string) => void;
   onClose: () => void;
   theme: string;
 }
@@ -49,9 +46,6 @@ interface InspectorPanelProps {
 export default function InspectorPanel({
   item,
   allItems,
-  onUpdateItem,
-  onDeleteItem,
-  onDuplicateItem,
   onClose,
   theme
 }: InspectorPanelProps) {
@@ -167,46 +161,6 @@ export default function InspectorPanel({
                   className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
                 >
                   Generate BibTeX citation
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={() => onDuplicateItem(item.id)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-yellow-400 transition cursor-pointer"
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  Duplicate record
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={() => onDeleteItem(item.id)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-505 transition cursor-pointer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-805 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  {item.inTrash ? "Delete permanently" : "Move to Trash"}
                   <Tooltip.Arrow className="fill-slate-800" />
                 </Tooltip.Content>
               </Tooltip.Portal>
