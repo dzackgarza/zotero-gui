@@ -19,36 +19,24 @@ export const doiResolver: MetadataResolverPlugin = {
     }
     cleanDoi = cleanDoi.trim();
 
-    try {
-      const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
-      if (res.ok) {
-        const data = await res.json();
-        const work = data.message;
-        const title = work.title ? work.title[0] : `Document ${cleanDoi}`;
-        const authors = (work.author || []).map((a: any) => `${a.family}, ${a.given || ''}`).join(' and ');
-        const year = work.published && work.published['date-parts'] 
-          ? String(work.published['date-parts'][0][0]) 
-          : new Date().getFullYear().toString();
-        const journal = work['container-title'] ? work['container-title'][0] : 'CrossRef Journal';
-        
-        return `@article{doi_${cleanDoi.replace(/[^a-zA-Z0-9]/g, '_')},
+    const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`);
+    if (!res.ok) {
+      throw new Error(`CrossRef lookup failed with HTTP status ${res.status}`);
+    }
+    const data = await res.json();
+    const work = data.message;
+    const title = work.title ? work.title[0] : `Document ${cleanDoi}`;
+    const authors = (work.author || []).map((a: any) => `${a.family}, ${a.given || ''}`).join(' and ');
+    const year = work.published && work.published['date-parts'] 
+      ? String(work.published['date-parts'][0][0]) 
+      : new Date().getFullYear().toString();
+    const journal = work['container-title'] ? work['container-title'][0] : 'CrossRef Journal';
+    
+    return `@article{doi_${cleanDoi.replace(/[^a-zA-Z0-9]/g, '_')},
   title = {${title}},
   author = {${authors || 'Unknown Author'}},
   journal = {${journal}},
   year = {${year}},
-  doi = {${cleanDoi}}
-}`;
-      }
-    } catch (e) {
-      console.warn('CrossRef lookup failed, using fallback mock resolution', e);
-    }
-    
-    // Fallback Mock BibTeX
-    return `@article{doi_${cleanDoi.replace(/[^a-zA-Z0-9]/g, '_')},
-  title = {Resolved DOI Reference: ${cleanDoi}},
-  author = {Doe, John},
-  journal = {CrossRef Scholarly Proceeding},
-  year = {${new Date().getFullYear().toString()}},
   doi = {${cleanDoi}}
 }`;
   }
@@ -61,40 +49,30 @@ export const isbnResolver: MetadataResolverPlugin = {
   pattern: /^(isbn:?\s*)?((?:97[89])?\d{9}[\dxX])$/i,
   async resolve(input: string): Promise<string> {
     const isbn = input.trim().toLowerCase().replace(/isbn:?/i, '').replace(/[- ]/g, '');
-    try {
-      const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-      if (res.ok) {
-        const data = await res.json();
-        const bookInfo = data[`ISBN:${isbn}`];
-        if (bookInfo) {
-          const title = bookInfo.title || `Book ${isbn}`;
-          const authors = (bookInfo.authors || []).map((a: any) => {
-            const parts = a.name.split(' ');
-            const lastName = parts.pop() || 'Unknown';
-            const firstName = parts.join(' ');
-            return `${lastName}, ${firstName}`;
-          }).join(' and ');
-          const year = bookInfo.publish_date || new Date().getFullYear().toString();
-          const publisher = bookInfo.publishers ? bookInfo.publishers.map((p: any) => p.name).join(', ') : 'OpenLibrary Publisher';
-          
-          return `@book{isbn_${isbn},
+    const res = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+    if (!res.ok) {
+      throw new Error(`OpenLibrary lookup failed with HTTP status ${res.status}`);
+    }
+    const data = await res.json();
+    const bookInfo = data[`ISBN:${isbn}`];
+    if (!bookInfo) {
+      throw new Error(`ISBN ${isbn} not found on OpenLibrary`);
+    }
+    const title = bookInfo.title || `Book ${isbn}`;
+    const authors = (bookInfo.authors || []).map((a: any) => {
+      const parts = a.name.split(' ');
+      const lastName = parts.pop() || 'Unknown';
+      const firstName = parts.join(' ');
+      return `${lastName}, ${firstName}`;
+    }).join(' and ');
+    const year = bookInfo.publish_date || new Date().getFullYear().toString();
+    const publisher = bookInfo.publishers ? bookInfo.publishers.map((p: any) => p.name).join(', ') : 'OpenLibrary Publisher';
+    
+    return `@book{isbn_${isbn},
   title = {${title}},
   author = {${authors || 'Unknown Author'}},
   publisher = {${publisher}},
   year = {${year}},
-  isbn = {${isbn}}
-}`;
-        }
-      }
-    } catch (e) {
-      console.warn('ISBN lookup failed, using fallback mock resolution', e);
-    }
-    
-    return `@book{isbn_${isbn},
-  title = {Resolved Book (ISBN: ${isbn})},
-  author = {Bookman, Jane},
-  publisher = {Scholarly Book Publisher},
-  year = {${new Date().getFullYear().toString()}},
   isbn = {${isbn}}
 }`;
   }
@@ -115,46 +93,38 @@ export const arxivResolver: MetadataResolverPlugin = {
       arxivId = arxivId.substring(6);
     }
 
-    try {
-      const res = await fetch(`https://export.arxiv.org/api/query?id_list=${encodeURIComponent(arxivId)}`);
-      if (res.ok) {
-        const text = await res.text();
-        const titleMatch = text.match(/<title>([^]*?)<\/title>/);
-        const title = titleMatch 
-          ? titleMatch[1].replace(/\n/g, ' ').trim().replace(/Title:\s*/i, '') 
-          : `arXiv Article ${arxivId}`;
-          
-        const authorsList: string[] = [];
-        const authorMatches = text.matchAll(/<author>[^]*?<name>(.*?)<\/name>[^]*?<\/author>/g);
-        for (const m of authorMatches) {
-          const name = m[1].trim();
-          const parts = name.split(' ');
-          const lastName = parts.pop() || 'Unknown';
-          const firstName = parts.join(' ');
-          authorsList.push(`${lastName}, ${firstName}`);
-        }
-        const authors = authorsList.join(' and ');
-        
-        const dateMatch = text.match(/<published>(.*?)<\/published>/);
-        const year = dateMatch ? dateMatch[1].substring(0, 4) : new Date().getFullYear().toString();
-        
-        return `@article{arxiv_${arxivId.replace(/[^a-zA-Z0-9]/g, '_')},
+    const res = await fetch(`https://export.arxiv.org/api/query?id_list=${encodeURIComponent(arxivId)}`);
+    if (!res.ok) {
+      throw new Error(`arXiv lookup failed with HTTP status ${res.status}`);
+    }
+    const text = await res.text();
+    if (text.includes('<entry>') && text.includes('<title>Error</title>')) {
+      throw new Error(`arXiv ID ${arxivId} not found`);
+    }
+    const titleMatch = text.match(/<title>([^]*?)<\/title>/);
+    const title = titleMatch 
+      ? titleMatch[1].replace(/\n/g, ' ').trim().replace(/Title:\s*/i, '') 
+      : `arXiv Article ${arxivId}`;
+      
+    const authorsList: string[] = [];
+    const authorMatches = text.matchAll(/<author>[^]*?<name>(.*?)<\/name>[^]*?<\/author>/g);
+    for (const m of authorMatches) {
+      const name = m[1].trim();
+      const parts = name.split(' ');
+      const lastName = parts.pop() || 'Unknown';
+      const firstName = parts.join(' ');
+      authorsList.push(`${lastName}, ${firstName}`);
+    }
+    const authors = authorsList.join(' and ');
+    
+    const dateMatch = text.match(/<published>(.*?)<\/published>/);
+    const year = dateMatch ? dateMatch[1].substring(0, 4) : new Date().getFullYear().toString();
+    
+    return `@article{arxiv_${arxivId.replace(/[^a-zA-Z0-9]/g, '_')},
   title = {${title}},
   author = {${authors || 'Unknown Author'}},
   journal = {arXiv preprint arXiv:${arxivId}},
   year = {${year}},
-  url = {https://arxiv.org/abs/${arxivId}}
-}`;
-      }
-    } catch (e) {
-      console.warn('arXiv lookup failed, using fallback mock resolution', e);
-    }
-    
-    return `@article{arxiv_${arxivId.replace(/[^a-zA-Z0-9]/g, '_')},
-  title = {Resolved arXiv Paper: ${arxivId}},
-  author = {Preprint, Alice},
-  journal = {arXiv preprint},
-  year = {${new Date().getFullYear().toString()}},
   url = {https://arxiv.org/abs/${arxivId}}
 }`;
   }
@@ -166,16 +136,7 @@ export const zbmathResolver: MetadataResolverPlugin = {
   name: 'zbMATH Resolver',
   pattern: /^(zbmath:)?(zbl\s*\d{4}\.\d{5}|an:\s*\d{4}\.\d{5}|\d{4}\.\d{5}|https?:\/\/zbmath\.org\/\?q=an:\d{4}\.\d{5}|https?:\/\/zbmath\.org\/an\/\d{4}\.\d{5})$/i,
   async resolve(input: string): Promise<string> {
-    const match = input.match(/(\d{4}\.\d{5})/);
-    const zblId = match ? match[1] : input.trim().replace(/[^0-9.]/g, '');
-    
-    return `@article{zbmath_${zblId.replace(/[^a-zA-Z0-9]/g, '_')},
-  title = {zbMATH Reference Entry (Zbl ${zblId})},
-  author = {Euler, Leonhard},
-  journal = {Zentralblatt MATH Catalog},
-  year = {${new Date().getFullYear().toString()}},
-  url = {https://zbmath.org/?q=an:${zblId}}
-}`;
+    throw new Error('zbMATH lookup is not implemented');
   }
 };
 
@@ -185,16 +146,7 @@ export const mathscinetResolver: MetadataResolverPlugin = {
   name: 'MathSciNet Resolver',
   pattern: /^(mr:)?(\d{6,8}|https?:\/\/ams\.org\/mathscinet-mref\?mr=\d+|https?:\/\/mathscinet\.ams\.org\/mathscinet-mref\?mr=\d+)$/i,
   async resolve(input: string): Promise<string> {
-    const match = input.match(/(\d{6,8})/);
-    const mrId = match ? match[1] : input.trim().replace(/[^0-9]/g, '');
-    
-    return `@article{mathscinet_${mrId},
-  title = {MathSciNet Mathematical Review entry (MR${mrId})},
-  author = {Gauss, Carl},
-  journal = {Mathematical Reviews (AMS)},
-  year = {${new Date().getFullYear().toString()}},
-  url = {https://mathscinet.ams.org/mathscinet-mref?mr=${mrId}}
-}`;
+    throw new Error('MathSciNet lookup is not implemented');
   }
 };
 

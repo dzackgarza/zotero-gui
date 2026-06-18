@@ -66,6 +66,18 @@ describe('Resolver Plugin Patterns', () => {
     expect(mathscinetResolver.pattern.test('mr:2050123')).toBe(true);
     expect(mathscinetResolver.pattern.test('https://mathscinet.ams.org/mathscinet-mref?mr=2050123')).toBe(true);
   });
+
+  it('doiResolver throws error on fetch failure', async () => {
+    await expect(doiResolver.resolve('10.1145/invalid')).rejects.toThrow();
+  });
+
+  it('zbmathResolver throws not implemented error', async () => {
+    await expect(zbmathResolver.resolve('1234.56789')).rejects.toThrow('zbMATH lookup is not implemented');
+  });
+
+  it('mathscinetResolver throws not implemented error', async () => {
+    await expect(mathscinetResolver.resolve('2050123')).rejects.toThrow('MathSciNet lookup is not implemented');
+  });
 });
 
 describe('Resolver Registry Extensibility', () => {
