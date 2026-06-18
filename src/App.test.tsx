@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -32,13 +32,10 @@ function renderAppWithLibraryResponse(response: Response): void {
 }
 
 describe('App library loading', () => {
-  beforeEach(() => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it('renders Zotero library items returned by /api/library', async () => {
