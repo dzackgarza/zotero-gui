@@ -48,6 +48,7 @@ export default function App() {
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const [headerContextMenu, setHeaderContextMenu] = useState<{ x: number; y: number } | null>(null);
   const headerMenuRef = useRef<HTMLDivElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sorting
   const [sortKey, setSortKey] = useState<keyof ZoteroItem | 'creators_compact'>('title');
@@ -430,6 +431,12 @@ export default function App() {
       category: 'Database'
     },
     {
+      id: 'import-json',
+      name: 'Import JSON Library Backup',
+      action: () => importFileInputRef.current?.click(),
+      category: 'Database'
+    },
+    {
       id: 'theme-dark',
       name: 'Activate VSCode Slate Dark Mode',
       action: () => setTheme('code-dark'),
@@ -620,12 +627,8 @@ export default function App() {
         <div className={`flex-1 flex flex-col min-w-0 relative ${theme === 'code-dark' ? 'bg-[#1e1e1e]' : 'bg-slate-950/40'}`}>
           
           {/* List operations bar */}
-          <div className={`h-9 px-3.5 border-b flex items-center justify-between text-[11px] shrink-0 ${theme === 'code-dark' ? 'bg-[#252526] border-[#2b2b2b]' : 'border-slate-900 bg-slate-950/80'}`}>
+          <div className={`h-8 px-3.5 border-b flex items-center justify-between text-[11px] shrink-0 ${theme === 'code-dark' ? 'bg-[#252526] border-[#2b2b2b]' : 'border-slate-900 bg-slate-950/80'}`}>
             <div className={`flex items-center gap-2 ${theme === 'code-dark' ? 'text-[#808080]' : 'text-slate-400'}`}>
-              <span className={`font-semibold uppercase tracking-wide ${theme === 'code-dark' ? 'text-[#cccccc]' : 'text-slate-300'}`}>
-                Documents list
-              </span>
-              <span>•</span>
               <span>Showing: <strong className={theme === 'code-dark' ? 'text-white' : 'text-sky-400'}>{filteredLibraryItems.length} entries</strong></span>
               {selectedTag && (
                 <>
@@ -634,41 +637,15 @@ export default function App() {
                 </>
               )}
             </div>
-
-            {/* Quick backup triggers */}
-            <div className="flex items-center gap-2.5">
-              
-              {/* Reload from live Zotero DB */}
-              <button
-                onClick={reloadFromDb}
-                title="Reload library from live Zotero database"
-                className={`flex items-center gap-1 font-mono text-[10px] ${theme === 'code-dark' ? 'text-[#cccccc] hover:text-white' : 'text-slate-450 hover:text-slate-100'}`}
-              >
-                <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
-                <span>{isLoading ? 'Loading…' : 'Reload DB'}</span>
-              </button>
-
-              {/* Import trigger file */}
-              <label className={`cursor-pointer flex items-center gap-1 font-mono text-[10px] select-none ${theme === 'code-dark' ? 'text-[#cccccc] hover:text-white' : 'text-slate-450 hover:text-slate-100'}`}>
-                <Upload className="h-3 w-3" />
-                <span>Import JSON</span>
-                <input
-                  type="file"
-                  accept="application/json"
-                  onChange={importDatabaseJson}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Export backup */}
-              <button
-                onClick={exportDatabaseJson}
-                className={`flex items-center gap-1 font-mono text-[10px] ${theme === 'code-dark' ? 'text-[#cccccc] hover:text-white' : 'text-slate-450 hover:text-slate-100'}`}
-              >
-                <Download className="h-3 w-3" />
-                <span>Export ZDB</span>
-              </button>
-            </div>
+            
+            {/* Hidden Input for library JSON imports */}
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept="application/json"
+              onChange={importDatabaseJson}
+              className="hidden"
+            />
           </div>
 
           {/* Core scrollable table viewport */}
@@ -845,16 +822,18 @@ export default function App() {
         </div>
 
         {/* 4. Right side Inspector detail panel */}
-        <div className="w-80 shrink-0">
-          <InspectorPanel
-            item={activeSelectedItem}
-            allItems={items}
-            onUpdateItem={handleUpdateItem}
-            onDeleteItem={handleDeleteItem}
-            onDuplicateItem={handleDuplicateItem}
-            onClose={() => setSelectedItemId(null)}
-          />
-        </div>
+        {activeSelectedItem && (
+          <div className="w-80 shrink-0">
+            <InspectorPanel
+              item={activeSelectedItem}
+              allItems={items}
+              onUpdateItem={handleUpdateItem}
+              onDeleteItem={handleDeleteItem}
+              onDuplicateItem={handleDuplicateItem}
+              onClose={() => setSelectedItemId(null)}
+            />
+          </div>
+        )}
       </div>
 
       {/* 5. Base Task/Status bar */}
