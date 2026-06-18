@@ -1,5 +1,5 @@
-test:
-    npm run test
+test *args:
+    npm run test -- {{args}}
 
 lint:
     npm run lint

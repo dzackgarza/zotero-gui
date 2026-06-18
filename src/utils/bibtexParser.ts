@@ -60,7 +60,8 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
   // Clean individual tags
   const title = cleanValue(tags.title || tags.TITLE);
   const date = cleanValue(tags.year || tags.YEAR || tags.date || tags.DATE);
-  const publicationTitle = cleanValue(tags.journal || tags.JOURNAL || tags.booktitle || tags.BOOKTITLE || tags.series || tags.publisher || tags.PUBLISHER);
+  const publicationTitle = cleanValue(tags.journal || tags.JOURNAL || tags.booktitle || tags.BOOKTITLE || tags.series);
+  const publisher = cleanValue(tags.publisher || tags.PUBLISHER);
   const doi = cleanValue(tags.doi || tags.DOI);
   const isbn = cleanValue(tags.isbn || tags.ISBN);
   const url = cleanValue(tags.url || tags.URL || tags.eprint || tags.EPRINT);
@@ -80,6 +81,7 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
     creators,
     date,
     publicationTitle,
+    publisher,
     doi,
     isbn,
     url,
