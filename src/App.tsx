@@ -57,6 +57,48 @@ export default function App() {
   const [startX, setStartX] = useState<number>(0);
   const [startWidth, setStartWidth] = useState<number>(0);
 
+  // Column reordering states & handlers
+  const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
+
+  const handleColumnDragStart = (e: React.DragEvent, colKey: string) => {
+    setDraggedColKey(colKey);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', colKey);
+  };
+
+  const handleColumnDragOver = (e: React.DragEvent, colKey: string) => {
+    e.preventDefault();
+  };
+
+  const handleColumnDrop = (e: React.DragEvent, targetColKey: string) => {
+    e.preventDefault();
+    if (!draggedColKey || draggedColKey === targetColKey) return;
+
+    setColumns(prev => {
+      const draggedIdx = prev.findIndex(c => c.key === draggedColKey);
+      const targetIdx = prev.findIndex(c => c.key === targetColKey);
+      if (draggedIdx === -1 || targetIdx === -1) return prev;
+
+      const updated = [...prev];
+      const [removed] = updated.splice(draggedIdx, 1);
+      updated.splice(targetIdx, 0, removed);
+      return updated;
+    });
+    setDraggedColKey(null);
+  };
+
+  const moveColumn = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= columns.length) return;
+    setColumns(prev => {
+      const updated = [...prev];
+      const temp = updated[index];
+      updated[index] = updated[newIndex];
+      updated[newIndex] = temp;
+      return updated;
+    });
+  };
+
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -388,7 +430,7 @@ export default function App() {
       } else if (selectedCollectionId === 'nonstandard-citekey') {
         result = result.filter(item => {
           const standard = getStandardCitekey(item);
-          return !item.citekey || item.citekey !== standard;
+          return !item.citekey || item.citekey.toLowerCase().trim() !== standard.toLowerCase().trim();
         });
       } else if (selectedCollectionId !== 'all') {
         // Belonging to collection or subcollections
@@ -674,8 +716,18 @@ export default function App() {
                       return (
                         <th
                           key={col.key}
+                          draggable={true}
+                          onDragStart={(e) => handleColumnDragStart(e, col.key as string)}
+                          onDragOver={(e) => handleColumnDragOver(e, col.key as string)}
+                          onDrop={(e) => handleColumnDrop(e, col.key as string)}
                           onClick={() => handleHeaderSort(col.key)}
-                          className={`relative px-3.5 py-2.5 cursor-pointer font-medium border-r whitespace-nowrap ${theme === 'code-dark' ? 'border-[#2b2b2b] hover:bg-[#323233] text-[#808080]' : 'border-slate-850/30 hover:bg-slate-805 text-slate-400 font-mono text-[10px] uppercase tracking-wider'}`}
+                          className={`relative px-3.5 py-2.5 cursor-grab active:cursor-grabbing font-medium border-r whitespace-nowrap ${
+                            theme === 'code-dark' 
+                              ? 'border-[#2b2b2b] hover:bg-[#323233] text-[#808080]' 
+                              : theme === 'monokai'
+                              ? 'border-[#3e3d32] hover:bg-[#3e3d32] text-[#f8f8f2]'
+                              : 'border-slate-850/30 hover:bg-slate-200 text-slate-700 font-mono text-[10px] uppercase tracking-wider'
+                          } ${draggedColKey === col.key ? 'opacity-40' : ''}`}
                           style={{ width: col.width ? `${col.width}px` : 'auto', minWidth: col.width ? `${col.width}px` : 'auto', maxWidth: col.width ? `${col.width}px` : 'none' }}
                         >
                           <div className="flex items-center gap-1.5 justify-between pr-2">
@@ -685,7 +737,10 @@ export default function App() {
                             )}
                           </div>
                           <div
-                            onMouseDown={(e) => handleResizeStart(e, col.key as string, col.width || 150)}
+                            onMouseDown={(e) => {
+                              e.stopPropagation(); // Avoid triggering drag on resize handle drag
+                              handleResizeStart(e, col.key as string, col.width || 150);
+                            }}
                             className={`absolute right-0 top-0 bottom-0 w-2 cursor-col-resize ${resizingCol === col.key ? 'bg-sky-500' : 'hover:bg-sky-500/50'}`}
                             style={{ touchAction: 'none' }}
                           />
@@ -864,29 +919,61 @@ export default function App() {
                 </div>
 
                 <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
-                  {columns.map(col => {
+                  {columns.map((col, index) => {
                     const isTitle = col.key === 'title';
                     return (
-                      <label
+                      <div
                         key={col.key}
-                        className={`flex items-center justify-between px-1.5 py-1 rounded-sm cursor-pointer hover:bg-slate-800/50 select-none ${
-                          isTitle ? 'opacity-80 cursor-not-allowed text-slate-400' : 'text-slate-300'
+                        className={`flex items-center justify-between px-1.5 py-1 rounded-sm hover:bg-slate-800/50 select-none ${
+                          isTitle ? 'opacity-80 text-slate-400' : 'text-slate-300'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
+                        <label className={`flex items-center gap-2 cursor-pointer flex-1 min-w-0 ${isTitle ? 'cursor-not-allowed' : ''}`}>
                           <input
                             type="checkbox"
                             checked={col.visible}
                             disabled={isTitle}
                             onChange={() => toggleColumn(col.key as string)}
-                            className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5"
+                            className="rounded border-slate-800 bg-slate-950 text-sky-600 focus:ring-0 h-3.5 w-3.5 cursor-pointer"
                           />
                           <span className="truncate">{col.label}</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              disabled={index === 0}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                moveColumn(index, 'up');
+                              }}
+                              className={`p-0.5 rounded hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent ${
+                                index === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
+                              }`}
+                              title="Move column left (up)"
+                            >
+                              <ChevronUp className="h-3 w-3 text-slate-400 hover:text-sky-400" />
+                            </button>
+                            <button
+                              disabled={index === columns.length - 1}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                moveColumn(index, 'down');
+                              }}
+                              className={`p-0.5 rounded hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent ${
+                                index === columns.length - 1 ? 'cursor-not-allowed' : 'cursor-pointer'
+                              }`}
+                              title="Move column right (down)"
+                            >
+                              <ChevronDown className="h-3 w-3 text-slate-400 hover:text-sky-400" />
+                            </button>
+                          </div>
+                          <span className="font-mono text-[9px] text-slate-500 uppercase shrink-0">
+                            {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
+                          </span>
                         </div>
-                        <span className="font-mono text-[9px] text-slate-500 uppercase">
-                          {col.key === 'creators_compact' ? 'creators' : col.key.toString()}
-                        </span>
-                      </label>
+                      </div>
                     );
                   })}
                 </div>

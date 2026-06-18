@@ -161,7 +161,7 @@ export default function SidebarCollections({
     return items.filter(item => {
       if (item.inTrash) return false;
       const standard = getStandardCitekey(item);
-      return !item.citekey || item.citekey !== standard;
+      return !item.citekey || item.citekey.toLowerCase().trim() !== standard.toLowerCase().trim();
     }).length;
   };
 
