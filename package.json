@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "api": "tsx watch src/server/server.ts",
+    "api": "tsx watch src/server/main.ts",
     "dev:full": "concurrently --names api,vite --prefix-colors cyan,yellow \"npm run api\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
@@ -38,7 +38,8 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -57,5 +58,8 @@
     "vite": "^6.2.3",
     "vite-plugin-checker": "^0.14.4",
     "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": "25.8.2"
   }
 }

@@ -1,41 +1,43 @@
-export type ItemType =
-  | 'journalArticle'
-  | 'book'
-  | 'bookSection'
-  | 'conferencePaper'
-  | 'thesis'
-  | 'webpage'
-  | 'report'
-  | 'patent'
-  | 'preprint'
-  | 'manuscript'
-  | 'document'
-  | 'presentation'
-  | 'magazineArticle'
-  | 'newspaperArticle'
-  | 'blogPost'
-  | 'forumPost'
-  | 'encyclopediaArticle'
-  | 'dictionaryEntry'
-  | 'interview'
-  | 'film'
-  | 'tvBroadcast'
-  | 'radioBroadcast'
-  | 'podcast'
-  | 'artwork'
-  | 'statute'
-  | 'bill'
-  | 'case'
-  | 'hearing'
-  | 'map'
-  | 'computerProgram'
-  | 'email'
-  | 'letter'
-  | 'audioRecording'
-  | 'videoRecording'
-  | string; // catch-all for future Zotero types
+export const ITEM_TYPES = [
+  'journalArticle',
+  'book',
+  'bookSection',
+  'conferencePaper',
+  'thesis',
+  'webpage',
+  'report',
+  'patent',
+  'preprint',
+  'manuscript',
+  'document',
+  'presentation',
+  'magazineArticle',
+  'newspaperArticle',
+  'blogPost',
+  'forumPost',
+  'encyclopediaArticle',
+  'dictionaryEntry',
+  'interview',
+  'film',
+  'tvBroadcast',
+  'radioBroadcast',
+  'podcast',
+  'artwork',
+  'statute',
+  'bill',
+  'case',
+  'hearing',
+  'map',
+  'computerProgram',
+  'email',
+  'letter',
+  'audioRecording',
+  'videoRecording',
+] as const;
 
-const ITEM_TYPE_LABEL_MAP: Record<string, string> = {
+export type ItemType = typeof ITEM_TYPES[number]; // catch-all for future Zotero types
+
+const ITEM_TYPE_LABEL_MAP: Record<ItemType, string> = {
   journalArticle: 'Journal Article',
   book: 'Book',
   bookSection: 'Book Section',
@@ -72,8 +74,8 @@ const ITEM_TYPE_LABEL_MAP: Record<string, string> = {
   videoRecording: 'Video Recording',
 };
 
-export function getItemTypeLabel(type: string): string {
-  return ITEM_TYPE_LABEL_MAP[type] ?? type.replace(/([A-Z])/g, ' $1').trim();
+export function getItemTypeLabel(type: ItemType): string {
+  return ITEM_TYPE_LABEL_MAP[type];
 }
 
 // Keep for backward-compat usage sites that reference ITEM_TYPE_LABELS

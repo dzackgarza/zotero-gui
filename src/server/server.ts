@@ -1,20 +1,16 @@
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import type { ZoteroItem, Collection, Creator, ItemNote, Attachment } from '../types.js';
+import { z } from 'zod';
+import { CreatedItemResponseSchema, LibraryPayloadSchema } from '../schemas.js';
+import type { LibraryPayload } from '../schemas.js';
+import { ITEM_TYPES, type ZoteroItem, type Collection, type Creator, type ItemNote, type Attachment, type ItemType } from '../types.js';
 import {
-  addBibTeXToZotero,
-  loadResolverPlugins,
+  pluginAcceptsInput,
+  resolverPluginMetadata,
   resolveSourceToZotero,
+  type ResolverExecutionConfig,
+  type ResolverPluginConfig,
 } from './resolverPlugins.js';
-
-const DB_URI = 'file:///home/dzack/Zotero/zotero.sqlite?immutable=1';
-const PORT = 3001;
-const RESOLVER_CONFIG_PATH = path.resolve(process.cwd(), 'resolver-plugins.json');
-
-const db = new DatabaseSync(DB_URI);
-const resolverPlugins = loadResolverPlugins(RESOLVER_CONFIG_PATH);
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -30,7 +26,14 @@ function cleanDate(raw: string | null | undefined): string | undefined {
   return raw;
 }
 
-function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
+function parseItemType(value: unknown): ItemType {
+  if (typeof value === 'string' && (ITEM_TYPES as readonly string[]).includes(value)) {
+    return value as ItemType;
+  }
+  throw new Error(`Unsupported Zotero item type: ${String(value)}`);
+}
+
+export function queryLibrary(db: DatabaseSync): LibraryPayload {
   // 1. Main items — EAV pivot via conditional aggregation
   const rawItems = db.prepare(`
     SELECT
@@ -199,7 +202,7 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
 
   const items: ZoteroItem[] = rawItems.map((row: any) => ({
     id: row.id,
-    itemType: row.itemType as any,
+    itemType: parseItemType(row.itemType),
     title: row.title ?? 'Untitled',
     creators: creatorsByItem.get(row.itemID) ?? [],
     publicationTitle: row.publicationTitle ?? undefined,
@@ -241,11 +244,8 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
     })),
   ];
 
-  return { items, collections };
+  return LibraryPayloadSchema.parse({ items, collections });
 }
-
-export const app = express();
-app.use(express.json());
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -253,81 +253,69 @@ function invariant(condition: unknown, message: string): asserts condition {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+const FromSourceRequestSchema = z.strictObject({
+  input: z.string().trim().min(1),
+  resolverId: z.string().trim().min(1),
+  collections: z.array(z.string().min(1)),
+});
+
+export interface AppDeps {
+  loadLibrary(): LibraryPayload;
+  resolverPlugins: ResolverPluginConfig[];
+  resolverExecution: ResolverExecutionConfig;
+  importEndpoint: string;
+  fetchImpl: typeof fetch;
 }
 
-function getRequiredString(body: Record<string, unknown>, key: string): string {
-  const value = body[key];
-  invariant(typeof value === 'string' && value.trim().length > 0, `${key} must be a non-empty string`);
-  return value;
-}
-
-function getCollections(body: Record<string, unknown>): string[] {
-  const value = body.collections;
-  invariant(Array.isArray(value), 'collections must be an array');
-  invariant(value.every(collection => typeof collection === 'string'), 'collections must contain only strings');
-  return value;
-}
-
-function getResolverPlugin(pluginId: string) {
+function getResolverPlugin(resolverPlugins: ResolverPluginConfig[], pluginId: string): ResolverPluginConfig {
   const plugin = resolverPlugins.find(candidate => candidate.id === pluginId);
   invariant(plugin, `resolver plugin ${pluginId} is not configured`);
   return plugin;
 }
 
-app.get('/api/resolver-plugins', (_req, res) => {
-  res.json(resolverPlugins.map(plugin => ({
-    id: plugin.id,
-    name: plugin.name,
-  })));
-});
-
-app.get('/api/library', (_req, res) => {
-  try {
-    const data = queryLibrary();
-    res.json(data);
-  } catch (err) {
-    console.error('Failed to query database:', err);
-    res.status(500).json({ error: 'Database query failed' });
-  }
-});
-
-app.post('/api/items/from-source', (req, res, next) => {
-  const body = req.body as unknown;
-  invariant(isRecord(body), 'request body must be an object');
-
-  const plugin = getResolverPlugin(getRequiredString(body, 'resolverId'));
-  const input = getRequiredString(body, 'input');
-  const collections = getCollections(body);
-
-  resolveSourceToZotero(plugin, input, collections)
-    .then(result => res.json(result))
-    .catch(next);
-});
-
-app.post('/api/items/from-bibtex', (req, res, next) => {
-  const body = req.body as unknown;
-  invariant(isRecord(body), 'request body must be an object');
-
-  const bibtex = getRequiredString(body, 'bibtex');
-  const collections = getCollections(body);
-
-  addBibTeXToZotero(bibtex, collections)
-    .then(result => res.json(result))
-    .catch(next);
-});
-
-app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  res.status(500).json({ error: error.message });
-});
-
-export function startServer() {
-  return app.listen(PORT, () => {
-  console.log(`Zotero API server → http://localhost:${PORT}`);
-  });
+function requireCreatedItem(payload: LibraryPayload, key: string) {
+  const item = payload.items.find(candidate => candidate.id === key);
+  invariant(item, `created Zotero item ${key} was not visible after import`);
+  return item;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  startServer();
+export function createApp(deps: AppDeps) {
+  const app = express();
+  app.use(express.json());
+
+  app.get('/api/resolver-plugins', (_req, res) => {
+    res.json(deps.resolverPlugins.map(resolverPluginMetadata));
+  });
+
+  app.get('/api/library', (_req, res, next) => {
+    Promise.resolve()
+      .then(() => res.json(LibraryPayloadSchema.parse(deps.loadLibrary())))
+      .catch(next);
+  });
+
+  app.post('/api/items/from-source', (req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        const body = FromSourceRequestSchema.parse(req.body);
+        const plugin = getResolverPlugin(deps.resolverPlugins, body.resolverId);
+        invariant(pluginAcceptsInput(plugin, body.input), `resolver ${plugin.id} does not accept the supplied input`);
+        const result = await resolveSourceToZotero(
+          plugin,
+          body.input,
+          body.collections,
+          deps.resolverExecution,
+          deps.importEndpoint,
+          deps.fetchImpl,
+        );
+        const item = requireCreatedItem(LibraryPayloadSchema.parse(deps.loadLibrary()), result.item_key);
+        res.json(CreatedItemResponseSchema.parse({ key: result.item_key, item }));
+      })
+      .catch(next);
+  });
+
+  app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(500).json({ error: error.message });
+  });
+
+  return app;
 }

@@ -6,24 +6,23 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
   if (!parsed || parsed.length === 0) {
     throw new Error('Invalid BibTeX input or empty entry list.');
   }
+  if (parsed.length !== 1) {
+    throw new Error('BibTeX input must contain exactly one entry.');
+  }
 
   const entry = parsed[0];
   const tags = entry.entryTags || {};
 
-  // Clean values (remove braces, e.g. {My Title} -> My Title)
   const cleanValue = (val: string | undefined): string => {
     if (!val) return '';
     let s = val.trim();
-    // Recursively strip outer braces if present
     while (s.startsWith('{') && s.endsWith('}')) {
       s = s.substring(1, s.length - 1).trim();
     }
-    // Remove common LaTeX escapes for special characters
     s = s.replace(/\\([&%$#_{}])/g, '$1');
     return s.trim();
   };
 
-  // Map entry type to Zotero ItemType
   let itemType: ItemType = 'journalArticle';
   const rawType = entry.entryType.toLowerCase();
   if (rawType === 'book') {
@@ -40,7 +39,6 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
     itemType = 'webpage';
   }
 
-  // Parse Authors
   const rawAuthors = tags.author || tags.AUTHOR || '';
   const creators = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(authorStr => {
     const cleanStr = cleanValue(authorStr);
@@ -49,15 +47,13 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
       const lastName = parts[0].trim();
       const firstName = parts.slice(1).join(',').trim();
       return { firstName, lastName, creatorType: 'author' };
-    } else {
-      const parts = cleanStr.split(/\s+/);
-      const lastName = parts.pop() || '';
-      const firstName = parts.join(' ');
-      return { firstName, lastName, creatorType: 'author' };
     }
-  }) : [{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }];
+    const parts = cleanStr.split(/\s+/);
+    const lastName = parts.pop() || '';
+    const firstName = parts.join(' ');
+    return { firstName, lastName, creatorType: 'author' };
+  }) : [];
 
-  // Clean individual tags
   const title = cleanValue(tags.title || tags.TITLE);
   const date = cleanValue(tags.year || tags.YEAR || tags.date || tags.DATE);
   const publicationTitle = cleanValue(tags.journal || tags.JOURNAL || tags.booktitle || tags.BOOKTITLE || tags.series);
@@ -70,7 +66,6 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
   const pages = cleanValue(tags.pages || tags.PAGES);
   const abstractNote = cleanValue(tags.abstract || tags.ABSTRACT);
 
-  // Validate title is present
   if (!title) {
     throw new Error('BibTeX entry must contain a title.');
   }
@@ -89,6 +84,6 @@ export function parseBibTeXToItem(bibtexStr: string): Partial<ZoteroItem> {
     issue,
     pages,
     abstractNote,
-    citekey: entry.citationKey || undefined
+    citekey: entry.citationKey || undefined,
   };
 }
