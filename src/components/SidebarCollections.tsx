@@ -18,6 +18,7 @@ interface SidebarCollectionsProps {
   onAddCollection: (name: string, parentId?: string) => void;
   selectedTag: string | null;
   onSelectTag: (tag: string | null) => void;
+  theme: string;
 }
 
 export default function SidebarCollections({
@@ -27,11 +28,61 @@ export default function SidebarCollections({
   items,
   onAddCollection,
   selectedTag,
-  onSelectTag
+  onSelectTag,
+  theme
 }: SidebarCollectionsProps) {
   const [newColName, setNewColName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newColParent, setNewColParent] = useState<string>('');
+
+  // Styles dynamically based on the VS theme
+  const getSidebarBg = () => {
+    switch (theme) {
+      case 'code-light':
+        return 'bg-[#f3f3f3] text-slate-800 border-r border-[#e4e4e7]';
+      case 'monokai':
+        return 'bg-[#272822] text-[#f8f8f2] border-r border-[#3e3d32] font-mono';
+      case 'code-dark':
+      default:
+        return 'bg-[#252526] text-[#cccccc] border-r border-[#2b2b2b]';
+    }
+  };
+
+  const getFolderSelectedClass = (isSelected: boolean) => {
+    if (isSelected) {
+      switch (theme) {
+        case 'code-light':
+          return 'bg-blue-600/10 border-l-2 border-blue-600 text-blue-600 font-semibold';
+        case 'monokai':
+          return 'bg-[#3e3d32] border-l-2 border-[#a6e22e] text-[#a6e22e] font-semibold';
+        case 'code-dark':
+        default:
+          return 'bg-blue-600/20 border-l-2 border-blue-500 text-sky-400 font-semibold';
+      }
+    } else {
+      switch (theme) {
+        case 'code-light':
+          return 'hover:bg-slate-200/80 text-slate-550 hover:text-slate-800';
+        case 'monokai':
+          return 'hover:bg-[#3e3d32]/50 text-[#75715e] hover:text-[#f8f8f2]';
+        case 'code-dark':
+        default:
+          return 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200';
+      }
+    }
+  };
+
+  const getCounterClass = (isSelected: boolean) => {
+    switch (theme) {
+      case 'code-light':
+        return isSelected ? 'bg-blue-600/15 text-blue-600 font-semibold' : 'bg-slate-200 text-slate-500';
+      case 'monokai':
+        return isSelected ? 'bg-[#3e3d32] text-[#a6e22e] font-semibold' : 'bg-[#1e1f1c] text-[#75715e]';
+      case 'code-dark':
+      default:
+        return isSelected ? 'bg-slate-950/50 text-sky-400 font-semibold' : 'bg-slate-950/50 text-slate-500';
+    }
+  };
 
   // Calculate item counters for each collection safely
   const getItemCount = (collectionId: string) => {
@@ -154,11 +205,7 @@ export default function SidebarCollections({
             onSelectTag(null); // Clear tag selection when moving categories
           }}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          className={`group flex items-center justify-between py-1.5 pr-2.5 rounded-sm cursor-pointer transition select-none ${
-            isSelected
-              ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-              : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-          }`}
+          className={`group flex items-center justify-between py-1.5 pr-2.5 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(isSelected)}`}
         >
           <div className="flex items-center gap-2 min-w-0">
             {childNodes.length > 0 ? (
@@ -166,10 +213,10 @@ export default function SidebarCollections({
             ) : (
               <span className="w-3" />
             )}
-            <Folder className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-blue-400' : 'text-slate-500'}`} />
+            <Folder className={`h-3.5 w-3.5 shrink-0 ${isSelected ? (theme === 'code-light' ? 'text-blue-600' : theme === 'monokai' ? 'text-[#a6e22e]' : 'text-blue-400') : 'text-slate-550'}`} />
             <span className="truncate text-xs">{col.name}</span>
           </div>
-          <span className={`text-[10px] font-mono px-1 rounded-sm bg-slate-950/50 ${isSelected ? 'text-blue-300' : 'text-slate-500'}`}>
+          <span className={`text-[10px] font-mono px-1 rounded-sm ${getCounterClass(isSelected)}`}>
             {count}
           </span>
         </div>
@@ -189,12 +236,12 @@ export default function SidebarCollections({
 
   return (
     <Tooltip.Provider delayDuration={400}>
-      <div className="h-full flex flex-col bg-slate-900 border-r border-slate-800 text-xs font-sans p-3 space-y-4 select-none scrollbar-thin scrollbar-thumb-slate-800">
+      <div className={`h-full flex flex-col ${getSidebarBg()} select-none`}>
         <Accordion.Root type="multiple" defaultValue={["collections", "views", "tags"]} className="w-full flex-1 flex flex-col space-y-4 min-h-0 overflow-hidden">
           
           {/* Collections Section */}
           <Accordion.Item value="collections" className="flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-850 pb-2 shrink-0 select-none">
+            <div className={`flex items-center justify-between pb-2 shrink-0 select-none border-b ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-850'}`}>
               <Accordion.Trigger className="font-semibold text-[10px] text-slate-400 uppercase tracking-widest flex items-center gap-1.5 cursor-pointer hover:text-slate-200 outline-hidden select-none">
                 <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0 transition-transform duration-200 data-[state=closed]:-rotate-90" />
                 <span>Collections</span>
@@ -204,7 +251,7 @@ export default function SidebarCollections({
                   <button
                     type="button"
                     onClick={() => setShowAddForm(!showAddForm)}
-                    className="rounded p-1 text-slate-455 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
+                    className="rounded p-1 text-slate-450 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
                   >
                     <FolderPlus className="h-3.5 w-3.5" />
                   </button>
@@ -223,15 +270,23 @@ export default function SidebarCollections({
 
             {/* Drawer Creation Toggle */}
             {showAddForm && (
-              <form onSubmit={handleAddSubmit} className="bg-slate-950 p-2.5 rounded-md border border-slate-800 space-y-2 mt-2 shrink-0 animate-fade-in">
-                <p className="text-[10px] font-mono text-slate-400 font-semibold mb-1">New Collection</p>
+              <form onSubmit={handleAddSubmit} className={`p-2.5 rounded-md border space-y-2 mt-2 shrink-0 animate-fade-in ${
+                theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
+              }`}>
+                <p className="text-[10px] font-mono text-slate-450 font-semibold mb-1">New Collection</p>
                 <input
                   type="text"
                   required
                   value={newColName}
                   onChange={e => setNewColName(e.target.value)}
                   placeholder="e.g. NLP, Genetics..."
-                  className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:outline-hidden focus:border-sky-500"
+                  className={`w-full rounded border px-2 py-1 text-xs focus:outline-hidden ${
+                    theme === 'code-light' 
+                      ? 'border-[#e4e4e7] bg-[#ffffff] text-slate-800 focus:border-blue-600' 
+                      : theme === 'monokai' 
+                      ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2] focus:border-[#a6e22e]' 
+                      : 'border-slate-850 bg-slate-900 text-slate-100 focus:border-sky-500'
+                  }`}
                 />
                 <div className="space-y-1">
                   <label className="block text-[9px] font-mono text-slate-500">Nest Under (Optional)</label>
@@ -239,16 +294,22 @@ export default function SidebarCollections({
                     value={newColParent || "none"}
                     onValueChange={val => setNewColParent(val === "none" ? "" : val)}
                   >
-                    <Select.Trigger className="w-full flex items-center justify-between rounded border border-slate-800 bg-slate-900 text-slate-300 py-1 px-2 text-[10px] cursor-pointer outline-hidden">
+                    <Select.Trigger className={`w-full flex items-center justify-between rounded border py-1 px-2 text-[10px] cursor-pointer outline-hidden ${
+                      theme === 'code-light' ? 'border-[#e4e4e7] bg-[#ffffff] text-slate-700' : theme === 'monokai' ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2]' : 'border-slate-850 bg-slate-900 text-slate-350'
+                    }`}>
                       <Select.Value placeholder="No Parent (Root level)" />
                       <Select.Icon>
                         <ChevronDown className="h-3 w-3 text-slate-500" />
                       </Select.Icon>
                     </Select.Trigger>
                     <Select.Portal>
-                      <Select.Content className="z-50 bg-slate-900 border border-slate-800 rounded shadow-xl p-1 text-[10px] text-slate-300 min-w-[120px] focus:outline-hidden">
+                      <Select.Content className={`z-50 rounded shadow-xl p-1 text-[10px] min-w-[120px] focus:outline-hidden border ${
+                        theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7] text-slate-800' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32] text-[#f8f8f2]' : 'bg-slate-900 border-slate-800 text-slate-300'
+                      }`}>
                         <Select.Viewport>
-                          <Select.Item value="none" className="px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none flex items-center justify-between">
+                          <Select.Item value="none" className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
+                            theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
+                          }`}>
                             <Select.ItemText>No Parent (Root level)</Select.ItemText>
                             <Select.ItemIndicator>
                               <Check className="h-3 w-3 text-emerald-400" />
@@ -260,7 +321,9 @@ export default function SidebarCollections({
                               <Select.Item
                                 key={c.id}
                                 value={c.id}
-                                className="px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none flex items-center justify-between"
+                                className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
+                                  theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
+                                }`}
                               >
                                 <Select.ItemText>{c.name}</Select.ItemText>
                                 <Select.ItemIndicator>
@@ -298,17 +361,13 @@ export default function SidebarCollections({
                   onSelectCollection('all');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'all' && !selectedTag
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'all' && !selectedTag)}`}
               >
                 <div className="flex items-center gap-2">
-                  <FolderOpen className="h-3.5 w-3.5 text-blue-400" />
+                  <FolderOpen className={`h-3.5 w-3.5 ${selectedCollectionId === 'all' && !selectedTag ? (theme === 'code-light' ? 'text-blue-600' : theme === 'monokai' ? 'text-[#a6e22e]' : 'text-blue-400') : 'text-slate-550'}`} />
                   <span className="font-semibold text-xs">My Library (All)</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'all' && !selectedTag)}`}>
                   {getItemCount('all')}
                 </span>
               </div>
@@ -319,7 +378,7 @@ export default function SidebarCollections({
           </Accordion.Item>
 
           {/* Views Section */}
-          <Accordion.Item value="views" className="flex flex-col min-h-0 shrink-0 border-t border-slate-850 pt-2">
+          <Accordion.Item value="views" className={`flex flex-col min-h-0 shrink-0 border-t pt-2 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-850'}`}>
             <Accordion.Trigger className="font-semibold text-[10px] text-slate-400 uppercase tracking-widest pl-2 mb-2 flex items-center gap-1.5 cursor-pointer select-none hover:text-slate-205 outline-hidden">
               <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0 transition-transform duration-200 data-[state=closed]:-rotate-90" />
               <span>Views</span>
@@ -332,17 +391,13 @@ export default function SidebarCollections({
                   onSelectCollection('duplicates');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'duplicates'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'duplicates')}`}
               >
                 <div className="flex items-center gap-2">
-                  <Layers className="h-3.5 w-3.5 text-amber-500" />
+                  <Layers className={`h-3.5 w-3.5 ${selectedCollectionId === 'duplicates' ? 'text-amber-500' : 'text-slate-500'}`} />
                   <span>Duplicate Items</span>
                 </div>
-                <span className="text-[10.5px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10.5px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'duplicates')}`}>
                   {getDuplicateCount()}
                 </span>
               </div>
@@ -353,17 +408,13 @@ export default function SidebarCollections({
                   onSelectCollection('unfiled');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'unfiled'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'unfiled')}`}
               >
                 <div className="flex items-center gap-2">
-                  <PackageMinus className="h-3.5 w-3.5 text-orange-400" />
+                  <PackageMinus className={`h-3.5 w-3.5 ${selectedCollectionId === 'unfiled' ? 'text-orange-400' : 'text-slate-500'}`} />
                   <span>Unfiled Items</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500 font-semibold text-sky-400">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'unfiled')}`}>
                   {getUnfiledCount()}
                 </span>
               </div>
@@ -374,17 +425,13 @@ export default function SidebarCollections({
                   onSelectCollection('no-pdf');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'no-pdf'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'no-pdf')}`}
               >
                 <div className="flex items-center gap-2">
-                  <FileMinus className="h-3.5 w-3.5 text-red-400" />
+                  <FileMinus className={`h-3.5 w-3.5 ${selectedCollectionId === 'no-pdf' ? 'text-red-400' : 'text-slate-500'}`} />
                   <span>No PDF Attachment</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'no-pdf')}`}>
                   {getNoPdfCount()}
                 </span>
               </div>
@@ -395,17 +442,13 @@ export default function SidebarCollections({
                   onSelectCollection('no-extraction');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'no-extraction'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'no-extraction')}`}
               >
                 <div className="flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 text-yellow-500" />
+                  <FileText className={`h-3.5 w-3.5 ${selectedCollectionId === 'no-extraction' ? 'text-yellow-500' : 'text-slate-500'}`} />
                   <span>No Extraction</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'no-extraction')}`}>
                   {getNoExtractionCount()}
                 </span>
               </div>
@@ -416,17 +459,13 @@ export default function SidebarCollections({
                   onSelectCollection('nonstandard-citekey');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'nonstandard-citekey'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'nonstandard-citekey')}`}
               >
                 <div className="flex items-center gap-2">
-                  <Key className="h-3.5 w-3.5 text-purple-400" />
+                  <Key className={`h-3.5 w-3.5 ${selectedCollectionId === 'nonstandard-citekey' ? 'text-purple-400' : 'text-slate-500'}`} />
                   <span>Nonstandard Citation Key</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'nonstandard-citekey')}`}>
                   {getNonstandardCitekeyCount()}
                 </span>
               </div>
@@ -437,17 +476,13 @@ export default function SidebarCollections({
                   onSelectCollection('trash');
                   onSelectTag(null);
                 }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${
-                  selectedCollectionId === 'trash'
-                    ? 'bg-blue-600/25 border-l-2 border-blue-500 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'trash')}`}
               >
                 <div className="flex items-center gap-2">
-                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                  <Trash2 className={`h-3.5 w-3.5 ${selectedCollectionId === 'trash' ? 'text-red-500' : 'text-slate-500'}`} />
                   <span>Trash bin</span>
                 </div>
-                <span className="text-[10px] font-mono px-1 rounded bg-slate-950/50 text-slate-500">
+                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'trash')}`}>
                   {getTrashCount()}
                 </span>
               </div>
@@ -455,7 +490,7 @@ export default function SidebarCollections({
           </Accordion.Item>
 
           {/* Tags Section */}
-          <Accordion.Item value="tags" className="flex-1 flex flex-col min-h-[160px] border-t border-slate-850 pt-3 min-h-0 overflow-hidden">
+          <Accordion.Item value="tags" className={`flex-1 flex flex-col min-h-[160px] border-t pt-3 min-h-0 overflow-hidden ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-850'}`}>
             <Accordion.Trigger className="flex items-center gap-1.5 text-slate-400 font-semibold text-[10px] uppercase tracking-widest pl-2 mb-2 cursor-pointer select-none hover:text-slate-200 outline-hidden">
               <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0 transition-transform duration-200 data-[state=closed]:-rotate-90" />
               <Tag className="h-3.5 w-3.5 text-sky-400 shrink-0" />
@@ -464,7 +499,9 @@ export default function SidebarCollections({
 
             <Accordion.Content className="flex-1 flex flex-col min-h-0 overflow-hidden select-none data-[state=closed]:animate-slide-up data-[state=open]:animate-slide-down">
               {selectedTag && (
-                <div className="flex items-center justify-between bg-blue-600/10 border border-blue-500/20 rounded p-1.5 mb-2.5 text-xs text-sky-400 shrink-0 select-none">
+                <div className={`flex items-center justify-between border rounded p-1.5 mb-2.5 text-xs text-sky-400 shrink-0 select-none ${
+                  theme === 'code-light' ? 'bg-blue-50 border-blue-200 text-blue-600' : theme === 'monokai' ? 'bg-[#3e3d32] border-[#a6e22e]/30 text-[#a6e22e]' : 'bg-blue-600/10 border-blue-500/20 text-sky-400'
+                }`}>
                   <span className="truncate font-semibold">Active: {selectedTag}</span>
                   <button
                     onClick={() => onSelectTag(null)}
@@ -487,12 +524,16 @@ export default function SidebarCollections({
                         onClick={() => onSelectTag(isTagSelected ? null : tag)}
                         className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer text-[11px] transition ${
                           isTagSelected
-                            ? 'bg-sky-600 text-white font-medium'
-                            : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                            ? (theme === 'code-light' ? 'bg-blue-600 text-white font-medium' : theme === 'monokai' ? 'bg-[#a6e22e] text-black font-medium' : 'bg-sky-600 text-white font-medium')
+                            : (theme === 'code-light' ? 'hover:bg-slate-200 text-slate-600' : theme === 'monokai' ? 'hover:bg-[#3e3d32]/50 text-[#f8f8f2]' : 'hover:bg-slate-800 text-slate-400')
                         }`}
                       >
                         <span className="truncate pr-1.5">{tag}</span>
-                        <span className={`text-[9px] font-mono px-1 rounded-xs ${isTagSelected ? 'bg-sky-700 text-white' : 'bg-slate-950/40 text-slate-500'}`}>
+                        <span className={`text-[9px] font-mono px-1 rounded-xs ${
+                          isTagSelected 
+                            ? (theme === 'code-light' ? 'bg-blue-700 text-white' : theme === 'monokai' ? 'bg-[#8ec027] text-black' : 'bg-sky-700 text-white') 
+                            : (theme === 'code-light' ? 'bg-slate-200 text-slate-550' : theme === 'monokai' ? 'bg-[#1e1f1c] text-[#75715e]' : 'bg-slate-950/40 text-slate-550')
+                        }`}>
                           {count}
                         </span>
                       </div>

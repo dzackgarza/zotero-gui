@@ -44,6 +44,7 @@ interface InspectorPanelProps {
   onDeleteItem: (id: string) => void;
   onDuplicateItem: (id: string) => void;
   onClose: () => void;
+  theme: string;
 }
 
 export default function InspectorPanel({
@@ -52,7 +53,8 @@ export default function InspectorPanel({
   onUpdateItem,
   onDeleteItem,
   onDuplicateItem,
-  onClose
+  onClose,
+  theme
 }: InspectorPanelProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'notes' | 'tags' | 'attachments'>('info');
   const [copied, setCopied] = useState(false);
@@ -79,6 +81,43 @@ export default function InspectorPanel({
   // New Tag state
   const [newTag, setNewTag] = useState('');
 
+  // Styles dynamically based on the VS theme
+  const getPanelBg = () => {
+    switch (theme) {
+      case 'code-light':
+        return 'bg-[#f3f3f3] text-slate-800 border-l border-[#e4e4e7]';
+      case 'monokai':
+        return 'bg-[#272822] text-[#f8f8f2] border-l border-[#3e3d32] font-mono';
+      case 'code-dark':
+      default:
+        return 'bg-[#252526] text-[#cccccc] border-l border-[#2b2b2b]';
+    }
+  };
+
+  const getSubpanelHeaderBg = () => {
+    switch (theme) {
+      case 'code-light':
+        return 'bg-white border-b border-[#e4e4e7]';
+      case 'monokai':
+        return 'bg-[#1e1f1c] border-b border-[#3e3d32]';
+      case 'code-dark':
+      default:
+        return 'bg-slate-950 border-b border-[#2b2b2b]';
+    }
+  };
+
+  const getInputClass = () => {
+    switch (theme) {
+      case 'code-light':
+        return 'bg-white border border-[#e4e4e7] text-slate-800 placeholder:text-slate-400 focus:border-blue-600';
+      case 'monokai':
+        return 'bg-[#272822] border border-[#3e3d32] text-[#f8f8f2] placeholder:text-stone-500 focus:border-[#a6e22e]';
+      case 'code-dark':
+      default:
+        return 'bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-550 focus:border-blue-600';
+    }
+  };
+
   // Validate citekey unique matches
   useEffect(() => {
     if (item && item.citekey) {
@@ -92,11 +131,13 @@ export default function InspectorPanel({
   }, [item, allItems]);
 
   if (!item) {
+    const isLight = theme === 'code-light';
+    const isMonokai = theme === 'monokai';
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-slate-500 font-sans border-l border-slate-800 bg-slate-900/60 select-none">
-        <FileText className="h-10 w-10 text-slate-700 mb-2.5 animate-pulse" />
-        <p className="text-xs font-semibold text-slate-400">No Item Selected</p>
-        <p className="text-[10px] text-slate-500 leading-normal text-center mt-1 max-w-xs">
+      <div className={`h-full flex flex-col items-center justify-center p-6 select-none ${getPanelBg()}`}>
+        <FileText className={`h-10 w-10 mb-2.5 animate-pulse ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-700'}`} />
+        <p className={`text-xs font-semibold ${isLight ? 'text-slate-500' : isMonokai ? 'text-[#f8f8f2]' : 'text-slate-400'}`}>No Item Selected</p>
+        <p className={`text-[10px] leading-normal text-center mt-1 max-w-xs ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-550'}`}>
           Select any bibliography row or press <kbd className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-[9px] text-slate-400 font-mono">Ctrl+P</kbd> to inspect detailed metadata.
         </p>
       </div>
@@ -209,10 +250,10 @@ export default function InspectorPanel({
 
   return (
     <Tooltip.Provider delayDuration={400}>
-      <div className="h-full flex flex-col bg-slate-900 border-l border-slate-800 text-xs font-sans">
+      <div className={`h-full flex flex-col ${getPanelBg()}`}>
         
         {/* Title / Close pane */}
-        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-3 py-2 shrink-0">
+        <div className={`flex items-center justify-between px-3 py-2 shrink-0 ${getSubpanelHeaderBg()}`}>
           <span className="font-semibold text-[10px] text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5 text-blue-400" />
             <span>Item Inspector</span>
@@ -234,7 +275,7 @@ export default function InspectorPanel({
               <Tooltip.Portal>
                 <Tooltip.Content
                   side="top"
-                  className="z-50 rounded bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
+                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
                 >
                   Generate BibTeX citation
                   <Tooltip.Arrow className="fill-slate-800" />
@@ -254,7 +295,7 @@ export default function InspectorPanel({
               <Tooltip.Portal>
                 <Tooltip.Content
                   side="top"
-                  className="z-50 rounded bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
+                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
                 >
                   Duplicate record
                   <Tooltip.Arrow className="fill-slate-800" />
@@ -266,7 +307,7 @@ export default function InspectorPanel({
               <Tooltip.Trigger asChild>
                 <button
                   onClick={() => onDeleteItem(item.id)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-500 transition cursor-pointer"
+                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-505 transition cursor-pointer"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -274,7 +315,7 @@ export default function InspectorPanel({
               <Tooltip.Portal>
                 <Tooltip.Content
                   side="top"
-                  className="z-50 rounded bg-slate-950 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
+                  className="z-50 rounded bg-slate-955 border border-slate-805 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
                 >
                   {item.inTrash ? "Delete permanently" : "Move to Trash"}
                   <Tooltip.Arrow className="fill-slate-800" />
@@ -292,7 +333,7 @@ export default function InspectorPanel({
         </div>
 
         {/* Item summary label */}
-        <div className="bg-slate-950/60 p-3 border-b border-slate-800 shrink-0">
+        <div className={`p-3 shrink-0 ${theme === 'code-light' ? 'bg-[#eaeaea] border-b border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-b border-[#3e3d32]' : 'bg-slate-950/60 border-b border-slate-800'}`}>
           <div className="font-mono text-[9px] text-sky-400 mb-1 flex items-center justify-between">
             <span>{ITEM_TYPE_LABELS[item.itemType]}</span>
             {item.inTrash && (
@@ -301,19 +342,27 @@ export default function InspectorPanel({
               </span>
             )}
           </div>
-          <h3 className="font-semibold text-slate-100 text-xs line-clamp-2 leading-snug">
+          <h3 className={`font-semibold text-xs line-clamp-2 leading-snug ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
             {item.title || 'Untitled'}
           </h3>
         </div>
 
         {/* Tabs Panels Container */}
         <Tabs.Root value={activeTab} onValueChange={val => setActiveTab(val as any)} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <Tabs.List className="flex border-b border-slate-850 bg-slate-900 shrink-0 font-medium text-[10px] uppercase tracking-wide select-none">
+          <Tabs.List className={`flex border-b shrink-0 font-medium text-[10px] uppercase tracking-wide select-none ${
+            theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-900 border-[#2b2b2b]'
+          }`}>
             {(['info', 'notes', 'tags', 'attachments'] as const).map(tab => (
               <Tabs.Trigger
                 key={tab}
                 value={tab}
-                className="flex-1 py-1.5 text-center border-b-2 hover:text-slate-100 transition cursor-pointer outline-hidden data-[state=active]:border-blue-500 data-[state=active]:text-slate-100 data-[state=active]:bg-slate-950/40 data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400"
+                className={`flex-1 py-1.5 text-center border-b-2 hover:text-slate-100 transition cursor-pointer outline-hidden ${
+                  theme === 'code-light' 
+                    ? 'data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:bg-slate-50 data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-500 hover:text-slate-800' 
+                    : theme === 'monokai' 
+                    ? 'data-[state=active]:border-[#a6e22e] data-[state=active]:text-[#a6e22e] data-[state=active]:bg-[#272822] data-[state=inactive]:border-transparent data-[state=inactive]:text-[#75715e] hover:text-[#f8f8f2]' 
+                    : 'data-[state=active]:border-blue-500 data-[state=active]:text-slate-100 data-[state=active]:bg-slate-950/40 data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400'
+                }`}
               >
                 {tab === 'info' && 'Details'}
                 {tab === 'notes' && `Notes (${item.notes.length})`}
@@ -333,20 +382,24 @@ export default function InspectorPanel({
                   value={item.itemType}
                   onValueChange={val => handleFieldChange('itemType', val as ItemType)}
                 >
-                  <Select.Trigger className="w-full flex items-center justify-between rounded border border-slate-800 bg-slate-950 text-slate-350 py-1 px-2 text-xs cursor-pointer outline-hidden focus:border-blue-600">
+                  <Select.Trigger className={`w-full flex items-center justify-between rounded border py-1 px-2 text-xs cursor-pointer outline-hidden ${getInputClass()}`}>
                     <Select.Value />
                     <Select.Icon>
                       <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
                     </Select.Icon>
                   </Select.Trigger>
                   <Select.Portal>
-                    <Select.Content className="z-50 bg-slate-900 border border-slate-805 rounded shadow-xl p-1 text-xs text-slate-300 min-w-[140px] focus:outline-hidden">
+                    <Select.Content className={`z-50 rounded shadow-xl p-1 text-xs min-w-[140px] focus:outline-hidden border ${
+                      theme === 'code-light' ? 'bg-white border-[#e4e4e7] text-slate-850' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32] text-[#f8f8f2]' : 'bg-slate-900 border-slate-805 text-slate-300'
+                    }`}>
                       <Select.Viewport>
                         {(Object.keys(ITEM_TYPE_LABELS) as ItemType[]).map(key => (
                           <Select.Item
                             key={key}
                             value={key}
-                            className="px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none flex items-center justify-between"
+                            className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
+                              theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
+                            }`}
                           >
                             <Select.ItemText>{ITEM_TYPE_LABELS[key]}</Select.ItemText>
                             <Select.ItemIndicator>
@@ -367,7 +420,7 @@ export default function InspectorPanel({
                   value={item.title}
                   onChange={e => handleFieldChange('title', e.target.value)}
                   rows={2}
-                  className="w-full text-xs font-semibold rounded border border-slate-800 bg-slate-950 text-slate-100 py-1 px-2 focus:border-blue-600 focus:outline-hidden resize-none leading-normal"
+                  className={`w-full text-xs font-semibold rounded border py-1 px-2 focus:outline-hidden resize-none leading-normal ${getInputClass()}`}
                 />
               </div>
 
@@ -386,8 +439,10 @@ export default function InspectorPanel({
                   value={item.citekey || ''}
                   onChange={e => handleFieldChange('citekey', e.target.value)}
                   placeholder="e.g. author_title_year"
-                  className={`w-full rounded border font-mono text-[11px] py-1 px-1.5 bg-slate-950 focus:outline-hidden focus:border-blue-600 ${
-                    citekeyConflict ? 'border-amber-500 text-amber-300' : 'border-slate-800 text-slate-300'
+                  className={`w-full rounded border font-mono text-[11px] py-1 px-1.5 focus:outline-hidden ${
+                    citekeyConflict 
+                      ? 'border-amber-500 text-amber-300 bg-slate-950/20' 
+                      : (theme === 'code-light' ? 'border-[#e4e4e7] bg-white text-slate-800 focus:border-blue-600' : theme === 'monokai' ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2] focus:border-[#a6e22e]' : 'border-slate-800 bg-slate-950 text-slate-350 focus:border-blue-600')
                   }`}
                 />
               </div>
@@ -406,7 +461,7 @@ export default function InspectorPanel({
                     handleFieldChange('creators', parsed);
                   }}
                   placeholder="LastName, FirstName; LastName, FirstName; ..."
-                  className="w-full rounded border border-slate-800 bg-slate-950 text-slate-100 py-1.5 px-2 focus:border-blue-600 focus:outline-hidden font-sans text-xs"
+                  className={`w-full rounded border py-1.5 px-2 focus:outline-hidden font-sans text-xs ${getInputClass()}`}
                 />
                 <span className="text-[9px] font-mono text-slate-650 mt-1 block">
                   Format: Last, First; Last, First
@@ -414,14 +469,14 @@ export default function InspectorPanel({
               </div>
 
               {/* Standard Zotero bibliographic metadata boxes */}
-              <div className="space-y-2 border-t border-slate-800 pt-3">
+              <div className={`space-y-2 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
                 <div>
                   <label className="block text-[10px] font-mono text-slate-500 mb-0.5">Publication Journal / Book</label>
                   <input
                     type="text"
                     value={item.publicationTitle || ''}
                     onChange={e => handleFieldChange('publicationTitle', e.target.value)}
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                   />
                 </div>
 
@@ -432,7 +487,7 @@ export default function InspectorPanel({
                       type="text"
                       value={item.date || ''}
                       onChange={e => handleFieldChange('date', e.target.value)}
-                      className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                   <div>
@@ -442,7 +497,7 @@ export default function InspectorPanel({
                       value={item.pages || ''}
                       onChange={e => handleFieldChange('pages', e.target.value)}
                       placeholder="e.g. 10-25"
-                      className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                 </div>
@@ -454,7 +509,7 @@ export default function InspectorPanel({
                       type="text"
                       value={item.volume || ''}
                       onChange={e => handleFieldChange('volume', e.target.value)}
-                      className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                   <div>
@@ -463,7 +518,7 @@ export default function InspectorPanel({
                       type="text"
                       value={item.issue || ''}
                       onChange={e => handleFieldChange('issue', e.target.value)}
-                      className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                 </div>
@@ -475,7 +530,7 @@ export default function InspectorPanel({
                     value={item.doi || ''}
                     onChange={e => handleFieldChange('doi', e.target.value)}
                     placeholder="e.g. 10.1000/xyz123"
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden font-mono text-[11px]"
+                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden font-mono text-[11px] ${getInputClass()}`}
                   />
                 </div>
 
@@ -486,7 +541,7 @@ export default function InspectorPanel({
                     value={item.url || ''}
                     onChange={e => handleFieldChange('url', e.target.value)}
                     placeholder="https://..."
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                   />
                 </div>
 
@@ -497,7 +552,7 @@ export default function InspectorPanel({
                       type="text"
                       value={item.publisher || ''}
                       onChange={e => handleFieldChange('publisher', e.target.value)}
-                      className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                   <div>
@@ -506,7 +561,7 @@ export default function InspectorPanel({
                       type="text"
                       value={item.place || ''}
                       onChange={e => handleFieldChange('place', e.target.value)}
-                      className="w-full rounded border border-slate-800 bg-slate-955 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                      className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                     />
                   </div>
                 </div>
@@ -517,7 +572,7 @@ export default function InspectorPanel({
                     type="text"
                     value={item.isbn || item.issn || ''}
                     onChange={e => handleFieldChange('isbn', e.target.value)}
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                   />
                 </div>
 
@@ -527,7 +582,7 @@ export default function InspectorPanel({
                     type="text"
                     value={item.language || ''}
                     onChange={e => handleFieldChange('language', e.target.value)}
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-1.5 focus:border-blue-600 focus:outline-hidden"
+                    className={`w-full rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                   />
                 </div>
 
@@ -537,11 +592,11 @@ export default function InspectorPanel({
                     value={item.abstractNote || ''}
                     onChange={e => handleFieldChange('abstractNote', e.target.value)}
                     rows={4}
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-300 py-1 px-2 focus:border-blue-600 focus:outline-hidden leading-normal text-xs"
+                    className={`w-full rounded border py-1 px-2 focus:outline-hidden leading-normal text-xs ${getInputClass()}`}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-slate-650 pt-2 border-t border-slate-850">
+                <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-slate-650 pt-2 border-t border-slate-800">
                   <div>Added: {new Date(item.dateAdded).toLocaleDateString()}</div>
                   <div>Modified: {new Date(item.dateModified).toLocaleDateString()}</div>
                 </div>
@@ -558,7 +613,7 @@ export default function InspectorPanel({
                     onChange={e => setNewNoteText(e.target.value)}
                     placeholder="Record summary details, qualitative takeaways, experimental outcomes, or literature quotes..."
                     rows={3}
-                    className="w-full rounded border border-slate-800 bg-slate-950 text-slate-200 py-1.5 px-2 focus:border-blue-600 focus:outline-hidden leading-normal text-xs"
+                    className={`w-full rounded border py-1.5 px-2 focus:outline-hidden leading-normal text-xs ${getInputClass()}`}
                   />
                   <button
                     type="button"
@@ -584,7 +639,9 @@ export default function InspectorPanel({
                   item.notes.map(note => {
                     const isEditing = editingNoteId === note.id;
                     return (
-                      <div key={note.id} className="rounded-md border border-slate-800 bg-slate-950 p-2.5 space-y-2">
+                      <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
+                        theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
+                      }`}>
                         {isEditing ? (
                           <div className="space-y-2">
                             <textarea
@@ -610,7 +667,9 @@ export default function InspectorPanel({
                           </div>
                         ) : (
                           <div>
-                            <p className="text-slate-200 whitespace-pre-wrap leading-relaxed text-[11px]">
+                            <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
+                              theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
+                            }`}>
                               {note.note}
                             </p>
                             <div className="flex items-center justify-between border-t border-slate-900/60 mt-2.5 pt-2 text-[9px] text-slate-550">
@@ -651,7 +710,7 @@ export default function InspectorPanel({
                     value={newTag}
                     onChange={e => setNewTag(e.target.value)}
                     placeholder="e.g. CRISPR, Transformer, NLP..."
-                    className="flex-1 rounded border border-slate-800 bg-slate-950 text-slate-100 py-1 px-1.5 focus:outline-hidden focus:border-blue-600"
+                    className={`flex-1 rounded border py-1 px-1.5 focus:outline-hidden ${getInputClass()}`}
                   />
                   <button
                     type="submit"
@@ -674,7 +733,13 @@ export default function InspectorPanel({
                     {item.tags.map(t => (
                       <span
                         key={t}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium text-[10px]"
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] ${
+                          theme === 'code-light' 
+                            ? 'border-blue-200 bg-blue-50 text-blue-650 font-medium' 
+                            : theme === 'monokai' 
+                            ? 'border-[#a6e22e]/30 bg-[#a6e22e]/5 text-[#a6e22e] font-medium' 
+                            : 'border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium'
+                        }`}
                       >
                         <span>{t}</span>
                         <button
@@ -701,7 +766,7 @@ export default function InspectorPanel({
                     value={newAttachTitle}
                     onChange={e => setNewAttachTitle(e.target.value)}
                     placeholder="e.g. vaswani_supplementary_2017.pdf"
-                    className="flex-1 rounded border border-slate-800 bg-slate-900 text-slate-200 py-1 px-1.5 text-xs focus:ring-0 focus:outline-hidden"
+                    className={`flex-1 rounded border py-1 px-1.5 text-xs focus:ring-0 focus:outline-hidden ${getInputClass()}`}
                   />
                   <button
                     onClick={handleAddAttachment}
@@ -718,23 +783,25 @@ export default function InspectorPanel({
                   Files linked ({item.attachments.length})
                 </h4>
                 {item.attachments.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed border-slate-800 rounded-md text-slate-550 text-[10px] p-4 leading-relaxed">
+                  <div className="text-center py-6 border border-dashed border-slate-800 rounded-md text-slate-555 text-[10px] p-4 leading-relaxed">
                     No linked PDFs, datasets, or manuscript attachments. Click link to index local materials.
                   </div>
                 ) : (
                   item.attachments.map(a => (
-                    <div key={a.id} className="flex items-center justify-between rounded border border-slate-800 bg-slate-950 p-2.5">
+                    <div key={a.id} className={`flex items-center justify-between rounded border p-2.5 ${
+                      theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
+                    }`}>
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-200 truncate text-[11px] max-w-xs">{a.title}</p>
+                          <p className={`font-semibold truncate text-[11px] max-w-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>{a.title}</p>
                           <p className="text-[9px] text-slate-550 truncate font-mono uppercase mt-0.5">{a.mimeType}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => setPdfReaderUrl(a.title)}
-                          className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
+                          className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
                         >
                           Read
                         </button>
@@ -769,7 +836,7 @@ export default function InspectorPanel({
                   </div>
                   <Dialog.Close asChild>
                     <button
-                      className="p-1 px-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-350 hover:text-slate-100 cursor-pointer outline-hidden text-[10px] font-semibold transition-colors"
+                      className="p-1 px-2 bg-slate-805 hover:bg-slate-700 rounded text-slate-350 hover:text-slate-100 cursor-pointer outline-hidden text-[10px] font-semibold transition-colors"
                     >
                       ✕ Close Reader
                     </button>

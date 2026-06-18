@@ -627,6 +627,7 @@ export default function App() {
             }}
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
+            theme={theme}
           />
         </div>
 
@@ -905,6 +906,7 @@ export default function App() {
               onDeleteItem={handleDeleteItem}
               onDuplicateItem={handleDuplicateItem}
               onClose={() => setSelectedItemId(null)}
+              theme={theme}
             />
           </div>
         )}
