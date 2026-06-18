@@ -270,39 +270,43 @@ export default function App() {
     showToast(`Created new ${newDoc.itemType}!`);
   };
 
-  const handleAddResolvedItem = (resolved: Partial<ZoteroItem>) => {
-    const now = new Date().toISOString();
-    const newDoc: ZoteroItem = {
-      id: `item-${Date.now()}`,
-      itemType: resolved.itemType || 'journalArticle',
-      title: resolved.title || 'Resolved Reference Document',
-      creators: resolved.creators || [{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }],
-      date: resolved.date || new Date().getFullYear().toString(),
-      publicationTitle: resolved.publicationTitle || '',
-      volume: resolved.volume || '',
-      issue: resolved.issue || '',
-      pages: resolved.pages || '',
-      doi: resolved.doi || '',
-      url: resolved.url || '',
-      isbn: resolved.isbn || '',
-      abstractNote: resolved.abstractNote || '',
-      citekey: resolved.citekey || '',
-      tags: resolved.tags || ['resolved'],
-      notes: [],
-      attachments: [],
-      collections: selectedCollectionId !== 'all' && selectedCollectionId !== 'duplicates' && selectedCollectionId !== 'unfiled' && selectedCollectionId !== 'trash' ? [selectedCollectionId] : [],
-      dateAdded: now,
-      dateModified: now
-    };
-
-    if (!newDoc.citekey) {
-      const stdKey = getStandardCitekey(newDoc);
-      newDoc.citekey = stdKey || `doc_${Date.now().toString().slice(-4)}`;
+  const handleAddResolvedItem = async (resolved: Partial<ZoteroItem>) => {
+    // Generate a temporary citekey if missing before posting
+    if (!resolved.citekey) {
+      const tempKey = getStandardCitekey({
+        itemType: resolved.itemType || 'journalArticle',
+        title: resolved.title || 'Resolved Reference Document',
+        creators: resolved.creators || [{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }],
+        date: resolved.date || new Date().getFullYear().toString(),
+        tags: resolved.tags || ['resolved']
+      } as any);
+      resolved.citekey = tempKey || `doc_${Date.now().toString().slice(-4)}`;
     }
 
-    setItems(prev => [newDoc, ...prev]);
-    setSelectedItemId(newDoc.id);
-    showToast('Successfully resolved and added bibliography item!');
+    showToast('Adding resolved item to Zotero API...');
+    try {
+      const response = await fetch('/api/items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ item: resolved })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to post item to Zotero (HTTP ${response.status})`);
+      }
+
+      const createdItem: ZoteroItem = await response.json();
+      setItems(prev => [createdItem, ...prev]);
+      setSelectedItemId(createdItem.id);
+      showToast('Successfully added item to Zotero!');
+    } catch (err: any) {
+      console.error('Failed to save item:', err);
+      showToast(`Error adding item: ${err.message || 'Zotero API error'}`);
+      throw err;
+    }
   };
 
   const handleUpdateItem = (updated: ZoteroItem) => {

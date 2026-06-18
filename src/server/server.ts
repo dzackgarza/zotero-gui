@@ -250,6 +250,133 @@ function getLibrary() {
 }
 
 const app = express();
+app.use(express.json());
+
+app.post('/api/items', async (req, res) => {
+  try {
+    const api_key = process.env.ZOTERO_API_KEY;
+    if (!api_key) {
+      return res.status(500).json({ error: 'ZOTERO_API_KEY environment variable is not set.' });
+    }
+
+    // Determine user ID dynamically from users table if not set in environment
+    let user_id = process.env.ZOTERO_USER_ID;
+    if (!user_id) {
+      try {
+        const users = db.prepare('SELECT userID FROM users LIMIT 1').all() as any[];
+        if (users && users.length > 0) {
+          user_id = String(users[0].userID);
+        }
+      } catch (err) {
+        console.error('Failed to query userID from users table:', err);
+      }
+    }
+
+    if (!user_id) {
+      return res.status(500).json({ error: 'Could not determine ZOTERO_USER_ID from environment or database.' });
+    }
+
+    const { item } = req.body;
+    if (!item) {
+      return res.status(400).json({ error: 'Missing item in request body.' });
+    }
+
+    // Map fields for Zotero API upload
+    const cleanCreators = (item.creators || []).map((c: any) => ({
+      firstName: c.firstName || '',
+      lastName: c.lastName || '',
+      creatorType: c.creatorType || 'author'
+    }));
+
+    const zoteroItem: Record<string, any> = {
+      itemType: item.itemType,
+      title: item.title,
+      creators: cleanCreators,
+      tags: (item.tags || []).map((t: string) => ({ tag: t })),
+    };
+
+    if (item.publicationTitle) zoteroItem.publicationTitle = item.publicationTitle;
+    if (item.volume) zoteroItem.volume = item.volume;
+    if (item.issue) zoteroItem.issue = item.issue;
+    if (item.pages) zoteroItem.pages = item.pages;
+    if (item.date) zoteroItem.date = item.date;
+    if (item.publisher) zoteroItem.publisher = item.publisher;
+    if (item.place) zoteroItem.place = item.place;
+    if (item.doi) zoteroItem.DOI = item.doi;
+    if (item.url) zoteroItem.url = item.url;
+    if (item.isbn) zoteroItem.ISBN = item.isbn;
+    if (item.issn) zoteroItem.ISSN = item.issn;
+    if (item.abstractNote) zoteroItem.abstractNote = item.abstractNote;
+    if (item.citekey) zoteroItem.citationKey = item.citekey;
+
+    const url = `https://api.zotero.org/users/${user_id}/items`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Zotero-API-Key': api_key,
+        'Zotero-API-Version': '3',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([zoteroItem])
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({ error: `Zotero API error: ${errorText}` });
+    }
+
+    const result: any = await response.json();
+    const success = result.successful || {};
+    const failed = result.failed || {};
+
+    if (failed && Object.keys(failed).length > 0) {
+      const errMsg = Object.values(failed).map((e: any) => e.message).join(', ');
+      return res.status(400).json({ error: `Failed to add item: ${errMsg}` });
+    }
+
+    const successKeys = Object.keys(success);
+    if (successKeys.length === 0) {
+      return res.status(400).json({ error: 'Zotero API did not return success.' });
+    }
+
+    const createdItemData = success[successKeys[0]].data;
+
+    // Map back to ZoteroItem schema
+    const returnedItem: ZoteroItem = {
+      id: createdItemData.key,
+      itemType: createdItemData.itemType,
+      title: createdItemData.title || 'Untitled',
+      creators: createdItemData.creators || [],
+      publicationTitle: createdItemData.publicationTitle,
+      volume: createdItemData.volume,
+      issue: createdItemData.issue,
+      pages: createdItemData.pages,
+      date: cleanDate(createdItemData.date),
+      publisher: createdItemData.publisher,
+      place: createdItemData.place,
+      doi: createdItemData.DOI,
+      url: createdItemData.url,
+      isbn: createdItemData.ISBN,
+      issn: createdItemData.ISSN,
+      abstractNote: createdItemData.abstractNote,
+      citekey: createdItemData.citationKey,
+      tags: (createdItemData.tags || []).map((t: any) => t.tag),
+      notes: [],
+      attachments: [],
+      collections: createdItemData.collections || [],
+      dateAdded: createdItemData.dateAdded,
+      dateModified: createdItemData.dateModified
+    };
+
+    // Invalidate local query cache
+    cached = null;
+
+    res.json(returnedItem);
+  } catch (err: any) {
+    console.error('Error posting item to Zotero:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
 
 app.get('/api/library', (_req, res) => {
   res.json(getLibrary());
