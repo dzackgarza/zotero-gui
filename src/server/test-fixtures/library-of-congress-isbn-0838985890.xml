@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<zs:searchRetrieveResponse xmlns:zs="http://www.loc.gov/zing/srw/">
+  <zs:version>1.1</zs:version>
+  <zs:numberOfRecords>1</zs:numberOfRecords>
+  <zs:records>
+    <zs:record>
+      <zs:recordSchema/>
+      <zs:recordPacking>xml</zs:recordPacking>
+      <zs:recordData>
+        <record xmlns="http://www.loc.gov/MARC21/slim">
+          <leader>01598cam a22003614a 4500</leader>
+          <datafield tag="020" ind1=" " ind2=" ">
+            <subfield code="a">9780838985892</subfield>
+            <subfield code="q">pbk. : alk. paper</subfield>
+          </datafield>
+          <datafield tag="020" ind1=" " ind2=" ">
+            <subfield code="a">0838985890</subfield>
+            <subfield code="q">pbk. : alk. paper</subfield>
+          </datafield>
+          <datafield tag="100" ind1="1" ind2=" ">
+            <subfield code="a">Puckett, Jason,</subfield>
+            <subfield code="d">1969-</subfield>
+          </datafield>
+          <datafield tag="245" ind1="1" ind2="0">
+            <subfield code="a">Zotero :</subfield>
+            <subfield code="b">a guide for librarians, researchers, and educators /</subfield>
+            <subfield code="c">by Jason Puckett.</subfield>
+          </datafield>
+          <datafield tag="260" ind1=" " ind2=" ">
+            <subfield code="a">Chicago :</subfield>
+            <subfield code="b">Association of College and Research Libraries,</subfield>
+            <subfield code="c">2011.</subfield>
+          </datafield>
+        </record>
+      </zs:recordData>
+    </zs:record>
+  </zs:records>
+</zs:searchRetrieveResponse>

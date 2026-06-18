@@ -136,6 +136,26 @@ describe('server-owned resolver plugin execution', () => {
     expect(bracedBibTeXField(bibtex, 'pages')).toBe('338–353');
   });
 
+  it('runs the ISBN plugin through Zotero-priority Library of Congress lookup', async () => {
+    const fixturePath = path.join(thisDir, 'test-fixtures', 'library-of-congress-isbn-0838985890.xml');
+    const { bookBibTeX } = await import(pathToFileURL(path.join(thisDir, '..', '..', 'resolver-plugins', 'isbn-lib.mjs')).href) as {
+      bookBibTeX: (xmlText: string, isbn: string) => string;
+    };
+    const bibtex = bookBibTeX(readFileSync(fixturePath, 'utf8'), '0838985890');
+    const item = parseBibTeXToItem(bibtex);
+
+    expect(item).toMatchObject({
+      itemType: 'book',
+      title: 'Zotero: a guide for librarians, researchers, and educators',
+      publisher: 'Association of College and Research Libraries',
+      date: '2011',
+      isbn: '9780838985892 0838985890',
+    });
+    expect(item.creators).toEqual([
+      { firstName: 'Jason', lastName: 'Puckett', creatorType: 'author' },
+    ]);
+  });
+
   it('runs the arXiv plugin through arXiv BibTeX export', async () => {
     const plugin = {
       id: 'arxiv',
