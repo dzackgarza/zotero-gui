@@ -374,11 +374,12 @@ export default function InspectorPanel({
 
           <div className="flex-1 overflow-y-auto p-3.5 space-y-4 scrollbar-thin scrollbar-thumb-slate-800">
             {/* Details Tab */}
+            {/* Details Tab */}
             <Tabs.Content value="info" className="space-y-4 outline-hidden select-text">
               {/* Item Type */}
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
-                <div className={`text-xs py-1 px-1.5 rounded font-medium ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                <div className={`text-xs font-medium ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                   {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
                 </div>
               </div>
@@ -386,7 +387,7 @@ export default function InspectorPanel({
               {/* Title */}
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Title</label>
-                <div className={`text-xs font-semibold leading-relaxed break-words py-1.5 px-2 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-900' : 'bg-slate-950/65 text-slate-100'}`}>
+                <div className={`text-xs font-semibold leading-relaxed break-words ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
                   {item.title || 'Untitled'}
                 </div>
               </div>
@@ -401,7 +402,7 @@ export default function InspectorPanel({
                     </span>
                   )}
                 </div>
-                <div className={`font-mono text-xs py-1 px-1.5 rounded ${citekeyConflict ? 'bg-amber-500/10 text-amber-300' : (theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-sky-400')}`}>
+                <div className={`font-mono text-xs ${citekeyConflict ? 'text-amber-400' : (theme === 'code-light' ? 'text-slate-800' : 'text-sky-400')}`}>
                   {item.citekey || '—'}
                 </div>
               </div>
@@ -409,7 +410,7 @@ export default function InspectorPanel({
               {/* Creator / Authors Section */}
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Creators / Authors</label>
-                <div className={`text-xs py-1.5 px-2 rounded break-words ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                <div className={`text-xs break-words ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                   {creatorsText || '—'}
                 </div>
               </div>
@@ -418,7 +419,7 @@ export default function InspectorPanel({
               <div className={`space-y-3 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publication Journal / Book</label>
-                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                     {item.publicationTitle || '—'}
                   </div>
                 </div>
@@ -426,13 +427,13 @@ export default function InspectorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Date / Year</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.date || '—'}
                     </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Pages</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.pages || '—'}
                     </div>
                   </div>
@@ -441,13 +442,13 @@ export default function InspectorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Volume</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.volume || '—'}
                     </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Issue</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.issue || '—'}
                     </div>
                   </div>
@@ -455,14 +456,14 @@ export default function InspectorPanel({
 
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">DOI</label>
-                  <div className={`font-mono text-[11px] py-1 px-1.5 rounded break-all ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  <div className={`font-mono text-[11px] break-all ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                     {item.doi || '—'}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">URL</label>
-                  <div className={`text-xs py-1 px-1.5 rounded break-all ${theme === 'code-light' ? 'bg-zinc-100 text-sky-600' : 'bg-slate-950/65 text-sky-400'}`}>
+                  <div className={`text-xs break-all ${theme === 'code-light' ? 'text-sky-600' : 'text-sky-400'}`}>
                     {item.url ? (
                       <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.url}</a>
                     ) : '—'}
@@ -472,13 +473,13 @@ export default function InspectorPanel({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publisher</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.publisher || '—'}
                     </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Place</label>
-                    <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                       {item.place || '—'}
                     </div>
                   </div>
@@ -486,21 +487,21 @@ export default function InspectorPanel({
 
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">ISBN / ISSN</label>
-                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                     {item.isbn || item.issn || '—'}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Language</label>
-                  <div className={`text-xs py-1 px-1.5 rounded ${theme === 'code-light' ? 'bg-zinc-100 text-slate-800' : 'bg-slate-950/65 text-slate-200'}`}>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
                     {item.language || '—'}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Abstract / Description Notes</label>
-                  <div className={`text-xs py-1.5 px-2 rounded leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'bg-zinc-100 text-slate-700' : 'bg-slate-950/65 text-slate-300'}`}>
+                  <div className={`text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'text-slate-700' : 'text-slate-300'}`}>
                     {item.abstractNote || '—'}
                   </div>
                 </div>
