@@ -235,20 +235,6 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
   return { items, collections };
 }
 
-// Cache the result — DB is read-only and Zotero won't change it mid-session.
-// Invalidate by restarting the server.
-let cached: ReturnType<typeof queryLibrary> | null = null;
-
-function getLibrary() {
-  if (!cached) {
-    console.log('Loading library from Zotero DB...');
-    const start = Date.now();
-    cached = queryLibrary();
-    console.log(`Loaded ${cached.items.length} items, ${cached.collections.length} collections in ${Date.now() - start}ms`);
-  }
-  return cached;
-}
-
 const app = express();
 app.use(express.json());
 
@@ -271,11 +257,15 @@ app.get('/api/config', (_req, res) => {
 });
 
 app.get('/api/library', (_req, res) => {
-  res.json(getLibrary());
+  try {
+    const data = queryLibrary();
+    res.json(data);
+  } catch (err) {
+    console.error('Failed to query database:', err);
+    res.status(500).json({ error: 'Database query failed' });
+  }
 });
 
 app.listen(PORT, () => {
   console.log(`Zotero API server → http://localhost:${PORT}`);
-  // Warm the cache immediately on startup
-  getLibrary();
 });
