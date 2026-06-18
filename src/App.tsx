@@ -25,8 +25,20 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
-    const saved = localStorage.getItem('zotero_columns');
-    return saved ? JSON.parse(saved) : DEFAULT_COLUMNS;
+    const savedStr = localStorage.getItem('zotero_columns');
+    if (!savedStr) return DEFAULT_COLUMNS;
+    try {
+      const saved = JSON.parse(savedStr) as ColumnDefinition[];
+      const merged = [...saved];
+      DEFAULT_COLUMNS.forEach(defCol => {
+        if (!merged.some(c => c.key === defCol.key)) {
+          merged.push(defCol);
+        }
+      });
+      return merged;
+    } catch (e) {
+      return DEFAULT_COLUMNS;
+    }
   });
 
   const [theme, setTheme] = useState<string>(() => {
