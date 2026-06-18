@@ -500,79 +500,17 @@ export default function InspectorPanel({
                 </div>
 
                 {/* PDF content block */}
-                <div className="flex-1 flex overflow-hidden">
-                  <div className="flex-1 bg-slate-800 overflow-y-auto p-8 flex justify-center scrollbar-thin scrollbar-thumb-slate-900">
-                    <div className="w-full max-w-2xl bg-white text-slate-800 shadow-2xl p-10 font-serif leading-relaxed text-xs space-y-6 relative rounded">
-                      <div className="absolute top-2 right-4 font-mono text-[8px] text-slate-400 tracking-wider">
-                        ZOTERO READER • OFFLINE CACHE
-                      </div>
-
-                      <h1 className="text-lg font-bold font-sans text-center text-slate-900 border-b border-slate-200 pb-3 leading-snug">
-                        {item.title}
-                      </h1>
-
-                      <div className="text-[10px] text-center font-sans font-medium text-slate-650">
-                        {item.creators.map(c => `${c.firstName} ${c.lastName}`).join(', ')} <br />
-                        Published: {item.publicationTitle || 'Academic Archive'} ({item.date || 'N/A'})
-                      </div>
-
-                      <div className="border border-slate-200 rounded-sm bg-slate-50 p-4 font-sans text-[11px] leading-normal ml-4 mr-4 italic text-slate-600">
-                        <span className="font-bold text-slate-800 block not-italic uppercase tracking-wider text-[9px] mb-1">
-                          Abstract Note
-                        </span>
-                        {item.abstractNote || 'No abstract note was registered for this record.'}
-                      </div>
-
-                      <div className="space-y-4 text-slate-700">
-                        <h2 className="text-sm font-bold font-sans text-slate-900">1. INTRODUCTION AND BACKGROUND</h2>
-                        <p>
-                          Modern computer linguistics and cognitive indexing depend heavily on efficient search systems.
-                          This clone application emulates Zotero, the open-source reference management tool.
-                          We extend the metadata storage to demonstrate live selectable column views, instant fuzzy queries,
-                          and keyboard-focused command palettes to reduce researcher fatigue.
-                        </p>
-                        <p>
-                          By wrapping structural database components in a reactive local layout, scientific documents can be quickly indexed, citation keys conflict-checked automatically, and researchers can toggle specific column layers (e.g. DOI, ISSN) to match their personal workflow requirements.
-                        </p>
-                        <p>
-                          Furthermore, real-time citation formatters (e.g. BibTeX entries) are generated in the inspector to ease transcription into LaTeX packages.
-                        </p>
-
-                        <h2 className="text-sm font-bold font-sans text-slate-900">2. METHODOLOGY AND INTERACTIVE CAPABILITIES</h2>
-                        <p>
-                          This system implements partial tokenized matching. By executing fuzzy matching against all available fields, queries are automatically evaluated across author headers, abstract briefs, and note databases. This allows multi-field querying (e.g. finding a 2017 paper by Vaswani on translation) in a single unified entry block.
-                        </p>
-                        <p>
-                          Additionally, the <code>Ctrl+P</code> command utility triggers direct command piping. Prefixing commands with the chevron symbol enables rapid terminal actions without breaking focus.
-                        </p>
-                      </div>
-
-                      <div className="border-t border-slate-200 pt-3 mt-14 font-mono text-[8px] text-slate-400 text-center">
-                        Page 1 of Simulated Article • DOI Indicator: {item.doi || 'N/A'}
-                      </div>
+                <div className="flex-grow flex flex-col items-center justify-center bg-slate-950 p-6 text-center space-y-3">
+                  <FileText className="h-12 w-12 text-slate-600" />
+                  <p className="font-semibold text-sm text-slate-200">PDF Preview Not Supported</p>
+                  <p className="text-xs text-slate-400 max-w-md">
+                    Direct PDF rendering is not supported in the browser client. Please open the file using your local Zotero application.
+                  </p>
+                  {item.attachments.find(a => a.title === pdfReaderUrl)?.path && (
+                    <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded p-3 text-[10px] text-left font-mono break-all text-slate-300">
+                      <strong className="text-slate-500">File Path:</strong> {item.attachments.find(a => a.title === pdfReaderUrl)?.path}
                     </div>
-                  </div>
-
-                  {/* Reader sidebar annotator */}
-                  <div className="w-64 bg-slate-900 border-l border-slate-800 p-3.5 space-y-3.5 text-[11px] shrink-0 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
-                    <h4 className="font-semibold text-slate-400 border-b border-slate-800 pb-1 flex items-center gap-1.5 select-none">
-                      <LayoutGrid className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>Reader Annotations</span>
-                    </h4>
-                    <div className="space-y-2">
-                      <div className="rounded bg-slate-950 p-2 border-l-2 border-emerald-500">
-                        <p className="text-slate-350 italic">"This clone application emulates Zotero..."</p>
-                        <span className="text-[9px] font-mono text-slate-600 block mt-1">Highlighted on Page 1</span>
-                      </div>
-                      <div className="rounded bg-slate-950 p-2 border-l-2 border-yellow-500">
-                        <p className="text-slate-350 italic">"Ctrl+P command utility triggers direct piping..."</p>
-                        <span className="text-[9px] font-mono text-slate-600 block mt-1">Highlighted on Page 1</span>
-                      </div>
-                    </div>
-                    <div className="rounded p-2.5 border border-slate-805 bg-slate-950/40 text-slate-500 italic leading-snug">
-                      Note: This reader generates interactive PDF content. You can write custom notes on the Notes tab to attach persistent study thoughts.
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </Dialog.Content>
