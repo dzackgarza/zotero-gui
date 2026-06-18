@@ -757,7 +757,7 @@ export default function App() {
         <div className="flex items-center space-x-3 text-[#969696]">
           <button 
             onClick={() => {
-              showToast("Database synchronized successfully.");
+              reloadFromDb();
             }}
             className="text-[#969696] hover:text-white"
             title="Sync library now"
