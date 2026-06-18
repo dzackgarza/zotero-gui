@@ -5,6 +5,35 @@ import {
 } from 'lucide-react';
 import { ZoteroItem, ItemType, ITEM_TYPE_LABELS, Creator } from '../types';
 
+const serializeCreators = (creators: Creator[]): string => {
+  return creators
+    .map(c => {
+      if (c.lastName && c.firstName) {
+        return `${c.lastName}, ${c.firstName}`;
+      }
+      return c.lastName || c.firstName || '';
+    })
+    .filter(Boolean)
+    .join('; ');
+};
+
+const deserializeCreators = (str: string): Creator[] => {
+  return str
+    .split(';')
+    .map(part => {
+      const trimmed = part.trim();
+      if (!trimmed) return null;
+      const commaIndex = trimmed.indexOf(',');
+      if (commaIndex !== -1) {
+        const lastName = trimmed.substring(0, commaIndex).trim();
+        const firstName = trimmed.substring(commaIndex + 1).trim();
+        return { firstName, lastName, creatorType: 'author' };
+      }
+      return { firstName: '', lastName: trimmed, creatorType: 'author' };
+    })
+    .filter((c): c is Creator => c !== null);
+};
+
 interface InspectorPanelProps {
   item: ZoteroItem | null;
   allItems: ZoteroItem[];
@@ -25,6 +54,15 @@ export default function InspectorPanel({
   const [activeTab, setActiveTab] = useState<'info' | 'notes' | 'tags' | 'attachments'>('info');
   const [copied, setCopied] = useState(false);
   const [citekeyConflict, setCitekeyConflict] = useState(false);
+
+  const [creatorsText, setCreatorsText] = useState('');
+  const [isEditingCreators, setIsEditingCreators] = useState(false);
+
+  useEffect(() => {
+    if (item && !isEditingCreators) {
+      setCreatorsText(serializeCreators(item.creators));
+    }
+  }, [item, isEditingCreators]);
 
   // Notes state
   const [newNoteText, setNewNoteText] = useState('');
@@ -71,28 +109,7 @@ export default function InspectorPanel({
     });
   };
 
-  // Creators/Authors management
-  const handleCreatorChange = (index: number, field: keyof Creator, value: string) => {
-    const updatedCreators = [...item.creators];
-    updatedCreators[index] = {
-      ...updatedCreators[index],
-      [field]: value
-    };
-    handleFieldChange('creators', updatedCreators);
-  };
 
-  const addCreator = () => {
-    const updatedCreators = [
-      ...item.creators,
-      { firstName: '', lastName: '', creatorType: 'author' as const }
-    ];
-    handleFieldChange('creators', updatedCreators);
-  };
-
-  const removeCreator = (index: number) => {
-    const updatedCreators = item.creators.filter((_, i) => i !== index);
-    handleFieldChange('creators', updatedCreators);
-  };
 
   // Notes management
   const handleAddNote = () => {
@@ -325,54 +342,23 @@ export default function InspectorPanel({
 
             {/* Creator / Authors Section */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-mono text-slate-500">Creators / Authors</label>
-                <button
-                  type="button"
-                  onClick={addCreator}
-                  className="p-1 px-2 rounded-sm bg-slate-800/80 hover:bg-slate-855 text-sky-400 hover:text-sky-305 flex items-center gap-1 text-[9px] font-mono leading-none"
-                >
-                  <UserPlus className="h-3 w-3" />
-                  <span>Add Author</span>
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {item.creators.map((creator, index) => (
-                  <div key={index} className="flex items-center gap-1.5 rounded bg-slate-950/40 p-1.5 border border-slate-850/50">
-                    <input
-                      type="text"
-                      value={creator.lastName}
-                      onChange={e => handleCreatorChange(index, 'lastName', e.target.value)}
-                      placeholder="Last Name"
-                      className="flex-1 rounded border border-slate-850 bg-slate-950 text-slate-100 py-1 px-1.5 min-w-0"
-                    />
-                    <input
-                      type="text"
-                      value={creator.firstName}
-                      onChange={e => handleCreatorChange(index, 'firstName', e.target.value)}
-                      placeholder="First Name"
-                      className="flex-1 rounded border border-slate-850 bg-slate-950 text-slate-100 py-1 px-1.5 min-w-0"
-                    />
-                    <select
-                      value={creator.creatorType}
-                      onChange={e => handleCreatorChange(index, 'creatorType', e.target.value as any)}
-                      className="rounded border border-slate-850 bg-slate-950 text-slate-400 py-1 text-[10px] min-w-0 font-sans"
-                    >
-                      <option value="author">Author</option>
-                      <option value="editor">Editor</option>
-                      <option value="translator">Translator</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeCreator(index)}
-                      className="p-1 text-slate-500 hover:text-red-400"
-                    >
-                      <Trash className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <label className="block text-[10px] font-mono text-slate-500 mb-1">Creators / Authors</label>
+              <input
+                type="text"
+                value={creatorsText}
+                onFocus={() => setIsEditingCreators(true)}
+                onChange={e => setCreatorsText(e.target.value)}
+                onBlur={() => {
+                  setIsEditingCreators(false);
+                  const parsed = deserializeCreators(creatorsText);
+                  handleFieldChange('creators', parsed);
+                }}
+                placeholder="LastName, FirstName; LastName, FirstName; ..."
+                className="w-full rounded border border-slate-800 bg-slate-950 text-slate-100 py-1.5 px-2 focus:border-blue-600 focus:outline-hidden font-sans text-xs"
+              />
+              <span className="text-[9px] font-mono text-slate-600 mt-1 block">
+                Format: Last, First; Last, First
+              </span>
             </div>
 
             {/* Standard Zotero bibliographic metadata boxes */}

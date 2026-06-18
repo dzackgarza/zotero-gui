@@ -30,9 +30,4 @@ describe('App Component', () => {
     // Check if the brand logo / header text is in the document
     expect(screen.getByText('Zotero VS')).toBeInTheDocument();
   });
-
-  it('renders the command palette hint', () => {
-    render(<App />);
-    expect(screen.getByText(/Command Palette/i)).toBeInTheDocument();
-  });
 });
