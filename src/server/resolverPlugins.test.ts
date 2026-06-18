@@ -121,6 +121,36 @@ describe('server-owned resolver plugin execution', () => {
     expect(item.isbn).toBe('9780262033848');
   });
 
+  it('runs the DOI plugin through DOI content-negotiated BibTeX', async () => {
+    const plugin = {
+      id: 'doi',
+      name: 'DOI Resolver',
+      command: [process.execPath, path.join(thisDir, '..', '..', 'resolver-plugins', 'doi.mjs')],
+    } satisfies ResolverPluginConfig;
+    const bibtex = await runResolverPlugin(plugin, 'https://doi.org/10.1016/S0019-9958(65)90241-X');
+
+    expect(bracedBibTeXField(bibtex, 'DOI').toLowerCase()).toBe('10.1016/s0019-9958(65)90241-x');
+    expect(bracedBibTeXField(bibtex, 'title')).toBe('Fuzzy sets');
+    expect(bracedBibTeXField(bibtex, 'journal')).toBe('Information and Control');
+    expect(bracedBibTeXField(bibtex, 'year')).toBe('1965');
+    expect(bracedBibTeXField(bibtex, 'pages')).toBe('338–353');
+  });
+
+  it('runs the arXiv plugin through arXiv BibTeX export', async () => {
+    const plugin = {
+      id: 'arxiv',
+      name: 'arXiv Resolver',
+      command: [process.execPath, path.join(thisDir, '..', '..', 'resolver-plugins', 'arxiv.mjs')],
+    } satisfies ResolverPluginConfig;
+    const bibtex = await runResolverPlugin(plugin, 'https://arxiv.org/abs/1706.03762');
+
+    expect(bracedBibTeXField(bibtex, 'title')).toBe('Attention Is All You Need');
+    expect(bracedBibTeXField(bibtex, 'eprint')).toBe('1706.03762');
+    expect(bracedBibTeXField(bibtex, 'archivePrefix')).toBe('arXiv');
+    expect(bracedBibTeXField(bibtex, 'primaryClass')).toBe('cs.CL');
+    expect(bracedBibTeXField(bibtex, 'url')).toBe('https://arxiv.org/abs/1706.03762');
+  });
+
   it('runs the ZBMath plugin from both accepted user inputs to canonical BibTeX', async () => {
     const plugin = {
       id: 'zbmath',
