@@ -1,6 +1,7 @@
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { ZoteroItem, Collection, Creator, ItemNote, Attachment } from '../types.js';
 import {
   addBibTeXToZotero,
@@ -243,7 +244,7 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
   return { items, collections };
 }
 
-const app = express();
+export const app = express();
 app.use(express.json());
 
 function invariant(condition: unknown, message: string): asserts condition {
@@ -321,6 +322,12 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: error.message });
 });
 
-app.listen(PORT, () => {
+export function startServer() {
+  return app.listen(PORT, () => {
   console.log(`Zotero API server → http://localhost:${PORT}`);
-});
+  });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startServer();
+}
