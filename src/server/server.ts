@@ -58,6 +58,7 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
       CASE WHEN di.itemID IS NOT NULL THEN 1 ELSE 0 END                             AS inTrash
     FROM items i
     JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+    JOIN libraries l ON i.libraryID = l.libraryID
     LEFT JOIN itemData id2 ON i.itemID = id2.itemID
     LEFT JOIN fields f ON id2.fieldID = f.fieldID
     LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
@@ -72,6 +73,7 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
       -- Exclude child annotations (have a parent item)
       SELECT itemID FROM itemAnnotations WHERE parentItemID IS NOT NULL
     )
+    AND l.type != 'feed'
     GROUP BY i.itemID
     ORDER BY i.dateAdded DESC
   `).all() as any[];
@@ -130,8 +132,9 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
   const rawCollections = db.prepare(`
     SELECT c.collectionID, c.collectionName, c.parentCollectionID
     FROM collections c
+    JOIN libraries l ON c.libraryID = l.libraryID
     LEFT JOIN deletedCollections dc ON c.collectionID = dc.collectionID
-    WHERE dc.collectionID IS NULL
+    WHERE dc.collectionID IS NULL AND l.type != 'feed'
     ORDER BY c.collectionID
   `).all() as any[];
 
