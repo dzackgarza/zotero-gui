@@ -1,0 +1,28 @@
+{
+  "plugins": [
+    {
+      "id": "doi",
+      "name": "DOI Resolver",
+      "command": [
+        "node",
+        "resolver-plugins/doi.mjs"
+      ]
+    },
+    {
+      "id": "isbn",
+      "name": "ISBN Resolver",
+      "command": [
+        "node",
+        "resolver-plugins/isbn.mjs"
+      ]
+    },
+    {
+      "id": "arxiv",
+      "name": "arXiv Resolver",
+      "command": [
+        "node",
+        "resolver-plugins/arxiv.mjs"
+      ]
+    }
+  ]
+}

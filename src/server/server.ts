@@ -1,11 +1,19 @@
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
 import type { ZoteroItem, Collection, Creator, ItemNote, Attachment } from '../types.js';
+import {
+  addBibTeXToZotero,
+  loadResolverPlugins,
+  resolveSourceToZotero,
+} from './resolverPlugins.js';
 
 const DB_URI = 'file:///home/dzack/Zotero/zotero.sqlite?immutable=1';
 const PORT = 3001;
+const RESOLVER_CONFIG_PATH = path.resolve(process.cwd(), 'resolver-plugins.json');
 
 const db = new DatabaseSync(DB_URI);
+const resolverPlugins = loadResolverPlugins(RESOLVER_CONFIG_PATH);
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -238,22 +246,40 @@ function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
 const app = express();
 app.use(express.json());
 
-app.get('/api/config', (_req, res) => {
-  let user_id = process.env.ZOTERO_USER_ID;
-  if (!user_id) {
-    try {
-      const users = db.prepare('SELECT userID FROM users LIMIT 1').all() as any[];
-      if (users && users.length > 0) {
-        user_id = String(users[0].userID);
-      }
-    } catch (err) {
-      console.error('Failed to query userID from users table:', err);
-    }
+function invariant(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
   }
-  res.json({
-    apiKey: process.env.ZOTERO_API_KEY || '',
-    userId: user_id || ''
-  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getRequiredString(body: Record<string, unknown>, key: string): string {
+  const value = body[key];
+  invariant(typeof value === 'string' && value.trim().length > 0, `${key} must be a non-empty string`);
+  return value;
+}
+
+function getCollections(body: Record<string, unknown>): string[] {
+  const value = body.collections;
+  invariant(Array.isArray(value), 'collections must be an array');
+  invariant(value.every(collection => typeof collection === 'string'), 'collections must contain only strings');
+  return value;
+}
+
+function getResolverPlugin(pluginId: string) {
+  const plugin = resolverPlugins.find(candidate => candidate.id === pluginId);
+  invariant(plugin, `resolver plugin ${pluginId} is not configured`);
+  return plugin;
+}
+
+app.get('/api/resolver-plugins', (_req, res) => {
+  res.json(resolverPlugins.map(plugin => ({
+    id: plugin.id,
+    name: plugin.name,
+  })));
 });
 
 app.get('/api/library', (_req, res) => {
@@ -264,6 +290,35 @@ app.get('/api/library', (_req, res) => {
     console.error('Failed to query database:', err);
     res.status(500).json({ error: 'Database query failed' });
   }
+});
+
+app.post('/api/items/from-source', (req, res, next) => {
+  const body = req.body as unknown;
+  invariant(isRecord(body), 'request body must be an object');
+
+  const plugin = getResolverPlugin(getRequiredString(body, 'resolverId'));
+  const input = getRequiredString(body, 'input');
+  const collections = getCollections(body);
+
+  resolveSourceToZotero(plugin, input, collections)
+    .then(result => res.json(result))
+    .catch(next);
+});
+
+app.post('/api/items/from-bibtex', (req, res, next) => {
+  const body = req.body as unknown;
+  invariant(isRecord(body), 'request body must be an object');
+
+  const bibtex = getRequiredString(body, 'bibtex');
+  const collections = getCollections(body);
+
+  addBibTeXToZotero(bibtex, collections)
+    .then(result => res.json(result))
+    .catch(next);
+});
+
+app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(500).json({ error: error.message });
 });
 
 app.listen(PORT, () => {

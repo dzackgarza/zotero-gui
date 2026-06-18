@@ -1,14 +1,36 @@
 import path from 'node:path';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseBibTeXToItem } from '../utils/bibtexParser';
-import { buildZoteroItemPayload, runResolverPlugin } from './resolverPlugins';
+import { buildZoteroItemPayload, loadResolverPlugins, parseZoteroCreateResult, runResolverPlugin } from './resolverPlugins';
 
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
 const fixturePlugin = path.join(thisDir, 'test-fixtures', 'echo-resolver.mjs');
 
 describe('server-owned resolver plugin execution', () => {
+  it('loads resolver commands from an explicit config file', () => {
+    const configDir = mkdtempSync(path.join(tmpdir(), 'zotero-gui-resolvers-'));
+    const configPath = path.join(configDir, 'resolver-plugins.json');
+    writeFileSync(configPath, JSON.stringify({
+      plugins: [{
+        id: 'fixture',
+        name: 'Fixture Resolver',
+        command: [process.execPath, fixturePlugin],
+      }],
+    }));
+
+    const plugins = loadResolverPlugins(configPath);
+
+    expect(plugins).toEqual([{
+      id: 'fixture',
+      name: 'Fixture Resolver',
+      command: [process.execPath, fixturePlugin],
+    }]);
+  });
+
   it('feeds a source string to an external script and receives BibTeX', async () => {
     const bibtex = await runResolverPlugin({
       id: 'fixture',
@@ -62,6 +84,21 @@ describe('BibTeX ingestion payload mapping', () => {
       DOI: '10.1017/S001309150000811X',
       url: 'https://doi.org/10.1017/S001309150000811X',
       citationKey: 'atiyah1969',
+    });
+  });
+
+  it('accepts Zotero create responses with a successful result map', () => {
+    expect(parseZoteroCreateResult({
+      successful: {
+        0: {
+          key: 'ABCD1234',
+          data: { title: 'Created item' },
+        },
+      },
+      failed: {},
+    })).toEqual({
+      key: 'ABCD1234',
+      data: { title: 'Created item' },
     });
   });
 });

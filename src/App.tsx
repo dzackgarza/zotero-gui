@@ -25,14 +25,6 @@ export default function App() {
   const [items, setItems] = useState<ZoteroItem[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [zoteroConfig, setZoteroConfig] = useState<{ apiKey: string; userId: string } | null>(null);
-
-  useEffect(() => {
-    fetch('/api/config')
-      .then(r => r.json())
-      .then(cfg => setZoteroConfig(cfg))
-      .catch(err => console.error('Failed to load Zotero config:', err));
-  }, []);
 
   const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
     const savedStr = localStorage.getItem('zotero_columns');
@@ -278,123 +270,9 @@ export default function App() {
     showToast(`Created new ${newDoc.itemType}!`);
   };
 
-  const handleAddResolvedItem = async (resolved: Partial<ZoteroItem>) => {
-    // Generate a temporary citekey if missing before posting
-    if (!resolved.citekey) {
-      const tempKey = getStandardCitekey({
-        itemType: resolved.itemType || 'journalArticle',
-        title: resolved.title || 'Resolved Reference Document',
-        creators: resolved.creators || [{ firstName: '', lastName: 'Unknown Author', creatorType: 'author' }],
-        date: resolved.date || new Date().getFullYear().toString(),
-        tags: resolved.tags || ['resolved']
-      } as any);
-      resolved.citekey = tempKey || `doc_${Date.now().toString().slice(-4)}`;
-    }
-
-    // Map fields for Zotero upload schema
-    const cleanCreators = (resolved.creators || []).map((c: any) => ({
-      firstName: c.firstName || '',
-      lastName: c.lastName || '',
-      creatorType: c.creatorType || 'author'
-    }));
-
-    const zoteroItem: Record<string, any> = {
-      itemType: resolved.itemType || 'journalArticle',
-      title: resolved.title || 'Untitled',
-      creators: cleanCreators,
-      tags: (resolved.tags || ['resolved']).map((t: string) => ({ tag: t })),
-    };
-
-    if (resolved.publicationTitle) zoteroItem.publicationTitle = resolved.publicationTitle;
-    if (resolved.volume) zoteroItem.volume = resolved.volume;
-    if (resolved.issue) zoteroItem.issue = resolved.issue;
-    if (resolved.pages) zoteroItem.pages = resolved.pages;
-    if (resolved.date) zoteroItem.date = resolved.date;
-    if (resolved.publisher) zoteroItem.publisher = resolved.publisher;
-    if (resolved.place) zoteroItem.place = resolved.place;
-    if (resolved.doi) zoteroItem.DOI = resolved.doi;
-    if (resolved.url) zoteroItem.url = resolved.url;
-    if (resolved.isbn) zoteroItem.ISBN = resolved.isbn;
-    if (resolved.issn) zoteroItem.ISSN = resolved.issn;
-    if (resolved.abstractNote) zoteroItem.abstractNote = resolved.abstractNote;
-    if (resolved.citekey) zoteroItem.citationKey = resolved.citekey;
-
-    let response: Response | null = null;
-    showToast('Adding item directly to Zotero (Local API)...');
-
-    // Post directly to Local Zotero API
-    response = await fetch('http://127.0.0.1:23119/api/users/0/items', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(zoteroConfig?.apiKey ? { 'Zotero-API-Key': zoteroConfig.apiKey } : {})
-      },
-      body: JSON.stringify([zoteroItem])
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Local Zotero API error (HTTP ${response.status}): ${errorText}`);
-    }
-
-    const result: any = await response.json();
-    const success = result.successful || {};
-    const failed = result.failed || {};
-
-    if (failed && Object.keys(failed).length > 0) {
-      const errMsg = Object.values(failed).map((e: any) => e.message).join(', ');
-      throw new Error(`Failed to add item: ${errMsg}`);
-    }
-
-    const successKeys = Object.keys(success);
-    if (successKeys.length === 0) {
-      throw new Error('Zotero API did not return success.');
-    }
-
-    const createdItemData = success[successKeys[0]].data;
-
-    // Helper to extract clean year/date
-    const cleanDate = (raw: string | null | undefined): string | undefined => {
-      if (!raw) return undefined;
-      const zeroMatch = raw.match(/^\d{4}-00-00\s+(\d{4})$/);
-      if (zeroMatch) return zeroMatch[1];
-      const partialZero = raw.match(/^(\d{4})-00-00/);
-      if (partialZero) return partialZero[1];
-      return raw;
-    };
-
-    const createdItem: ZoteroItem = {
-      id: createdItemData.key,
-      itemType: createdItemData.itemType,
-      title: createdItemData.title || 'Untitled',
-      creators: createdItemData.creators || [],
-      publicationTitle: createdItemData.publicationTitle,
-      volume: createdItemData.volume,
-      issue: createdItemData.issue,
-      pages: createdItemData.pages,
-      date: cleanDate(createdItemData.date),
-      publisher: createdItemData.publisher,
-      place: createdItemData.place,
-      doi: createdItemData.DOI,
-      url: createdItemData.url,
-      isbn: createdItemData.ISBN,
-      issn: createdItemData.ISSN,
-      abstractNote: createdItemData.abstractNote,
-      citekey: createdItemData.citationKey,
-      tags: (createdItemData.tags || []).map((t: any) => t.tag),
-      notes: [],
-      attachments: [],
-      collections: createdItemData.collections || [],
-      dateAdded: createdItemData.dateAdded,
-      dateModified: createdItemData.dateModified
-    };
-
-    // Trigger local library reload from SQLite to keep it synced
-    setTimeout(() => loadFromApi(), 500);
-
-    setItems(prev => [createdItem, ...prev]);
-    setSelectedItemId(createdItem.id);
-    showToast('Successfully added item directly to Zotero (Local API)!');
+  const handleAddResolvedItem = () => {
+    loadFromApi();
+    showToast('Successfully added item to Zotero.');
   };
 
   const handleUpdateItem = (updated: ZoteroItem) => {
@@ -1160,6 +1038,7 @@ export default function App() {
         isOpen={isAddByIdentifierOpen}
         onClose={() => setIsAddByIdentifierOpen(false)}
         onAddResolvedItem={handleAddResolvedItem}
+        collections={selectedCollectionId !== 'all' && selectedCollectionId !== 'duplicates' && selectedCollectionId !== 'unfiled' && selectedCollectionId !== 'trash' ? [selectedCollectionId] : []}
         theme={theme}
       />
 

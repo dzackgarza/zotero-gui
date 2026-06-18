@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Sparkles, Terminal, ChevronDown, Check } from 'lucide-react';
-import { registry, MetadataResolverPlugin } from '../utils/resolvers';
-import { parseBibTeXToItem } from '../utils/bibtexParser';
-import { ZoteroItem } from '../types';
+import { Sparkles, Terminal, ChevronDown } from 'lucide-react';
+
+interface ResolverPluginMetadata {
+  id: string;
+  name: string;
+}
 
 interface AddByIdentifierModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddResolvedItem: (item: Partial<ZoteroItem>) => void;
+  onAddResolvedItem: () => void;
+  collections: string[];
   theme: string;
 }
 
@@ -16,56 +19,79 @@ export default function AddByIdentifierModal({
   isOpen,
   onClose,
   onAddResolvedItem,
+  collections,
   theme
 }: AddByIdentifierModalProps) {
   const [input, setInput] = useState('');
-  const [selectedPluginId, setSelectedPluginId] = useState<string>('auto');
+  const [selectedPluginId, setSelectedPluginId] = useState<string>('');
+  const [plugins, setPlugins] = useState<ResolverPluginMetadata[]>([]);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const plugins = registry.getAllPlugins();
 
-  // Compute matching plugin synchronously during render
-  const detectedPlugin = selectedPluginId === 'auto'
-    ? (registry.getMatchingPlugins(input)[0] || null)
-    : (registry.getPluginById(selectedPluginId) || null);
+  function invariant(condition: unknown, message: string): asserts condition {
+    if (!condition) {
+      throw new Error(message);
+    }
+  }
 
-  const handleResolve = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    fetch('/api/resolver-plugins')
+      .then(response => {
+        invariant(response.ok, `Resolver plugin list failed with HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((metadata: ResolverPluginMetadata[]) => {
+        setPlugins(metadata);
+      });
+  }, [isOpen]);
+
+  const handleResolve = (e: React.FormEvent) => {
     e.preventDefault();
     const query = input.trim();
-    if (!query) return;
 
     setResolving(true);
     setError(null);
 
-    try {
-      let bibtex = '';
-      if (selectedPluginId === 'auto') {
-        if (!detectedPlugin) {
-          throw new Error('No matching resolver found for this input. Please select a specific plugin.');
+    fetch('/api/items/from-source', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        resolverId: selectedPluginId,
+        input: query,
+        collections,
+      }),
+    })
+      .then(async response => {
+        if (!response.ok) {
+          throw new Error(`Resolver ingestion failed with HTTP ${response.status}: ${await response.text()}`);
         }
-        bibtex = await detectedPlugin.resolve(query);
-      } else {
-        bibtex = await registry.resolveWithPlugin(selectedPluginId, query);
-      }
-
-      // Parse the BibTeX entry and validate schema
-      const resolvedItem = parseBibTeXToItem(bibtex);
-      onAddResolvedItem(resolvedItem);
-      setInput('');
-      setSelectedPluginId('auto');
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to resolve and parse identifier.');
-    } finally {
-      setResolving(false);
-    }
+        return response.json();
+      })
+      .then(() => {
+        onAddResolvedItem();
+        setInput('');
+        setSelectedPluginId('');
+        onClose();
+      })
+      .catch((caught: Error) => {
+        setError(caught.message);
+      })
+      .finally(() => {
+        setResolving(false);
+      });
   };
 
   const isLight = theme === 'code-light';
   const isMonokai = theme === 'monokai';
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setInput(''); setError(null); setSelectedPluginId('auto'); onClose(); } }}>
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) { setInput(''); setError(null); setSelectedPluginId(''); onClose(); } }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs animate-fade-in" />
         <Dialog.Content className="fixed inset-0 z-50 flex items-center justify-center p-4 focus:outline-hidden">
@@ -78,17 +104,17 @@ export default function AddByIdentifierModal({
             </Dialog.Title>
             
             <Dialog.Description className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Enter an identifier (DOI, ISBN, arXiv ID, zbMATH key, or MathSciNet link). The input will be resolved into a BibTeX entry and parsed semantically.
+              Select a resolver plugin and enter the source identifier. The server runs the plugin and adds validated BibTeX to Zotero.
             </Dialog.Description>
 
             <form onSubmit={handleResolve} className="space-y-3">
-              {/* Plugin Selector */}
               <div className="space-y-1">
                 <label className={`text-[10px] uppercase tracking-wider font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Resolver Plugin
                 </label>
                 <div className="relative">
                   <select
+                    required
                     value={selectedPluginId}
                     onChange={e => setSelectedPluginId(e.target.value)}
                     className={`w-full appearance-none rounded border px-3 py-1.5 text-xs focus:outline-hidden cursor-pointer ${
@@ -99,7 +125,7 @@ export default function AddByIdentifierModal({
                         : 'border-slate-800 bg-slate-950 text-slate-100 focus:border-sky-500'
                     }`}
                   >
-                    <option value="auto">Auto-detect Plugin</option>
+                    <option value="" disabled>Select Plugin</option>
                     {plugins.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -108,10 +134,9 @@ export default function AddByIdentifierModal({
                 </div>
               </div>
 
-              {/* Identifier Input */}
               <div className="space-y-1">
                 <label className={`text-[10px] uppercase tracking-wider font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Identifier / URL
+                  Source Identifier
                 </label>
                 <input
                   type="text"
@@ -119,14 +144,7 @@ export default function AddByIdentifierModal({
                   value={input}
                   disabled={resolving}
                   onChange={e => setInput(e.target.value)}
-                  placeholder={
-                    selectedPluginId === 'doi' ? 'e.g., 10.1145/3318464.3389700' :
-                    selectedPluginId === 'isbn' ? 'e.g., 9780262033848' :
-                    selectedPluginId === 'arxiv' ? 'e.g., arXiv:1706.03762' :
-                    selectedPluginId === 'zbmath' ? 'e.g., 1234.56789' :
-                    selectedPluginId === 'mathscinet' ? 'e.g., 2050123' :
-                    'e.g., DOI, ISBN, arXiv ID, zbMATH, or MathSciNet Link'
-                  }
+                  placeholder="Identifier or URL accepted by the selected plugin"
                   className={`w-full rounded border px-3 py-2 text-xs focus:outline-hidden ${
                     isLight 
                       ? 'border-zinc-200 bg-white text-slate-850 focus:border-blue-600' 
@@ -136,20 +154,6 @@ export default function AddByIdentifierModal({
                   }`}
                 />
               </div>
-
-              {/* Match Indicator */}
-              {selectedPluginId === 'auto' && input.trim() && (
-                <div className={`text-[10px] flex items-center gap-1 ${detectedPlugin ? 'text-emerald-550 dark:text-emerald-400' : 'text-amber-550 dark:text-amber-400'}`}>
-                  {detectedPlugin ? (
-                    <>
-                      <Check className="h-3 w-3 shrink-0" />
-                      <span>Auto-detected: <strong>{detectedPlugin.name}</strong></span>
-                    </>
-                  ) : (
-                    <span>No auto-detected plugin. Select one above manually or check input formatting.</span>
-                  )}
-                </div>
-              )}
 
               {error && (
                 <div className="rounded bg-red-500/10 border border-red-500/20 p-2.5 text-[10px] text-red-400 flex items-start gap-1.5 leading-normal font-mono">
@@ -172,8 +176,8 @@ export default function AddByIdentifierModal({
                 </Dialog.Close>
                 <button
                   type="submit"
-                  disabled={resolving || !input.trim() || (selectedPluginId === 'auto' && !detectedPlugin)}
-                  className={`px-4 py-1.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:hover:bg-blue-600 disabled:cursor-not-allowed`}
+                  disabled={resolving || !input.trim() || !selectedPluginId}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:hover:bg-blue-600 disabled:cursor-not-allowed"
                 >
                   {resolving ? 'Resolving...' : 'Add Item'}
                 </button>
