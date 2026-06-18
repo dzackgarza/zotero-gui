@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   FileText, Plus, Info, Share2, Copy, Trash2, LayoutGrid, Check, ChevronDown
 } from 'lucide-react';
-import * as Tabs from '@radix-ui/react-tabs';
 import * as Select from '@radix-ui/react-select';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
@@ -56,7 +55,6 @@ export default function InspectorPanel({
   onClose,
   theme
 }: InspectorPanelProps) {
-  const [activeTab, setActiveTab] = useState<'info' | 'notes' | 'tags' | 'attachments'>('info');
   const [copied, setCopied] = useState(false);
   const [citekeyConflict, setCitekeyConflict] = useState(false);
 
@@ -347,273 +345,245 @@ export default function InspectorPanel({
           </h3>
         </div>
 
-        {/* Tabs Panels Container */}
-        <Tabs.Root value={activeTab} onValueChange={val => setActiveTab(val as any)} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <Tabs.List className={`flex border-b shrink-0 font-medium text-[10px] uppercase tracking-wide select-none ${
-            theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-900 border-[#2b2b2b]'
-          }`}>
-            {(['info', 'notes', 'tags', 'attachments'] as const).map(tab => (
-              <Tabs.Trigger
-                key={tab}
-                value={tab}
-                className={`flex-1 py-1.5 text-center border-b-2 hover:text-slate-100 transition cursor-pointer outline-hidden ${
-                  theme === 'code-light' 
-                    ? 'data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:bg-slate-50 data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-500 hover:text-slate-800' 
-                    : theme === 'monokai' 
-                    ? 'data-[state=active]:border-[#a6e22e] data-[state=active]:text-[#a6e22e] data-[state=active]:bg-[#272822] data-[state=inactive]:border-transparent data-[state=inactive]:text-[#75715e] hover:text-[#f8f8f2]' 
-                    : 'data-[state=active]:border-blue-500 data-[state=active]:text-slate-100 data-[state=active]:bg-slate-950/40 data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400'
-                }`}
-              >
-                {tab === 'info' && 'Details'}
-                {tab === 'notes' && `Notes (${item.notes.length})`}
-                {tab === 'tags' && `Tags (${item.tags.length})`}
-                {tab === 'attachments' && `Files (${item.attachments.length})`}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
-
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-4 scrollbar-thin scrollbar-thumb-slate-800">
-            {/* Details Tab */}
-            {/* Details Tab */}
-            <Tabs.Content value="info" className="space-y-4 outline-hidden select-text">
-              {/* Item Type */}
-              <div>
-                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
-                <div className={`text-xs font-medium ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
-                </div>
+        {/* Single Scrollable Container for All Metadata Sections */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-800 select-text">
+          {/* Details Section */}
+          <div className="space-y-4">
+            <h4 className="text-[10px] font-mono text-slate-550 border-b border-slate-850 pb-1.5 uppercase tracking-wider font-semibold">
+              Details
+            </h4>
+            
+            {/* Item Type */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
+              <div className={`text-xs font-medium ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
               </div>
+            </div>
 
-              {/* Title */}
-              <div>
-                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Title</label>
-                <div className={`text-xs font-semibold leading-relaxed break-words ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
-                  {item.title || 'Untitled'}
-                </div>
+            {/* Title */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Title</label>
+              <div className={`text-xs font-semibold leading-relaxed break-words ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
+                {item.title || 'Untitled'}
               </div>
+            </div>
 
-              {/* Citekey section with conflict alert */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-mono text-slate-550 mb-0.5">Citation Key</label>
-                  {citekeyConflict && (
-                    <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1 border border-amber-500/20 rounded">
-                      Conflict Detected!
-                    </span>
-                  )}
-                </div>
-                <div className={`font-mono text-xs ${citekeyConflict ? 'text-amber-400' : (theme === 'code-light' ? 'text-slate-800' : 'text-sky-400')}`}>
-                  {item.citekey || '—'}
-                </div>
-              </div>
-
-              {/* Creator / Authors Section */}
-              <div>
-                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Creators / Authors</label>
-                <div className={`text-xs break-words ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {creatorsText || '—'}
-                </div>
-              </div>
-
-              {/* Standard Zotero bibliographic metadata boxes */}
-              <div className={`space-y-3 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publication Journal / Book</label>
-                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.publicationTitle || '—'}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Date / Year</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.date || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Pages</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.pages || '—'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Volume</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.volume || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Issue</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.issue || '—'}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">DOI</label>
-                  <div className={`font-mono text-[11px] break-all ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.doi || '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">URL</label>
-                  <div className={`text-xs break-all ${theme === 'code-light' ? 'text-sky-600' : 'text-sky-400'}`}>
-                    {item.url ? (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.url}</a>
-                    ) : '—'}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publisher</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.publisher || '—'}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Place</label>
-                    <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                      {item.place || '—'}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">ISBN / ISSN</label>
-                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.isbn || item.issn || '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Language</label>
-                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.language || '—'}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Abstract / Description Notes</label>
-                  <div className={`text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'text-slate-700' : 'text-slate-300'}`}>
-                    {item.abstractNote || '—'}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-slate-650 pt-2 border-t border-slate-800">
-                  <div>Added: {new Date(item.dateAdded).toLocaleDateString()}</div>
-                  <div>Modified: {new Date(item.dateModified).toLocaleDateString()}</div>
-                </div>
-              </div>
-            </Tabs.Content>
-
-            {/* Notes Tab */}
-            <Tabs.Content value="notes" className="space-y-4 outline-hidden select-text">
-              {/* Note lists */}
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-mono text-slate-550 border-b border-slate-850 pb-1 uppercase tracking-wider">
-                  Attached Notes ({item.notes.length})
-                </h4>
-                {item.notes.length === 0 ? (
-                  <div className="text-center py-4 text-slate-550 text-[11px]">
-                    No scholarly notes attached to this bibliography record.
-                  </div>
-                ) : (
-                  item.notes.map(note => {
-                    return (
-                      <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
-                        theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
-                      }`}>
-                        <div>
-                          <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
-                            theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
-                          }`}>
-                            {note.note}
-                          </p>
-                          <div className="flex items-center justify-between border-t border-slate-900/60 mt-2.5 pt-2 text-[9px] text-slate-550">
-                            <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
+            {/* Citekey section with conflict alert */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono text-slate-550 mb-0.5">Citation Key</label>
+                {citekeyConflict && (
+                  <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1 border border-amber-500/20 rounded">
+                    Conflict Detected!
+                  </span>
                 )}
               </div>
-            </Tabs.Content>
-            {/* Tags Tab */}
-            <Tabs.Content value="tags" className="space-y-4 outline-hidden select-text">
-              {/* List */}
-              <div className="space-y-2.5">
-                <h4 className="text-[10px] font-mono text-slate-550 uppercase tracking-widest border-b border-slate-850 pb-1">
-                  Document Tags ({item.tags.length})
-                </h4>
-                {item.tags.length === 0 ? (
-                  <p className="text-slate-550 text-center py-4">No tagging indices established.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {item.tags.map(t => (
-                      <span
-                        key={t}
-                        className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] ${
-                          theme === 'code-light' 
-                            ? 'border-blue-200 bg-blue-50 text-blue-650 font-medium' 
-                            : theme === 'monokai' 
-                            ? 'border-[#a6e22e]/30 bg-[#a6e22e]/5 text-[#a6e22e] font-medium' 
-                            : 'border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium'
-                        }`}
-                      >
-                        <span>{t}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <div className={`font-mono text-xs ${citekeyConflict ? 'text-amber-400' : (theme === 'code-light' ? 'text-slate-800' : 'text-sky-400')}`}>
+                {item.citekey || '—'}
               </div>
-            </Tabs.Content>
- 
-            {/* Attachments Tab */}
-            <Tabs.Content value="attachments" className="space-y-4 outline-hidden select-text">
-              {/* PDF attachment listing */}
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-mono text-slate-550 border-b border-slate-850 pb-1 uppercase tracking-wider">
-                  Files linked ({item.attachments.length})
-                </h4>
-                {item.attachments.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed border-slate-800 rounded-md text-slate-555 text-[10px] p-4 leading-relaxed">
-                    No linked PDFs, datasets, or manuscript attachments.
-                  </div>
-                ) : (
-                  item.attachments.map(a => (
-                    <div key={a.id} className={`flex items-center justify-between rounded border p-2.5 ${
-                      theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
-                    }`}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className={`font-semibold truncate text-[11px] max-w-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>{a.title}</p>
-                          <p className="text-[9px] text-slate-555 truncate font-mono uppercase mt-0.5">{a.mimeType}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setPdfReaderUrl(a.title)}
-                          className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
-                        >
-                          Read
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
+            </div>
+
+            {/* Creator / Authors Section */}
+            <div>
+              <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Creators / Authors</label>
+              <div className={`text-xs break-words ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                {creatorsText || '—'}
               </div>
-            </Tabs.Content>
+            </div>
+
+            {/* Standard Zotero bibliographic metadata boxes */}
+            <div className={`space-y-3 border-t pt-3 ${theme === 'code-light' ? 'border-zinc-200' : theme === 'monokai' ? 'border-[#3e3d32]' : 'border-slate-800'}`}>
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publication Journal / Book</label>
+                <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                  {item.publicationTitle || '—'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Date / Year</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.date || '—'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Pages</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.pages || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Volume</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.volume || '—'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Issue</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.issue || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">DOI</label>
+                <div className={`font-mono text-[11px] break-all ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                  {item.doi || '—'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">URL</label>
+                <div className={`text-xs break-all ${theme === 'code-light' ? 'text-sky-600' : 'text-sky-400'}`}>
+                  {item.url ? (
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.url}</a>
+                  ) : '—'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publisher</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.publisher || '—'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Place</label>
+                  <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                    {item.place || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">ISBN / ISSN</label>
+                <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                  {item.isbn || item.issn || '—'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Language</label>
+                <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
+                  {item.language || '—'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Abstract / Description Notes</label>
+                <div className={`text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'text-slate-700' : 'text-slate-300'}`}>
+                  {item.abstractNote || '—'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[9px] font-mono text-slate-650 pt-2 border-t border-slate-800">
+                <div>Added: {new Date(item.dateAdded).toLocaleDateString()}</div>
+                <div>Modified: {new Date(item.dateModified).toLocaleDateString()}</div>
+              </div>
+            </div>
           </div>
-        </Tabs.Root>
+
+          {/* Notes Section */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-[10px] font-mono text-slate-555 border-b border-slate-850 pb-1.5 uppercase tracking-wider font-semibold">
+              Notes ({item.notes.length})
+            </h4>
+            {item.notes.length === 0 ? (
+              <div className="text-center py-2 text-slate-550 text-[11px]">
+                No scholarly notes attached to this record.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {item.notes.map(note => (
+                  <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
+                    theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
+                  }`}>
+                    <div>
+                      <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
+                        theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
+                      }`}>
+                        {note.note}
+                      </p>
+                      <div className="flex items-center justify-between border-t border-slate-900/60 mt-2 pt-1.5 text-[9px] text-slate-555">
+                        <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tags Section */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-[10px] font-mono text-slate-555 uppercase tracking-wider border-b border-slate-850 pb-1.5 font-semibold">
+              Tags ({item.tags.length})
+            </h4>
+            {item.tags.length === 0 ? (
+              <p className="text-slate-550 text-center py-2 text-[11px]">No tagging indices established.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {item.tags.map(t => (
+                  <span
+                    key={t}
+                    className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] ${
+                      theme === 'code-light' 
+                        ? 'border-blue-200 bg-blue-50 text-blue-650 font-medium' 
+                        : theme === 'monokai' 
+                        ? 'border-[#a6e22e]/30 bg-[#a6e22e]/5 text-[#a6e22e] font-medium' 
+                        : 'border-blue-500/20 bg-blue-500/5 text-blue-300 font-medium'
+                    }`}
+                  >
+                    <span>{t}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Attachments Section */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-[10px] font-mono text-slate-555 border-b border-slate-850 pb-1.5 uppercase tracking-wider font-semibold">
+              Attachments ({item.attachments.length})
+            </h4>
+            {item.attachments.length === 0 ? (
+              <div className="text-center py-4 border border-dashed border-slate-800 rounded-md text-slate-555 text-[10px] p-2">
+                No linked files or datasets.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {item.attachments.map(a => (
+                  <div key={a.id} className={`flex items-center justify-between rounded border p-2.5 ${
+                    theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
+                  }`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className={`font-semibold truncate text-[11px] max-w-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>{a.title}</p>
+                        <p className="text-[9px] text-slate-555 truncate font-mono uppercase mt-0.5">{a.mimeType}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setPdfReaderUrl(a.title)}
+                        className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
+                      >
+                        Read
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Fullscreen PDF dialogue Modal */}
         <Dialog.Root open={!!pdfReaderUrl} onOpenChange={(open) => { if (!open) setPdfReaderUrl(null); }}>
