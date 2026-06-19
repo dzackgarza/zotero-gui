@@ -117,6 +117,14 @@ describe('library selectors', () => {
     const citekeyItems = [
       ...moriItems,
       {
+        ...item('valid-diacritic-initials', 'Basic algebraic geometry', [], [], false, 'SR94'),
+        creators: [
+          { firstName: 'Igorʹ Rostislavovič', lastName: 'Šafarevič', creatorType: 'author' },
+          { firstName: 'Miles', lastName: 'Reid', creatorType: 'author' },
+        ],
+        date: '1994',
+      },
+      {
         ...item('valid-many-author-suffix', 'Many author suffix citekey', [], [], false, 'abc+20c'),
         creators: manyAuthorCreators,
         date: '2020',

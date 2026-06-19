@@ -25,34 +25,35 @@ export function fuzzyMatches(text: string, query: string, matchCase: boolean = f
  */
 export function getStandardCitekey(item: ZoteroItem): string {
   if (!item.creators || item.creators.length === 0) return '';
-  
-  // Filter for authors, fallback to all creators if none defined as author
+
   const authors = item.creators.filter(c => c.creatorType === 'author');
   const targetCreators = authors.length > 0 ? authors : item.creators;
-  
+
   const lastNames = targetCreators
-    .map(c => (c.lastName || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
+    .map(c =>
+      (c.lastName || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, ''),
+    )
     .filter(Boolean);
-    
+
   if (lastNames.length === 0) return '';
-  
+
   let authorsAlpha = '';
   if (lastNames.length === 1) {
-    // 1 author: first 3 letters of last name
     authorsAlpha = lastNames[0].substring(0, 3);
   } else if (lastNames.length >= 2 && lastNames.length <= 4) {
-    // 2-4 authors: first letter of each last name concatenated
     authorsAlpha = lastNames.map(name => name[0]).join('');
   } else {
-    // More than 4 authors: first letter of first 3 authors + '+'
     authorsAlpha = lastNames.slice(0, 3).map(name => name[0]).join('') + '+';
   }
 
-  // Extract year
   const dateStr = item.date || '';
   const match = dateStr.match(/\d{4}/);
   const year = match ? match[0] : '';
-  const yearSuffix = year ? year.substring(2, 4) : ''; // Last two digits of the year (e.g. 17 or 23)
+  const yearSuffix = year ? year.substring(2, 4) : '';
 
   return authorsAlpha + yearSuffix;
 }
