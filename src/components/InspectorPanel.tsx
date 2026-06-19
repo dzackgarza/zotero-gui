@@ -22,6 +22,7 @@ interface InspectorPanelProps {
   item: ZoteroItem | null;
   allItems: ZoteroItem[];
   onClose: () => void;
+  onOpenAttachment: (attachmentId: string) => void;
   theme: AppTheme;
 }
 
@@ -29,10 +30,10 @@ export default function InspectorPanel({
   item,
   allItems,
   onClose,
+  onOpenAttachment,
   theme
 }: InspectorPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [attachmentOpenError, setAttachmentOpenError] = useState<string | null>(null);
 
   // Styles dynamically based on the VS theme
   const getPanelBg = () => {
@@ -99,17 +100,6 @@ export default function InspectorPanel({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  };
-
-  const openAttachment = (attachmentId: string) => {
-    setAttachmentOpenError(null);
-    fetch(`/api/attachments/${encodeURIComponent(attachmentId)}/open`, { method: 'POST' })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`Attachment open failed with HTTP ${response.status}`);
-        }
-      })
-      .catch((error: Error) => setAttachmentOpenError(error.message));
   };
 
   return (
@@ -392,11 +382,6 @@ export default function InspectorPanel({
               </div>
             ) : (
               <div className="space-y-2">
-                {attachmentOpenError && (
-                  <div className="rounded border border-red-500/40 bg-red-950/30 px-2 py-1.5 text-[10px] font-mono text-red-300">
-                    {attachmentOpenError}
-                  </div>
-                )}
                 {item.attachments.map(a => (
                   <div key={a.id} className={`flex items-center justify-between rounded border p-2.5 ${
                     theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
@@ -410,7 +395,7 @@ export default function InspectorPanel({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => openAttachment(a.id)}
+                        onClick={() => onOpenAttachment(a.id)}
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
                       >
                         <ExternalLink className="h-3 w-3" />

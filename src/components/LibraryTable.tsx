@@ -32,6 +32,7 @@ interface LibraryTableProps {
   resizingCol: string | null;
   searchSettings: AdvancedSearchSettings;
   onSelectItem: (id: string) => void;
+  onOpenAttachment: (attachmentId: string) => void;
   onResetFilters: (settings: AdvancedSearchSettings) => void;
   onToggleExpand: (id: string, event: React.MouseEvent) => void;
   onColumnDragStart: (event: React.DragEvent, columnKey: ColumnDefinition['key']) => void;
@@ -58,6 +59,7 @@ export default function LibraryTable({
   resizingCol,
   searchSettings,
   onSelectItem,
+  onOpenAttachment,
   onResetFilters,
   onToggleExpand,
   onColumnDragStart,
@@ -232,10 +234,17 @@ export default function LibraryTable({
                         {visibleColumns.map(column => (
                           <td key={column.key} className={`px-3.5 py-1.5 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`} style={{ maxWidth: column.width ? `${column.width}px` : '20rem' }}>
                             {column.key === 'title' ? (
-                              <div className="flex items-center gap-2 pl-6">
+                              <button
+                                type="button"
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  onOpenAttachment(attachment.id);
+                                }}
+                                className="flex min-w-0 items-center gap-2 pl-6 text-left hover:text-sky-400"
+                              >
                                 <Paperclip className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                                 <span className="truncate opacity-80" title={attachment.title}>{attachment.title}</span>
-                              </div>
+                              </button>
                             ) : null}
                           </td>
                         ))}

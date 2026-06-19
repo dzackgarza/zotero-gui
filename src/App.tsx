@@ -159,6 +159,17 @@ export default function App() {
     });
   };
 
+  const openAttachment = (attachmentId: string) => {
+    fetch(`/api/attachments/${encodeURIComponent(attachmentId)}/open`, { method: 'POST' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Attachment open failed with HTTP ${response.status}`);
+        }
+        showToast('Opening attachment with xdg-open.');
+      })
+      .catch((error: Error) => showToast(error.message));
+  };
+
   if (libraryStatus === 'failed') {
     return (
       <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
@@ -305,6 +316,7 @@ export default function App() {
             resizingCol={resizingCol}
             searchSettings={searchSettings}
             onSelectItem={setSelectedItemId}
+            onOpenAttachment={openAttachment}
             onResetFilters={(settings) => {
               setSearchSettings(settings);
               setSelectedTag(null);
@@ -329,6 +341,7 @@ export default function App() {
               item={activeSelectedItem}
               allItems={items}
               onClose={() => setSelectedItemId(null)}
+              onOpenAttachment={openAttachment}
               theme={theme}
             />
           </div>

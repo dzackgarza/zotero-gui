@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import TopBar from './TopBar';
 import SidebarCollections from './SidebarCollections';
 import InspectorPanel from './InspectorPanel';
+import LibraryTable from './LibraryTable';
+import { DEFAULT_COLUMNS } from '../data/samples';
 import type { AdvancedSearchSettings, Collection, ZoteroItem } from '../types';
 
 const searchSettings: AdvancedSearchSettings = {
@@ -104,6 +106,7 @@ describe('read-only GUI controls', () => {
         item={item}
         allItems={[item]}
         onClose={vi.fn()}
+        onOpenAttachment={vi.fn()}
         theme="code-dark"
       />,
     );
@@ -113,15 +116,15 @@ describe('read-only GUI controls', () => {
     expect(screen.queryByText('Delete permanently')).not.toBeInTheDocument();
   });
 
-  it('renders attached note text and launches attachments through the server boundary', () => {
-    const fetchSpy = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    vi.stubGlobal('fetch', fetchSpy);
+  it('renders attached note text and routes inspector attachment opens', () => {
+    const onOpenAttachment = vi.fn();
 
     render(
       <InspectorPanel
         item={item}
         allItems={[item]}
         onClose={vi.fn()}
+        onOpenAttachment={onOpenAttachment}
         theme="code-dark"
       />,
     );
@@ -131,6 +134,43 @@ describe('read-only GUI controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /open/i }));
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/attachments/ATTACH12/open', { method: 'POST' });
+    expect(onOpenAttachment).toHaveBeenCalledWith('ATTACH12');
+  });
+
+  it('launches attachments from expanded library table attachment rows', () => {
+    const onOpenAttachment = vi.fn();
+
+    render(
+      <LibraryTable
+        columns={DEFAULT_COLUMNS}
+        items={[item]}
+        theme="code-dark"
+        tableClass=""
+        selectedItemId={null}
+        expandedItems={new Set([item.id])}
+        sortKey="title"
+        sortDesc={false}
+        draggedColKey={null}
+        resizingCol={null}
+        searchSettings={searchSettings}
+        onSelectItem={vi.fn()}
+        onOpenAttachment={onOpenAttachment}
+        onResetFilters={vi.fn()}
+        onToggleExpand={vi.fn()}
+        onColumnDragStart={vi.fn()}
+        onColumnDragOver={vi.fn()}
+        onColumnDrop={vi.fn()}
+        onHeaderSort={vi.fn()}
+        onResizeStart={vi.fn()}
+        onToggleColumn={vi.fn()}
+        onSetAllColumns={vi.fn()}
+        onResetColumns={vi.fn()}
+        onMoveColumn={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Local PDF'));
+
+    expect(onOpenAttachment).toHaveBeenCalledWith('ATTACH12');
   });
 });
