@@ -20,15 +20,19 @@ npm install
 Start both the API backend and Vite frontend concurrently:
 
 ```bash
-npm run dev:full
+just dev-full
 ```
 
 Open your browser and navigate to `http://localhost:3000` to interact with the GUI.
 
 To run the components separately:
 
-- API server: `npm run api` (starts on port 3001)
-- Frontend: `npm run dev` (starts on port 3000)
+- API server: `just api` (starts on port 3001)
+- Frontend: `just dev` (starts on port 3000)
+
+After dependency changes, restart the frontend with `just dev` and hard-reload the browser tab.
+The frontend recipe runs Vite with forced dependency optimization so stale `/node_modules/.vite/deps/` URLs are regenerated instead of reusing an outdated optimizer cache.
+Use `just diagnostic-live-vite-deps` against the running frontend to verify that the current server is serving every optimized dependency recorded by Vite.
 
 ## Configuration
 

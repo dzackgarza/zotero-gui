@@ -16,6 +16,9 @@ api:
 dev-full:
     npm run dev:full
 
+diagnostic-live-vite-deps:
+    npm run diagnostic:live-vite-deps
+
 diagnostic-live-zotero-doctor:
     npx tsx src/server/liveDiagnostics.ts doctor
 

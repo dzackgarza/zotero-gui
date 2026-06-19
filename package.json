@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "vite --port=3000 --host=0.0.0.0 --force",
     "api": "tsx watch src/server/main.ts",
     "dev:full": "concurrently --names api,vite --prefix-colors cyan,yellow \"npm run api\" \"npm run dev\"",
     "build": "vite build",
@@ -12,7 +12,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "diagnostic:live-vite-deps": "node scripts/verify-vite-optimized-deps.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.14",
