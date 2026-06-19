@@ -2,6 +2,7 @@ export const ITEM_TYPES = [
   'journalArticle',
   'book',
   'bookSection',
+  'attachment',
   'conferencePaper',
   'thesis',
   'webpage',
@@ -35,12 +36,13 @@ export const ITEM_TYPES = [
   'videoRecording',
 ] as const;
 
-export type ItemType = typeof ITEM_TYPES[number]; // catch-all for future Zotero types
+export type ItemType = typeof ITEM_TYPES[number];
 
 const ITEM_TYPE_LABEL_MAP: Record<ItemType, string> = {
   journalArticle: 'Journal Article',
   book: 'Book',
   bookSection: 'Book Section',
+  attachment: 'Attachment',
   conferencePaper: 'Conference Paper',
   thesis: 'Thesis',
   webpage: 'Webpage',
@@ -77,9 +79,6 @@ const ITEM_TYPE_LABEL_MAP: Record<ItemType, string> = {
 export function getItemTypeLabel(type: ItemType): string {
   return ITEM_TYPE_LABEL_MAP[type];
 }
-
-// Keep for backward-compat usage sites that reference ITEM_TYPE_LABELS
-export const ITEM_TYPE_LABELS = ITEM_TYPE_LABEL_MAP;
 
 export interface Creator {
   firstName: string;

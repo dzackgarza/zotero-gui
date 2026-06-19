@@ -94,8 +94,17 @@ const AttachmentRowSchema = z.strictObject({
   parentItemID: z.number(),
   id: z.string(),
   path: NullableStringSchema,
-  contentType: NullableStringSchema,
-  title: NullableStringSchema,
+  contentType: z.string(),
+  title: z.string(),
+  url: NullableStringSchema,
+});
+
+const StandaloneAttachmentRowSchema = z.strictObject({
+  itemID: z.number(),
+  id: z.string(),
+  path: NullableStringSchema,
+  contentType: z.string(),
+  title: z.string(),
   url: NullableStringSchema,
 });
 
@@ -212,6 +221,24 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     ORDER BY a.parentItemID
   `).all());
 
+  const standaloneAttachments = z.array(StandaloneAttachmentRowSchema).parse(db.prepare(`
+    SELECT
+      a.itemID,
+      i.key                                                        AS id,
+      a.path,
+      a.contentType,
+      MAX(CASE WHEN f.fieldName = 'title' THEN idv.value END)     AS title,
+      MAX(CASE WHEN f.fieldName = 'url'   THEN idv.value END)     AS url
+    FROM itemAttachments a
+    JOIN items i ON a.itemID = i.itemID
+    LEFT JOIN itemData id2 ON a.itemID = id2.itemID
+    LEFT JOIN fields f ON id2.fieldID = f.fieldID
+    LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
+    WHERE a.parentItemID IS NULL
+    GROUP BY a.itemID
+    ORDER BY a.itemID
+  `).all());
+
   // 7. Collections tree
   const rawCollections = z.array(RawCollectionRowSchema).parse(db.prepare(`
     SELECT c.collectionID, c.collectionName, c.parentCollectionID
@@ -262,12 +289,21 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     const list = attachsByItem.get(row.parentItemID) ?? [];
     list.push({
       id: row.id,
-      title: row.title ?? row.path ?? 'Attachment',
+      title: row.title,
       url: row.url ?? undefined,
-      mimeType: row.contentType ?? '',
+      mimeType: row.contentType,
       path: row.path ?? undefined,
     });
     attachsByItem.set(row.parentItemID, list);
+  }
+  for (const row of standaloneAttachments) {
+    attachsByItem.set(row.itemID, [{
+      id: row.id,
+      title: row.title,
+      url: row.url ?? undefined,
+      mimeType: row.contentType,
+      path: row.path ?? undefined,
+    }]);
   }
 
   // --- Assemble final ZoteroItem objects ---

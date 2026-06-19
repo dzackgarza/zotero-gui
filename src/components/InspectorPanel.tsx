@@ -5,7 +5,7 @@ import {
 import * as Select from '@radix-ui/react-select';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { ZoteroItem, ItemType, ITEM_TYPE_LABELS, Creator } from '../types';
+import { ZoteroItem, ItemType, getItemTypeLabel, Creator } from '../types';
 
 const serializeCreators = (creators: Creator[]): string => {
   return creators
@@ -178,7 +178,7 @@ export default function InspectorPanel({
         {/* Item summary label */}
         <div className={`p-3 shrink-0 ${theme === 'code-light' ? 'bg-[#eaeaea] border-b border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-b border-[#3e3d32]' : 'bg-slate-950/60 border-b border-slate-800'}`}>
           <div className="font-mono text-[9px] text-sky-400 mb-1 flex items-center justify-between">
-            <span>{ITEM_TYPE_LABELS[item.itemType]}</span>
+            <span>{getItemTypeLabel(item.itemType)}</span>
             {item.inTrash && (
               <span className="text-red-400 font-semibold uppercase px-1 border border-red-500 rounded-xs text-[8px] tracking-wide animate-pulse">
                 Trash Bin
@@ -202,7 +202,7 @@ export default function InspectorPanel({
             <div>
               <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
               <div className={`text-xs font-medium ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
+                {getItemTypeLabel(item.itemType)}
               </div>
             </div>
 
