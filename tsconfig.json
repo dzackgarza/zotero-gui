@@ -9,12 +9,16 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "skipLibCheck": true,
+    "strict": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
     "jsx": "react-jsx",
+    "types": [
+      "node",
+      "vitest/globals",
+      "@testing-library/jest-dom/vitest"
+    ],
     "paths": {
       "@/*": [
         "./*"
