@@ -39,7 +39,7 @@ function createFixtureDb(): DatabaseSync {
     INSERT INTO collections VALUES (100, 1, 'Root Collection', NULL), (101, 1, 'Nested Collection', 100);
 
     INSERT INTO items VALUES (1, 'BOOK1234', 1, 1, '2026-01-01 00:00:00', '2026-01-02 00:00:00');
-    INSERT INTO itemDataValues VALUES (1, 'Fixture Book'), (2, '2026'), (3, 'Fixture Press'), (4, 'Child Note'), (5, 'Attachment PDF'), (6, 'https://example.test/paper.pdf'), (7, 'Trashed Article');
+    INSERT INTO itemDataValues VALUES (1, 'Fixture Book'), (2, '2026'), (3, 'Fixture Press'), (4, 'Child Note'), (5, 'Attachment PDF'), (6, 'https://example.test/paper.pdf'), (7, 'Trashed Article'), (8, 'Standalone PDF'), (9, 'https://example.test/standalone.pdf');
     INSERT INTO itemData VALUES (1, 1, 1), (1, 2, 2), (1, 3, 3);
     INSERT INTO itemCreators VALUES (1, 1, 1, 0);
     INSERT INTO itemTags VALUES (1, 1), (1, 2);
@@ -51,6 +51,10 @@ function createFixtureDb(): DatabaseSync {
     INSERT INTO items VALUES (3, 'ATTACH12', 4, 1, '2026-01-05 00:00:00', '2026-01-06 00:00:00');
     INSERT INTO itemAttachments VALUES (3, 1, 'storage:paper.pdf', 'application/pdf');
     INSERT INTO itemData VALUES (3, 1, 5), (3, 4, 6);
+
+    INSERT INTO items VALUES (5, 'ATTACH99', 4, 1, '2026-01-09 00:00:00', '2026-01-10 00:00:00');
+    INSERT INTO itemAttachments VALUES (5, NULL, 'storage:standalone.pdf', 'application/pdf');
+    INSERT INTO itemData VALUES (5, 1, 8), (5, 4, 9);
 
     INSERT INTO items VALUES (4, 'TRASH123', 2, 1, '2026-01-07 00:00:00', '2026-01-08 00:00:00');
     INSERT INTO itemData VALUES (4, 1, 7);
@@ -98,22 +102,35 @@ describe('/api/library', () => {
 
   it('maps fixture SQLite library data through the route payload schema', async () => {
     const response = await fetch(`${baseUrl}/api/library`);
+    expect(response.status).toBe(200);
     const payload = LibraryPayloadSchema.parse(await response.json());
 
-    expect(response.status).toBe(200);
     expect(payload.collections).toEqual([
       { id: 'all', name: 'My Library' },
       { id: '100', name: 'Root Collection' },
       { id: '101', name: 'Nested Collection', parentId: '100' },
     ]);
-    expect(payload.items).toHaveLength(2);
+    expect(payload.items).toHaveLength(3);
     expect(payload.items[0]).toMatchObject({
+      id: 'ATTACH99',
+      itemType: 'attachment',
+      title: 'Standalone PDF',
+      url: 'https://example.test/standalone.pdf',
+      attachments: [{
+        id: 'ATTACH99',
+        title: 'Standalone PDF',
+        url: 'https://example.test/standalone.pdf',
+        mimeType: 'application/pdf',
+        path: 'storage:standalone.pdf',
+      }],
+    });
+    expect(payload.items[1]).toMatchObject({
       id: 'TRASH123',
       itemType: 'journalArticle',
       title: 'Trashed Article',
       inTrash: true,
     });
-    expect(payload.items[1]).toMatchObject({
+    expect(payload.items[2]).toMatchObject({
       id: 'BOOK1234',
       itemType: 'book',
       title: 'Fixture Book',
