@@ -1,8 +1,10 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { LibraryPayload } from '../schemas';
 import { createApp } from './server';
@@ -14,6 +16,8 @@ let baseUrl: string;
 let importEndpoint: string;
 let importMode: 'fail' | 'success' = 'fail';
 let libraryPayload: LibraryPayload;
+let attachmentOpenLogPath: string;
+let attachmentOpenerPath: string;
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), 'zotero-gui-route-'));
@@ -22,6 +26,16 @@ function tempDir(): string {
 function writeResolver(dir: string): string {
   const scriptPath = path.join(dir, 'resolver.mjs');
   writeFileSync(scriptPath, 'process.stdout.write("@book{created,title={Created Route Item}}\\n");');
+  return scriptPath;
+}
+
+function writeAttachmentOpener(dir: string): string {
+  const scriptPath = path.join(dir, 'attachment-opener.mjs');
+  writeFileSync(scriptPath, `
+import { appendFile } from 'node:fs/promises';
+
+await appendFile(process.argv[2], process.argv[3] + '\\n');
+`);
   return scriptPath;
 }
 
@@ -92,6 +106,10 @@ async function postFromSource(body: unknown): Promise<Response> {
   });
 }
 
+async function openAttachment(attachmentId: string): Promise<Response> {
+  return fetch(`${baseUrl}/api/attachments/${attachmentId}/open`, { method: 'POST' });
+}
+
 async function expectErrorKind(response: Response, status: number, kind: string): Promise<void> {
   expect(response.status).toBe(status);
   const payload = await response.json();
@@ -102,6 +120,8 @@ describe('/api/items/from-source error semantics', () => {
   beforeAll(async () => {
     const dir = tempDir();
     const resolverPath = writeResolver(dir);
+    attachmentOpenLogPath = path.join(dir, 'opened-attachments.log');
+    attachmentOpenerPath = writeAttachmentOpener(dir);
     libraryPayload = { items: [], collections: [{ id: 'all', name: 'My Library' }] };
 
     importServer = http.createServer((_req, res) => {
@@ -137,6 +157,19 @@ describe('/api/items/from-source error semantics', () => {
       resolverExecution: execution(dir),
       importEndpoint,
       fetchImpl: fetch,
+      openAttachmentFile: attachment => new Promise<void>((resolve, reject) => {
+        if (!attachment.path) {
+          reject(new Error(`Attachment ${attachment.id} has no local file path`));
+          return;
+        }
+        execFile(process.execPath, [attachmentOpenerPath, attachmentOpenLogPath, attachment.path], (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
     });
     const startedApp = await listenApp(app);
     appServer = startedApp.server;
@@ -177,5 +210,59 @@ describe('/api/items/from-source error semantics', () => {
       502,
       'zotero_visibility_failed',
     );
+  });
+
+  it('opens a loaded attachment through the route launcher boundary', async () => {
+    libraryPayload = {
+      collections: [{ id: 'all', name: 'My Library' }],
+      items: [{
+        id: 'ITEM123',
+        itemType: 'book',
+        title: 'Attachment Route Item',
+        creators: [],
+        tags: [],
+        notes: [],
+        attachments: [{
+          id: 'ATTACH12',
+          title: 'Paper',
+          mimeType: 'application/pdf',
+          path: '/tmp/zotero-gui-paper.pdf',
+        }],
+        collections: [],
+        dateAdded: '2026-06-20T00:00:00Z',
+        dateModified: '2026-06-20T00:00:00Z',
+      }],
+    };
+
+    const response = await openAttachment('ATTACH12');
+
+    expect(response.status).toBe(204);
+    expect(await readFile(attachmentOpenLogPath, 'utf8')).toBe('/tmp/zotero-gui-paper.pdf\n');
+  });
+
+  it('rejects unknown attachments and attachments without local paths before launching', async () => {
+    libraryPayload = {
+      collections: [{ id: 'all', name: 'My Library' }],
+      items: [{
+        id: 'ITEM123',
+        itemType: 'book',
+        title: 'Attachment Route Item',
+        creators: [],
+        tags: [],
+        notes: [],
+        attachments: [{
+          id: 'REMOTE12',
+          title: 'Remote Snapshot',
+          mimeType: 'text/html',
+          url: 'https://example.test/snapshot',
+        }],
+        collections: [],
+        dateAdded: '2026-06-20T00:00:00Z',
+        dateModified: '2026-06-20T00:00:00Z',
+      }],
+    };
+
+    await expectErrorKind(await openAttachment('MISSING12'), 404, 'attachment_not_found');
+    await expectErrorKind(await openAttachment('REMOTE12'), 400, 'attachment_path_missing');
   });
 });

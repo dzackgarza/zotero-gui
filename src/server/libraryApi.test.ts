@@ -146,6 +146,9 @@ describe('/api/library', () => {
       },
       importEndpoint: 'http://127.0.0.1:23119/write',
       fetchImpl: fetch,
+      openAttachmentFile: async () => {
+        throw new Error('library route test does not launch attachments');
+      },
     });
     server = await new Promise<Server>((resolve) => {
       const instance = app.listen(0, '127.0.0.1', () => resolve(instance));

@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  FileText, Info, Copy, LayoutGrid, Check, ChevronDown
+  FileText, Info, Copy, ExternalLink
 } from 'lucide-react';
-import * as Select from '@radix-ui/react-select';
-import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { ZoteroItem, ItemType, getItemTypeLabel, Creator } from '../types';
+import { ZoteroItem, getItemTypeLabel, Creator } from '../types';
 import type { AppTheme } from '../useThemePreference';
 
 const serializeCreators = (creators: Creator[]): string => {
@@ -18,23 +16,6 @@ const serializeCreators = (creators: Creator[]): string => {
     })
     .filter(Boolean)
     .join('; ');
-};
-
-const deserializeCreators = (str: string): Creator[] => {
-  return str
-    .split(';')
-    .map(part => {
-      const trimmed = part.trim();
-      if (!trimmed) return null;
-      const commaIndex = trimmed.indexOf(',');
-      if (commaIndex !== -1) {
-        const lastName = trimmed.substring(0, commaIndex).trim();
-        const firstName = trimmed.substring(commaIndex + 1).trim();
-        return { firstName, lastName, creatorType: 'author' };
-      }
-      return { firstName: '', lastName: trimmed, creatorType: 'author' };
-    })
-    .filter((c): c is Creator => c !== null);
 };
 
 interface InspectorPanelProps {
@@ -51,7 +32,7 @@ export default function InspectorPanel({
   theme
 }: InspectorPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [pdfReaderUrl, setPdfReaderUrl] = useState<string | null>(null);
+  const [attachmentOpenError, setAttachmentOpenError] = useState<string | null>(null);
 
   // Styles dynamically based on the VS theme
   const getPanelBg = () => {
@@ -75,18 +56,6 @@ export default function InspectorPanel({
       case 'code-dark':
       default:
         return 'bg-slate-950 border-b border-[#2b2b2b]';
-    }
-  };
-
-  const getInputClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-white border border-[#e4e4e7] text-slate-800 placeholder:text-slate-400 focus:border-blue-600';
-      case 'monokai':
-        return 'bg-[#272822] border border-[#3e3d32] text-[#f8f8f2] placeholder:text-stone-500 focus:border-[#a6e22e]';
-      case 'code-dark':
-      default:
-        return 'bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-550 focus:border-blue-600';
     }
   };
 
@@ -130,6 +99,17 @@ export default function InspectorPanel({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const openAttachment = (attachmentId: string) => {
+    setAttachmentOpenError(null);
+    fetch(`/api/attachments/${encodeURIComponent(attachmentId)}/open`, { method: 'POST' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Attachment open failed with HTTP ${response.status}`);
+        }
+      })
+      .catch((error: Error) => setAttachmentOpenError(error.message));
   };
 
   return (
@@ -348,20 +328,27 @@ export default function InspectorPanel({
             ) : (
               <div className="space-y-2.5">
                 {item.notes.map(note => (
-                  <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
+                  <article key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
                     theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
                   }`}>
-                    <div>
-                      <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-555 uppercase tracking-wide">
+                      <span>Attached Note</span>
+                      <span>{new Date(note.dateModified).toLocaleDateString()}</span>
+                    </div>
+                    <div className={`max-h-72 overflow-y-auto rounded border p-2 whitespace-pre-wrap leading-relaxed text-[11px] ${
+                      theme === 'code-light'
+                        ? 'border-zinc-200 bg-slate-50 text-slate-800'
+                        : theme === 'monokai'
+                          ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2]'
+                          : 'border-slate-850 bg-slate-950 text-slate-200'
+                    }`}>
+                      <p className={
                         theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
-                      }`}>
+                      }>
                         {note.note}
                       </p>
-                      <div className="flex items-center justify-between border-t border-slate-900/60 mt-2 pt-1.5 text-[9px] text-slate-555">
-                        <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
-                      </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
@@ -405,6 +392,11 @@ export default function InspectorPanel({
               </div>
             ) : (
               <div className="space-y-2">
+                {attachmentOpenError && (
+                  <div className="rounded border border-red-500/40 bg-red-950/30 px-2 py-1.5 text-[10px] font-mono text-red-300">
+                    {attachmentOpenError}
+                  </div>
+                )}
                 {item.attachments.map(a => (
                   <div key={a.id} className={`flex items-center justify-between rounded border p-2.5 ${
                     theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
@@ -418,10 +410,11 @@ export default function InspectorPanel({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setPdfReaderUrl(a.title)}
-                        className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
+                        onClick={() => openAttachment(a.id)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
                       >
-                        Read
+                        <ExternalLink className="h-3 w-3" />
+                        Open
                       </button>
                     </div>
                   </div>
@@ -430,47 +423,6 @@ export default function InspectorPanel({
             )}
           </div>
         </div>
-
-        {/* Fullscreen PDF dialogue Modal */}
-        <Dialog.Root open={!!pdfReaderUrl} onOpenChange={(open) => { if (!open) setPdfReaderUrl(null); }}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm animate-fade-in" />
-            <Dialog.Content className="fixed inset-4 z-50 flex items-center justify-center font-sans focus:outline-hidden">
-              <div className="w-full max-w-4xl h-[90vh] flex flex-col rounded-lg overflow-hidden border border-slate-800 bg-slate-955 text-slate-100 shadow-2xl">
-                {/* Header */}
-                <div className="flex items-center justify-between bg-slate-900 border-b border-slate-800 px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-red-500" />
-                    <span className="font-semibold text-xs text-slate-200 truncate max-w-lg">
-                      {pdfReaderUrl}
-                    </span>
-                  </div>
-                  <Dialog.Close asChild>
-                    <button
-                      className="p-1 px-2 bg-slate-805 hover:bg-slate-700 rounded text-slate-350 hover:text-slate-100 cursor-pointer outline-hidden text-[10px] font-semibold transition-colors"
-                    >
-                      ✕ Close Reader
-                    </button>
-                  </Dialog.Close>
-                </div>
-
-                {/* PDF content block */}
-                <div className="flex-grow flex flex-col items-center justify-center bg-slate-950 p-6 text-center space-y-3">
-                  <FileText className="h-12 w-12 text-slate-600" />
-                  <p className="font-semibold text-sm text-slate-200">PDF Preview Not Supported</p>
-                  <p className="text-xs text-slate-400 max-w-md">
-                    Direct PDF rendering is not supported in the browser client. Please open the file using your local Zotero application.
-                  </p>
-                  {item.attachments.find(a => a.title === pdfReaderUrl)?.path && (
-                    <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded p-3 text-[10px] text-left font-mono break-all text-slate-300">
-                      <strong className="text-slate-500">File Path:</strong> {item.attachments.find(a => a.title === pdfReaderUrl)?.path}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
       </div>
     </Tooltip.Provider>
   );

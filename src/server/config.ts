@@ -7,6 +7,7 @@ export const AppConfigSchema = z.strictObject({
   }),
   zotero: z.strictObject({
     databaseUri: z.string().min(1),
+    storageDir: z.string().min(1),
     importEndpoint: z.string().url(),
   }),
   resolverManifestPath: z.string().min(1),

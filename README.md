@@ -36,7 +36,7 @@ Use `just diagnostic-live-vite-deps` against the running frontend to verify that
 
 ## Configuration
 
-- `zotero-gui.config.json` is required at startup and must contain the server port, immutable Zotero DB URI, resolver manifest path, resolver execution limits, and Zotero write endpoint.
+- `zotero-gui.config.json` is required at startup and must contain the server port, immutable Zotero DB URI, Zotero storage directory, resolver manifest path, resolver execution limits, and Zotero write endpoint.
 - Resolver plugins are configured in `resolver-plugins.json` and defined in the `resolver-plugins/` directory.
 
 ## License

@@ -12,6 +12,8 @@ import {
 
 type ApiErrorKind =
   | 'invalid_request'
+  | 'attachment_not_found'
+  | 'attachment_path_missing'
   | 'resolver_not_found'
   | 'resolver_input_rejected'
   | 'upstream_boundary_failed'
@@ -35,12 +37,19 @@ const FromSourceRequestSchema = z.strictObject({
   collections: z.array(z.string().min(1)),
 });
 
+const OpenAttachmentParamsSchema = z.strictObject({
+  attachmentId: z.string().trim().min(1),
+});
+
+type Attachment = LibraryPayload['items'][number]['attachments'][number];
+
 export interface AppDeps {
   loadLibrary(): LibraryPayload;
   resolverPlugins: ResolverPluginConfig[];
   resolverExecution: ResolverExecutionConfig;
   importEndpoint: string;
   fetchImpl: typeof fetch;
+  openAttachmentFile(attachment: Attachment): Promise<void>;
 }
 
 function parseFromSourceRequest(body: unknown) {
@@ -71,6 +80,19 @@ function requireCreatedItem(payload: LibraryPayload, key: string) {
     throw new ApiError('zotero_visibility_failed', 502, `Created Zotero item ${key} was not visible after import`);
   }
   return item;
+}
+
+function requireAttachmentWithPath(payload: LibraryPayload, attachmentId: string): Attachment {
+  for (const item of payload.items) {
+    const attachment = item.attachments.find(candidate => candidate.id === attachmentId);
+    if (attachment) {
+      if (!attachment.path) {
+        throw new ApiError('attachment_path_missing', 400, `Attachment ${attachmentId} has no local file path`);
+      }
+      return attachment;
+    }
+  }
+  throw new ApiError('attachment_not_found', 404, `Attachment ${attachmentId} is not present in the loaded library`);
 }
 
 function classifyError(error: Error): { kind: ApiErrorKind; status: number; message: string } {
@@ -112,6 +134,19 @@ export function createApp(deps: AppDeps) {
         });
         const item = requireCreatedItem(LibraryPayloadSchema.parse(deps.loadLibrary()), result.item_key);
         res.json(CreatedItemResponseSchema.parse({ key: result.item_key, item }));
+      })
+      .catch(next);
+  });
+
+  app.post('/api/attachments/:attachmentId/open', (req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        const { attachmentId } = OpenAttachmentParamsSchema.parse(req.params);
+        const attachment = requireAttachmentWithPath(LibraryPayloadSchema.parse(deps.loadLibrary()), attachmentId);
+        await deps.openAttachmentFile(attachment).catch((error: Error) => {
+          throw new ApiError('upstream_boundary_failed', 502, error.message);
+        });
+        res.status(204).end();
       })
       .catch(next);
   });

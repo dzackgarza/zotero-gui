@@ -4,7 +4,8 @@
   },
   "zotero": {
     "databaseUri": "file:///home/dzack/Zotero/zotero.sqlite?immutable=1",
-    "importEndpoint": "http://127.0.0.1:23119/write"
+    "importEndpoint": "http://127.0.0.1:23119/write",
+    "storageDir": "/home/dzack/Zotero/storage"
   },
   "resolverManifestPath": "/home/dzack/gitclones/zotero-gui/resolver-plugins.json",
   "resolverExecution": {

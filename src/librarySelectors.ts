@@ -3,15 +3,6 @@ import { filterZoteroItems, formatCreatorsCompact, getStandardCitekey } from './
 
 export type SortKey = keyof ZoteroItem | 'creators_compact';
 
-export type LibraryViewId =
-  | 'all'
-  | 'duplicates'
-  | 'unfiled'
-  | 'trash'
-  | 'no-pdf'
-  | 'no-extraction'
-  | 'nonstandard-citekey';
-
 export interface VisibleLibraryItemsInput {
   items: ZoteroItem[];
   collections: Collection[];
@@ -24,10 +15,6 @@ export interface VisibleLibraryItemsInput {
 
 export function activeLibraryItems(items: ZoteroItem[]): ZoteroItem[] {
   return items.filter(item => !item.inTrash);
-}
-
-export function trashedLibraryItems(items: ZoteroItem[]): ZoteroItem[] {
-  return items.filter(item => item.inTrash);
 }
 
 export function collectionDescendantIds(collections: Collection[], collectionId: string): Set<string> {
@@ -84,10 +71,6 @@ export function duplicateItems(items: ZoteroItem[]): ZoteroItem[] {
   });
 }
 
-export function unfiledItems(items: ZoteroItem[]): ZoteroItem[] {
-  return activeLibraryItems(items).filter(item => item.collections.length === 0);
-}
-
 export function itemsWithoutPdf(items: ZoteroItem[]): ZoteroItem[] {
   return activeLibraryItems(items).filter(item => {
     const hasPdf = item.attachments.some(attachment =>
@@ -133,10 +116,6 @@ export function selectItemsForCollection(
       return activeLibraryItems(items);
     case 'duplicates':
       return duplicateItems(items);
-    case 'unfiled':
-      return unfiledItems(items);
-    case 'trash':
-      return trashedLibraryItems(items);
     case 'no-pdf':
       return itemsWithoutPdf(items);
     case 'no-extraction':
@@ -144,6 +123,9 @@ export function selectItemsForCollection(
     case 'nonstandard-citekey':
       return nonstandardCitekeyItems(items);
     default:
+      if (!collections.some(collection => collection.id === collectionId)) {
+        throw new Error(`Unknown library view or collection id: ${collectionId}`);
+      }
       return activeLibraryItems(items).filter(item =>
         itemIsInCollectionTree(item, collections, collectionId)
       );

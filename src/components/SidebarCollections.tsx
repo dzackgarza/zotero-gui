@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-  Folder, FolderOpen, ChevronDown, Trash2, Tag,
-  Layers, PackageMinus,
+  Folder, FolderOpen, ChevronDown, Tag,
+  Layers,
   FileMinus, FileText, Key
 } from 'lucide-react';
 import * as Accordion from '@radix-ui/react-accordion';
@@ -187,23 +187,6 @@ export default function SidebarCollections({
                 </span>
               </div>
 
-              {/* Unfiled Items */}
-              <div
-                onClick={() => {
-                  onSelectCollection('unfiled');
-                  onSelectTag(null);
-                }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'unfiled')}`}
-              >
-                <div className="flex items-center gap-2">
-                  <PackageMinus className={`h-3.5 w-3.5 ${selectedCollectionId === 'unfiled' ? 'text-orange-400' : 'text-slate-500'}`} />
-                  <span>Unfiled Items</span>
-                </div>
-                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'unfiled')}`}>
-                  {getItemCount('unfiled')}
-                </span>
-              </div>
-
               {/* No PDF Attachment */}
               <div
                 onClick={() => {
@@ -255,22 +238,6 @@ export default function SidebarCollections({
                 </span>
               </div>
 
-              {/* Trash */}
-              <div
-                onClick={() => {
-                  onSelectCollection('trash');
-                  onSelectTag(null);
-                }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'trash')}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Trash2 className={`h-3.5 w-3.5 ${selectedCollectionId === 'trash' ? 'text-red-500' : 'text-slate-500'}`} />
-                  <span>Trash bin</span>
-                </div>
-                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'trash')}`}>
-                  {getItemCount('trash')}
-                </span>
-              </div>
             </Accordion.Content>
           </Accordion.Item>
 

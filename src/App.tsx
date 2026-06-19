@@ -200,8 +200,6 @@ export default function App() {
 
   const getCollectionName = () => {
     if (selectedCollectionId === 'duplicates') return 'Duplicate Entries';
-    if (selectedCollectionId === 'unfiled') return 'Unfiled Documents';
-    if (selectedCollectionId === 'trash') return 'Trash Bin';
     if (selectedCollectionId === 'no-pdf') return 'No PDF Attachment';
     if (selectedCollectionId === 'no-extraction') return 'No Extraction';
     if (selectedCollectionId === 'nonstandard-citekey') return 'Nonstandard Citation Key';
@@ -345,10 +343,6 @@ export default function App() {
         items={items}
         onSelectItem={(id) => {
           setSelectedItemId(id);
-          const found = items.find(it => it.id === id);
-          if (found && found.inTrash) {
-            setSelectedCollectionId('trash');
-          }
         }}
         commands={commandsList}
       />
