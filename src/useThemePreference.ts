@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
+import { clientStorageKey } from './clientStorage';
 
 export const APP_THEMES = ['code-dark', 'code-light', 'monokai'] as const;
 export type AppTheme = typeof APP_THEMES[number];
 
-const THEME_STORAGE_KEY = 'zotero_theme';
+const THEME_STORAGE_KEY = clientStorageKey('theme');
 const DEFAULT_APP_THEME: AppTheme = 'code-dark';
 const AppThemeSchema = z.enum(APP_THEMES);
 

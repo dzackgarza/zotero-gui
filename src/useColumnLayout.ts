@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { z } from 'zod';
+import { clientStorageKey } from './clientStorage';
 import { DEFAULT_COLUMNS } from './data/samples';
 import type { ColumnDefinition } from './types';
 
-const COLUMN_STORAGE_KEY = 'zotero_columns';
+const COLUMN_STORAGE_KEY = clientStorageKey('columns');
 
 const StoredColumnSchema = z.object({
   key: z.string(),

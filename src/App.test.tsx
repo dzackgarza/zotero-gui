@@ -65,6 +65,31 @@ describe('App library loading', () => {
     expect(screen.getByText('Maynard')).toBeInTheDocument();
   });
 
+  it('ignores unversioned persisted column state from earlier browser sessions', async () => {
+    localStorage.setItem('zotero_columns', JSON.stringify([
+      { key: 'title', label: 'Title', visible: true, width: 280 },
+      { key: 'creators_compact', label: 'Creators', visible: true, width: 180 },
+    ]));
+
+    renderAppWithLibraryResponse(libraryResponse({
+      items: [{
+        id: 'ITEM123',
+        itemType: 'book',
+        title: 'Persisted State Regression',
+        creators: [],
+        tags: [],
+        notes: [],
+        attachments: [],
+        collections: [],
+        dateAdded: '2026-06-18T00:00:00Z',
+        dateModified: '2026-06-18T00:00:00Z',
+      }],
+      collections: [],
+    }));
+
+    expect(await screen.findByText('Persisted State Regression')).toBeInTheDocument();
+  });
+
   it('surfaces /api/library HTTP failures instead of corrupting item state', async () => {
     renderAppWithLibraryResponse(libraryResponse({ error: 'Database query failed' }, 500));
 
