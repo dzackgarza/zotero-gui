@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   countItemsForCollection,
+  nonstandardCitekeyItems,
   selectItemsForCollection,
   selectVisibleLibraryItems,
 } from './librarySelectors';
@@ -28,6 +29,7 @@ function item(
   collections: string[],
   tags: string[],
   inTrash: boolean,
+  citekey: string | null = id,
 ): ZoteroItem {
   return {
     id,
@@ -36,7 +38,7 @@ function item(
     creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
     publicationTitle: 'Collected Notes',
     date: '1843',
-    citekey: id,
+    citekey: citekey === null ? undefined : citekey,
     tags,
     notes: [],
     attachments: [],
@@ -88,6 +90,55 @@ describe('library selectors', () => {
     expect(selected.map(selectedItem => selectedItem.id)).toEqual([
       'root-item',
       'child-item',
+    ]);
+  });
+
+  it('accepts generated citekeys with standard disambiguation suffixes', () => {
+    const manyAuthorCreators = [
+      { firstName: 'Alice', lastName: 'Adams', creatorType: 'author' },
+      { firstName: 'Bruno', lastName: 'Baker', creatorType: 'author' },
+      { firstName: 'Camille', lastName: 'Clark', creatorType: 'author' },
+      { firstName: 'Dorian', lastName: 'Davis', creatorType: 'author' },
+      { firstName: 'Emery', lastName: 'Evans', creatorType: 'author' },
+    ];
+    const moriItems = [
+      item('valid-base', 'Mori base citekey', [], [], false, 'Mor19'),
+      item('valid-suffix', 'Mori suffix citekey', [], [], false, 'Mor19a'),
+      item('valid-uppercase-suffix', 'Mori uppercase suffix citekey', [], [], false, 'MOR19B'),
+      item('invalid-full-year', 'Mori full year citekey', [], [], false, 'Mor2019'),
+      item('invalid-long-author', 'Mori long author citekey', [], [], false, 'Mori19'),
+      item('missing-citekey', 'Mori missing citekey', [], [], false, null),
+      item('trashed-invalid', 'Mori trashed citekey', [], [], true, 'Mori2019'),
+    ].map(citekeyItem => ({
+      ...citekeyItem,
+      creators: [{ firstName: 'Shigefumi', lastName: 'Mori', creatorType: 'author' }],
+      date: '2019',
+    }));
+    const citekeyItems = [
+      ...moriItems,
+      {
+        ...item('valid-many-author-suffix', 'Many author suffix citekey', [], [], false, 'abc+20c'),
+        creators: manyAuthorCreators,
+        date: '2020',
+      },
+      {
+        ...item('invalid-many-author-missing-plus', 'Many author citekey without plus', [], [], false, 'abc20c'),
+        creators: manyAuthorCreators,
+        date: '2020',
+      },
+    ];
+
+    expect(nonstandardCitekeyItems(citekeyItems).map(selectedItem => selectedItem.id)).toEqual([
+      'invalid-full-year',
+      'invalid-long-author',
+      'missing-citekey',
+      'invalid-many-author-missing-plus',
+    ]);
+    expect(selectItemsForCollection(citekeyItems, collections, 'nonstandard-citekey').map(selectedItem => selectedItem.id)).toEqual([
+      'invalid-full-year',
+      'invalid-long-author',
+      'missing-citekey',
+      'invalid-many-author-missing-plus',
     ]);
   });
 });

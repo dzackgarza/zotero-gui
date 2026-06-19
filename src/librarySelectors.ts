@@ -112,7 +112,14 @@ export function itemsWithoutExtraction(items: ZoteroItem[]): ZoteroItem[] {
 export function nonstandardCitekeyItems(items: ZoteroItem[]): ZoteroItem[] {
   return activeLibraryItems(items).filter(item => {
     const standard = getStandardCitekey(item).toLowerCase().trim();
-    return !item.citekey || item.citekey.toLowerCase().trim() !== standard;
+    const citekey = item.citekey?.toLowerCase().trim();
+
+    if (!standard || !citekey) return true;
+
+    const suffix = citekey.slice(standard.length);
+    const matchesStandard = citekey === standard || (citekey.startsWith(standard) && /^[a-z]$/.test(suffix));
+
+    return !matchesStandard;
   });
 }
 
