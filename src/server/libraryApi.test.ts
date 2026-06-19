@@ -3,7 +3,8 @@ import { AddressInfo } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LibraryPayloadSchema } from '../schemas';
-import { createApp, queryLibrary } from './server';
+import { createApp } from './server';
+import { assertZoteroDatabaseContract, queryLibrary, ZoteroDatabaseContractError } from './zoteroRepository';
 
 let server: Server;
 let baseUrl: string;
@@ -63,9 +64,77 @@ function createFixtureDb(): DatabaseSync {
   return db;
 }
 
+function expectContractFailure(db: DatabaseSync, kind: ZoteroDatabaseContractError['kind']): void {
+  try {
+    assertZoteroDatabaseContract(db);
+  } catch (error) {
+    expect(error).toBeInstanceOf(ZoteroDatabaseContractError);
+    if (error instanceof ZoteroDatabaseContractError) {
+      expect(error.kind).toBe(kind);
+    }
+    return;
+  }
+  throw new Error(`expected Zotero DB contract failure ${kind}`);
+}
+
+describe('Zotero DB contract preflight', () => {
+  it('accepts the supported fixture schema and mapped rows', () => {
+    const db = createFixtureDb();
+    assertZoteroDatabaseContract(db);
+    const payload = queryLibrary(db);
+    expect(payload.items.map(item => item.id)).toEqual(['ATTACH99', 'TRASH123', 'BOOK1234']);
+  });
+
+  it('fails before serving when required tables, columns, or field contracts are missing', () => {
+    const missingTable = createFixtureDb();
+    missingTable.exec('DROP TABLE fields');
+    expectContractFailure(missingTable, 'missing_table');
+
+    const missingColumn = createFixtureDb();
+    missingColumn.exec(`
+      ALTER TABLE items RENAME TO items_old;
+      CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT NOT NULL, itemTypeID INTEGER NOT NULL, libraryID INTEGER NOT NULL, dateAdded TEXT NOT NULL);
+      INSERT INTO items SELECT itemID, key, itemTypeID, libraryID, dateAdded FROM items_old;
+      DROP TABLE items_old;
+    `);
+    expectContractFailure(missingColumn, 'missing_column');
+
+    const missingField = createFixtureDb();
+    missingField.exec("DELETE FROM fields WHERE fieldName = 'url'");
+    expectContractFailure(missingField, 'missing_field');
+  });
+
+  it('fails before serving on unsupported top-level item types and broken links', () => {
+    const unsupportedItemType = createFixtureDb();
+    unsupportedItemType.exec(`
+      INSERT INTO itemTypes VALUES (99, 'mysteryType');
+      INSERT INTO items VALUES (99, 'MYSTERY1', 99, 1, '2026-02-01 00:00:00', '2026-02-02 00:00:00');
+    `);
+    expectContractFailure(unsupportedItemType, 'unsupported_item_type');
+
+    const brokenCollection = createFixtureDb();
+    brokenCollection.exec('UPDATE collections SET parentCollectionID = 999 WHERE collectionID = 101');
+    expectContractFailure(brokenCollection, 'broken_link');
+  });
+
+  it('fails before serving when representative rows do not match owned row schemas', () => {
+    const malformedRows = createFixtureDb();
+    malformedRows.exec(`
+      DELETE FROM collectionItems;
+      DELETE FROM collections;
+      ALTER TABLE collections RENAME TO collections_old;
+      CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT, parentCollectionID INTEGER);
+      INSERT INTO collections VALUES (100, 1, NULL, NULL);
+      DROP TABLE collections_old;
+    `);
+    expectContractFailure(malformedRows, 'invalid_rows');
+  });
+});
+
 describe('/api/library', () => {
   beforeAll(async () => {
     const db = createFixtureDb();
+    assertZoteroDatabaseContract(db);
     const app = createApp({
       loadLibrary: () => queryLibrary(db),
       resolverPlugins: [],

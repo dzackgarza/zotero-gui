@@ -210,7 +210,9 @@ export async function importBibTeXToZotero(
       collection_keys: collections,
     }),
   });
-  invariant(response.ok, `Zotero BibTeX import failed with HTTP ${response.status}: ${await response.text()}`);
+  if (!response.ok) {
+    throw new Error(`Zotero BibTeX import failed with HTTP ${response.status}: ${await response.text()}`);
+  }
   return ZoteroImportResultSchema.parse(await response.json());
 }
 
