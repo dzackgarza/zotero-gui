@@ -442,7 +442,7 @@ export default function InspectorPanel({
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-red-500" />
                     <span className="font-semibold text-xs text-slate-200 truncate max-w-lg">
-                      {pdfReaderUrl} — Mock Academic PDF Viewer
+                      {pdfReaderUrl}
                     </span>
                   </div>
                   <Dialog.Close asChild>
