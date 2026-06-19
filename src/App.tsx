@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal } from 'lucide-react';
+import { RefreshCw, Terminal } from 'lucide-react';
 import { ColumnDefinition, AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
@@ -23,6 +23,7 @@ export default function App() {
     collections,
     isLoading,
     libraryLoadError,
+    status: libraryStatus,
     reloadLibrary,
   } = useLibraryApi();
 
@@ -263,8 +264,24 @@ export default function App() {
     });
   };
 
-  if (libraryLoadError) {
-    throw libraryLoadError;
+  if (libraryStatus === 'failed') {
+    return (
+      <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
+        <section className="w-full max-w-2xl border border-red-500/40 bg-[#252526] p-6 shadow-2xl">
+          <h1 className="text-lg font-semibold text-red-400">Zotero Library Load Failed</h1>
+          <p className="mt-3 font-mono text-xs text-red-200">
+            {libraryLoadError.message}
+          </p>
+          <button
+            onClick={reloadLibrary}
+            className="mt-5 inline-flex items-center gap-2 border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reload Library
+          </button>
+        </section>
+      </div>
+    );
   }
 
   const filteredLibraryItems = selectVisibleLibraryItems({
@@ -356,13 +373,7 @@ export default function App() {
           <div className="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
           <div className="w-3 h-3 rounded-full bg-[#27c93f]"></div>
         </div>
-        <div className="flex space-x-3 text-[#969696] text-[11px] font-sans">
-          <span className="hover:text-white cursor-default">File</span>
-          <span className="hover:text-white cursor-default">Edit</span>
-          <span className="hover:text-white cursor-default">View</span>
-          <span className="hover:text-white cursor-default">Tools</span>
-          <span className="hover:text-white cursor-default">Help</span>
-        </div>
+        <div className="flex min-w-32" />
         <div className="flex-grow text-center text-xs text-[#808080] font-sans font-medium truncate">
           {isLoading ? 'Zotero Pro — Loading…' : `Zotero Pro — My Library (${items.length} items)`}
         </div>

@@ -1,6 +1,19 @@
 import React from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { ChevronDown, ChevronRight, ChevronUp, Eye, Layers, RotateCcw } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  FileText,
+  Mic,
+  NotebookText,
+  Paperclip,
+  StickyNote,
+  Eye,
+  Layers,
+  RotateCcw,
+} from 'lucide-react';
 import { formatCreatorsCompact } from '../utils/fuzzy';
 import type { AdvancedSearchSettings, ColumnDefinition, ZoteroItem } from '../types';
 import type { SortKey } from '../librarySelectors';
@@ -182,11 +195,11 @@ export default function LibraryTable({
                                     </div>
                                   )}
                                 </div>
-                                <span className="shrink-0 bg-transparent">
-                                  {item.itemType === 'book' && '📚'}
-                                  {item.itemType === 'journalArticle' && '📄'}
-                                  {item.itemType === 'conferencePaper' && '🎤'}
-                                  {item.itemType !== 'book' && item.itemType !== 'journalArticle' && item.itemType !== 'conferencePaper' && '📝'}
+                                <span className="shrink-0 bg-transparent text-slate-400">
+                                  {item.itemType === 'book' && <BookOpen className="h-3.5 w-3.5" />}
+                                  {item.itemType === 'journalArticle' && <FileText className="h-3.5 w-3.5" />}
+                                  {item.itemType === 'conferencePaper' && <Mic className="h-3.5 w-3.5" />}
+                                  {item.itemType !== 'book' && item.itemType !== 'journalArticle' && item.itemType !== 'conferencePaper' && <NotebookText className="h-3.5 w-3.5" />}
                                 </span>
                                 <span className={`truncate font-medium ${theme === 'code-dark' ? (isSelected ? 'text-white' : 'text-[#cccccc]') : 'text-slate-100'}`} title={item.title}>
                                   {item.title || 'Untitled Record'}
@@ -219,7 +232,7 @@ export default function LibraryTable({
                           <td key={column.key} className={`px-3.5 py-1.5 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`} style={{ maxWidth: column.width ? `${column.width}px` : '20rem' }}>
                             {column.key === 'title' ? (
                               <div className="flex items-center gap-2 pl-6">
-                                <span className="shrink-0 text-emerald-500">📎</span>
+                                <Paperclip className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                                 <span className="truncate opacity-80" title={attachment.title}>{attachment.title}</span>
                               </div>
                             ) : null}
@@ -233,7 +246,7 @@ export default function LibraryTable({
                           <td key={column.key} className={`px-3.5 py-1.5 truncate text-[11px] font-sans border-r ${theme === 'code-dark' ? 'border-[#2b2b2b]' : 'border-slate-900/40'}`} style={{ maxWidth: column.width ? `${column.width}px` : '20rem' }}>
                             {column.key === 'title' ? (
                               <div className="flex items-center gap-2 pl-6">
-                                <span className="shrink-0 text-amber-500">🗒️</span>
+                                <StickyNote className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                                 <span className="truncate opacity-80" title={note.note}>{note.note}</span>
                               </div>
                             ) : null}

@@ -2,23 +2,52 @@ import { useCallback, useEffect, useState } from 'react';
 import { LibraryPayloadSchema } from './schemas';
 import type { Collection, ZoteroItem } from './types';
 
-export interface LibraryApiState {
-  items: ZoteroItem[];
-  collections: Collection[];
-  isLoading: boolean;
-  libraryLoadError: Error | null;
+type LibraryApiReload = {
   reloadLibrary: () => void;
-}
+};
+
+type LibraryApiSnapshot =
+  | {
+      status: 'loading';
+      items: [];
+      collections: [];
+      isLoading: true;
+      libraryLoadError: null;
+    }
+  | {
+      status: 'ready';
+      items: ZoteroItem[];
+      collections: Collection[];
+      isLoading: false;
+      libraryLoadError: null;
+    }
+  | {
+      status: 'failed';
+      items: [];
+      collections: [];
+      isLoading: false;
+      libraryLoadError: Error;
+    };
+
+export type LibraryApiState = LibraryApiSnapshot & LibraryApiReload;
 
 export function useLibraryApi(): LibraryApiState {
-  const [items, setItems] = useState<ZoteroItem[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [libraryLoadError, setLibraryLoadError] = useState<Error | null>(null);
+  const [apiState, setApiState] = useState<LibraryApiSnapshot>({
+    status: 'loading',
+    items: [],
+    collections: [],
+    isLoading: true,
+    libraryLoadError: null,
+  });
 
   const reloadLibrary = useCallback(() => {
-    setIsLoading(true);
-    setLibraryLoadError(null);
+    setApiState({
+      status: 'loading',
+      items: [],
+      collections: [],
+      isLoading: true,
+      libraryLoadError: null,
+    });
 
     fetch('/api/library')
       .then(response => {
@@ -29,12 +58,22 @@ export function useLibraryApi(): LibraryApiState {
       })
       .then(payload => {
         const parsed = LibraryPayloadSchema.parse(payload);
-        setItems(parsed.items);
-        setCollections(parsed.collections);
-        setIsLoading(false);
+        setApiState({
+          status: 'ready',
+          items: parsed.items,
+          collections: parsed.collections,
+          isLoading: false,
+          libraryLoadError: null,
+        });
       })
-      .catch((error: Error) => {
-        setLibraryLoadError(error);
+      .catch((error: unknown) => {
+        setApiState({
+          status: 'failed',
+          items: [],
+          collections: [],
+          isLoading: false,
+          libraryLoadError: error instanceof Error ? error : new Error(String(error)),
+        });
       });
   }, []);
 
@@ -42,11 +81,21 @@ export function useLibraryApi(): LibraryApiState {
     reloadLibrary();
   }, [reloadLibrary]);
 
-  return {
-    items,
-    collections,
-    isLoading,
-    libraryLoadError,
-    reloadLibrary,
-  };
+  switch (apiState.status) {
+    case 'loading':
+      return {
+        ...apiState,
+        reloadLibrary,
+      };
+    case 'ready':
+      return {
+        ...apiState,
+        reloadLibrary,
+      };
+    case 'failed':
+      return {
+        ...apiState,
+        reloadLibrary,
+      };
+  }
 }

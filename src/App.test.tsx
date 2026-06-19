@@ -68,14 +68,15 @@ describe('App library loading', () => {
   it('surfaces /api/library HTTP failures instead of corrupting item state', async () => {
     renderAppWithLibraryResponse(libraryResponse({ error: 'Database query failed' }, 500));
 
-    expect(await screen.findByText('Application Render Error')).toBeInTheDocument();
-    expect(screen.getByText('Error: Library API failed with HTTP 500')).toBeInTheDocument();
+    expect(await screen.findByText('Zotero Library Load Failed')).toBeInTheDocument();
+    expect(screen.getByText('Library API failed with HTTP 500')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reload library/i })).toBeInTheDocument();
   });
 
   it('rejects malformed /api/library payloads before rendering with non-array state', async () => {
     renderAppWithLibraryResponse(libraryResponse({ error: 'Database query failed' }));
 
-    expect(await screen.findByText('Application Render Error')).toBeInTheDocument();
+    expect(await screen.findByText('Zotero Library Load Failed')).toBeInTheDocument();
     expect(screen.getByText(/items/)).toBeInTheDocument();
   });
 });
