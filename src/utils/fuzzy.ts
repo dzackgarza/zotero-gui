@@ -1,4 +1,84 @@
-import { ZoteroItem, AdvancedSearchSettings } from '../types';
+import * as CSL from 'citeproc';
+import fold2ascii from 'fold-to-ascii';
+import { transliterate } from 'transliteration';
+import { ZoteroItem, AdvancedSearchSettings, Creator } from '../types';
+
+const BBT_UNSAFE_CITEKEY_CHARS = /["#%'(),={}~\s\uFFFD]/g;
+
+type CreatorBucket = 'author' | 'editor' | 'translator' | 'collaborator';
+
+function bbtTransliterate(value: string): string {
+  return fold2ascii.foldMaintaining(transliterate(value, { unknown: '\uFFFD' }));
+}
+
+function stripCreatorName(value: string): string {
+  return value.replace(/^"(.*)"$/, '$1');
+}
+
+function bbtFamilyName(creator: Creator): string {
+  const name = {
+    family: stripCreatorName(creator.lastName || ''),
+    given: stripCreatorName(creator.firstName || ''),
+  };
+  CSL.parseParticles(name);
+  return bbtTransliterate(name.family);
+}
+
+function bbtCreatorBucket(creator: Creator): CreatorBucket {
+  const creatorType = creator.creatorType.toLowerCase();
+
+  if (creatorType === 'author') return 'author';
+  if (creatorType === 'editor' || creatorType === 'serieseditor') return 'editor';
+  if (creatorType === 'translator') return 'translator';
+  return 'collaborator';
+}
+
+function bbtAuthors(item: ZoteroItem): string[] {
+  const buckets: Record<CreatorBucket, string[]> = {
+    author: [],
+    editor: [],
+    translator: [],
+    collaborator: [],
+  };
+
+  for (const creator of item.creators) {
+    const name = bbtFamilyName(creator);
+    if (!name) continue;
+    buckets[bbtCreatorBucket(creator)].push(name);
+  }
+
+  for (const bucket of ['author', 'editor', 'translator', 'collaborator'] as const) {
+    if (buckets[bucket].length > 0) return buckets[bucket];
+  }
+
+  return [];
+}
+
+function bbtAuthorsAlpha(item: ZoteroItem): string {
+  const authors = bbtAuthors(item);
+
+  switch (authors.length) {
+    case 0:
+      return '';
+    case 1:
+      return authors[0].substring(0, 3);
+    case 2:
+    case 3:
+    case 4:
+      return authors.map(author => author.substring(0, 1)).join('');
+    default:
+      return `${authors.slice(0, 3).map(author => author.substring(0, 1)).join('')}+`;
+  }
+}
+
+function bbtCleanCitekey(value: string): string {
+  return value.replace(BBT_UNSAFE_CITEKEY_CHARS, '').trim();
+}
+
+function bbtYearSubstring(item: ZoteroItem): string {
+  const year = item.date?.match(/\d{4}/)?.[0] || '';
+  return year.slice(2, 6);
+}
 
 /**
  * Fuzzy match score calculation (simple Jaro-Winkler like subsequence score or token subset check)
@@ -21,41 +101,11 @@ export function fuzzyMatches(text: string, query: string, matchCase: boolean = f
 }
 
 /**
- * Performs comprehensive scoped filtering on items based on search configs
+ * Mirrors the fixed Better BibTeX formula used by this library: authorsAlpha + year.substring(3,4).
  */
 export function getStandardCitekey(item: ZoteroItem): string {
-  if (!item.creators || item.creators.length === 0) return '';
-
-  const authors = item.creators.filter(c => c.creatorType === 'author');
-  const targetCreators = authors.length > 0 ? authors : item.creators;
-
-  const lastNames = targetCreators
-    .map(c =>
-      (c.lastName || '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, ''),
-    )
-    .filter(Boolean);
-
-  if (lastNames.length === 0) return '';
-
-  let authorsAlpha = '';
-  if (lastNames.length === 1) {
-    authorsAlpha = lastNames[0].substring(0, 3);
-  } else if (lastNames.length >= 2 && lastNames.length <= 4) {
-    authorsAlpha = lastNames.map(name => name[0]).join('');
-  } else {
-    authorsAlpha = lastNames.slice(0, 3).map(name => name[0]).join('') + '+';
-  }
-
-  const dateStr = item.date || '';
-  const match = dateStr.match(/\d{4}/);
-  const year = match ? match[0] : '';
-  const yearSuffix = year ? year.substring(2, 4) : '';
-
-  return authorsAlpha + yearSuffix;
+  if (item.creators.length === 0) return '';
+  return bbtCleanCitekey(`${bbtAuthorsAlpha(item)}${bbtYearSubstring(item)}`);
 }
 
 export function filterZoteroItems(

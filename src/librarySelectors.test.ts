@@ -117,12 +117,54 @@ describe('library selectors', () => {
     const citekeyItems = [
       ...moriItems,
       {
+        ...item('valid-apostrophe-single-author', 'Introduction to Quadratic Forms', [], [], false, 'OM73'),
+        creators: [{ firstName: 'O. T.', lastName: "O'Meara", creatorType: 'author' }],
+        date: '1973',
+      },
+      {
+        ...item('valid-hyphenated-single-author', 'Problems and Solutions in Mathematics', [], [], false, 'Ta-98'),
+        creators: [{ firstName: 'Kuo-Tsai', lastName: 'Ta-Tsien', creatorType: 'author' }],
+        date: '1998',
+      },
+      {
+        ...item('valid-initials-as-family', 'Problems in mathematical analysis', [], [], false, 'W.01'),
+        creators: [{ firstName: '', lastName: 'W. J. Kaczor', creatorType: 'author' }],
+        date: '2001',
+      },
+      {
+        ...item('valid-leading-particle-two-authors', 'A course in combinatorics', [], [], false, 'LW01'),
+        creators: [
+          { firstName: 'J. H.', lastName: 'van Lint', creatorType: 'author' },
+          { firstName: 'R. M.', lastName: 'Wilson', creatorType: 'author' },
+        ],
+        date: '2001',
+      },
+      {
+        ...item('valid-leading-particle-three-authors', 'The Dual Complex of Singularities', [], [], false, 'FKX12'),
+        creators: [
+          { firstName: 'Tommaso', lastName: 'de Fernex', creatorType: 'author' },
+          { firstName: 'Janos', lastName: 'Kollár', creatorType: 'author' },
+          { firstName: 'Chenyang', lastName: 'Xu', creatorType: 'author' },
+        ],
+        date: '2012',
+      },
+      {
+        ...item('valid-leading-particle-single-author', 'Moduli of Products of Curves', [], [], false, 'Ops05'),
+        creators: [{ firstName: 'Stefan', lastName: 'van Opstall', creatorType: 'author' }],
+        date: '2005',
+      },
+      {
         ...item('valid-diacritic-initials', 'Basic algebraic geometry', [], [], false, 'SR94'),
         creators: [
           { firstName: 'Igorʹ Rostislavovič', lastName: 'Šafarevič', creatorType: 'author' },
           { firstName: 'Miles', lastName: 'Reid', creatorType: 'author' },
         ],
         date: '1994',
+      },
+      {
+        ...item('valid-polish-transliteration', 'Resolution of Singularities of Analytic Spaces', [], [], false, 'Wlo09'),
+        creators: [{ firstName: 'Jarosław', lastName: 'Włodarczyk', creatorType: 'author' }],
+        date: '2009',
       },
       {
         ...item('valid-many-author-suffix', 'Many author suffix citekey', [], [], false, 'abc+20c'),
