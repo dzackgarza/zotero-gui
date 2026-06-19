@@ -17,11 +17,12 @@ import {
 import { formatCreatorsCompact } from '../utils/fuzzy';
 import type { AdvancedSearchSettings, ColumnDefinition, ZoteroItem } from '../types';
 import type { SortKey } from '../librarySelectors';
+import type { AppTheme } from '../useThemePreference';
 
 interface LibraryTableProps {
   columns: ColumnDefinition[];
   items: ZoteroItem[];
-  theme: string;
+  theme: AppTheme;
   tableClass: string;
   selectedItemId: string | null;
   expandedItems: Set<string>;
@@ -33,11 +34,11 @@ interface LibraryTableProps {
   onSelectItem: (id: string) => void;
   onResetFilters: (settings: AdvancedSearchSettings) => void;
   onToggleExpand: (id: string, event: React.MouseEvent) => void;
-  onColumnDragStart: (event: React.DragEvent, columnKey: string) => void;
-  onColumnDragOver: (event: React.DragEvent, columnKey: string) => void;
-  onColumnDrop: (event: React.DragEvent, columnKey: string) => void;
+  onColumnDragStart: (event: React.DragEvent, columnKey: ColumnDefinition['key']) => void;
+  onColumnDragOver: (event: React.DragEvent, columnKey: ColumnDefinition['key']) => void;
+  onColumnDrop: (event: React.DragEvent, columnKey: ColumnDefinition['key']) => void;
   onHeaderSort: (key: SortKey) => void;
-  onResizeStart: (event: React.MouseEvent, columnKey: string, currentWidth: number) => void;
+  onResizeStart: (event: React.MouseEvent, columnKey: ColumnDefinition['key'], currentWidth: number) => void;
   onToggleColumn: (key: ColumnDefinition['key']) => void;
   onSetAllColumns: (visible: boolean) => void;
   onResetColumns: () => void;

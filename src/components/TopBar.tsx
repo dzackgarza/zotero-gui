@@ -3,6 +3,7 @@ import { Search, Sliders, Plus, Check } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AdvancedSearchSettings } from '../types';
+import { APP_THEMES, type AppTheme } from '../useThemePreference';
 
 interface TopBarProps {
   searchSettings: AdvancedSearchSettings;
@@ -11,8 +12,8 @@ interface TopBarProps {
   onOpenPalette: () => void;
   activeCollectionName: string;
   onOpenAddByIdentifier: () => void;
-  theme: string;
-  setTheme: (t: string) => void;
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
 }
 
 export default function TopBar({
@@ -116,7 +117,7 @@ export default function TopBar({
                 align="end"
                 className="z-40 w-32 rounded bg-slate-900 border border-slate-800 p-0.5 text-[10px] font-mono shadow-xl text-slate-300 focus:outline-hidden"
               >
-                {['code-dark', 'code-light', 'monokai'].map(t => (
+                {APP_THEMES.map(t => (
                   <DropdownMenu.Item
                     key={t}
                     onSelect={() => setTheme(t)}

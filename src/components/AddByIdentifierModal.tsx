@@ -6,13 +6,14 @@ import {
   ResolverPluginMetadataListSchema,
   type ResolverPluginMetadata,
 } from '../schemas';
+import type { AppTheme } from '../useThemePreference';
 
 interface AddByIdentifierModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddResolvedItem: () => void;
   collections: string[];
-  theme: string;
+  theme: AppTheme;
 }
 
 export default function AddByIdentifierModal({

@@ -7,6 +7,7 @@ import {
 import * as Accordion from '@radix-ui/react-accordion';
 import { Collection, ZoteroItem } from '../types';
 import { countItemsForCollection, selectTagCloud } from '../librarySelectors';
+import type { AppTheme } from '../useThemePreference';
 
 interface SidebarCollectionsProps {
   collections: Collection[];
@@ -15,7 +16,7 @@ interface SidebarCollectionsProps {
   items: ZoteroItem[];
   selectedTag: string | null;
   onSelectTag: (tag: string | null) => void;
-  theme: string;
+  theme: AppTheme;
 }
 
 export default function SidebarCollections({

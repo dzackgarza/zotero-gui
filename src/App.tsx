@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Terminal } from 'lucide-react';
-import { ColumnDefinition, AdvancedSearchSettings } from './types';
+import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
 import { formatCreatorsCompact } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
+import { useColumnLayout } from './useColumnLayout';
+import { THEME_CLASSES, useThemePreference } from './useThemePreference';
 
 // Top level components
 import TopBar from './components/TopBar';
@@ -27,79 +29,26 @@ export default function App() {
     reloadLibrary,
   } = useLibraryApi();
 
-  const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
-    const savedStr = localStorage.getItem('zotero_columns');
-    if (!savedStr) return DEFAULT_COLUMNS;
-    try {
-      const saved = JSON.parse(savedStr) as ColumnDefinition[];
-      const merged = [...saved];
-      DEFAULT_COLUMNS.forEach(defCol => {
-        if (!merged.some(c => c.key === defCol.key)) {
-          merged.push(defCol);
-        }
-      });
-      return merged;
-    } catch (e) {
-      return DEFAULT_COLUMNS;
-    }
-  });
-
-  const [theme, setTheme] = useState<string>(() => {
-    return localStorage.getItem('zotero_theme') || 'code-dark';
-  });
+  const [theme, setTheme] = useThemePreference();
+  const {
+    columns,
+    draggedColKey,
+    resizingCol,
+    handleColumnDragStart,
+    handleColumnDragOver,
+    handleColumnDrop,
+    handleResizeStart,
+    moveColumn,
+    resetColumns,
+    setAllColumns,
+    toggleColumn,
+  } = useColumnLayout();
 
   // --- UI Interactivity/Focus States ---
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-
-  // Resizable columns state
-  const [resizingCol, setResizingCol] = useState<string | null>(null);
-  const [startX, setStartX] = useState<number>(0);
-  const [startWidth, setStartWidth] = useState<number>(0);
-
-  // Column reordering states & handlers
-  const [draggedColKey, setDraggedColKey] = useState<string | null>(null);
-
-  const handleColumnDragStart = (e: React.DragEvent, colKey: string) => {
-    setDraggedColKey(colKey);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', colKey);
-  };
-
-  const handleColumnDragOver = (e: React.DragEvent, colKey: string) => {
-    e.preventDefault();
-  };
-
-  const handleColumnDrop = (e: React.DragEvent, targetColKey: string) => {
-    e.preventDefault();
-    if (!draggedColKey || draggedColKey === targetColKey) return;
-
-    setColumns(prev => {
-      const draggedIdx = prev.findIndex(c => c.key === draggedColKey);
-      const targetIdx = prev.findIndex(c => c.key === targetColKey);
-      if (draggedIdx === -1 || targetIdx === -1) return prev;
-
-      const updated = [...prev];
-      const [removed] = updated.splice(draggedIdx, 1);
-      updated.splice(targetIdx, 0, removed);
-      return updated;
-    });
-    setDraggedColKey(null);
-  };
-
-  const moveColumn = (index: number, direction: 'up' | 'down') => {
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= columns.length) return;
-    setColumns(prev => {
-      const updated = [...prev];
-      const temp = updated[index];
-      updated[index] = updated[newIndex];
-      updated[newIndex] = temp;
-      return updated;
-    });
-  };
 
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
@@ -126,14 +75,6 @@ export default function App() {
 
   // Notifications
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    localStorage.setItem('zotero_columns', JSON.stringify(columns));
-  }, [columns]);
-
-  useEffect(() => {
-    localStorage.setItem('zotero_theme', theme);
-  }, [theme]);
 
   const [paletteInitialInput, setPaletteInitialInput] = useState('');
 
@@ -163,26 +104,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, []);
 
-  const toggleColumn = (key: string) => {
-    setColumns(prev => prev.map(col => {
-      if (col.key === key) {
-        return { ...col, visible: !col.visible };
-      }
-      return col;
-    }));
-  };
-
-  const setAllColumns = (visible: boolean) => {
-    setColumns(prev => prev.map(col => {
-      if (col.key === 'title') return { ...col, visible: true };
-      return { ...col, visible };
-    }));
-  };
-
-  const resetColumns = () => {
-    setColumns(DEFAULT_COLUMNS);
-  };
-
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -197,32 +118,6 @@ export default function App() {
       return next;
     });
   };
-
-  const handleResizeStart = (e: React.MouseEvent, colKey: string, currentWidth: number) => {
-    e.stopPropagation();
-    setResizingCol(colKey);
-    setStartX(e.clientX);
-    setStartWidth(currentWidth || 150);
-  };
-
-  useEffect(() => {
-    if (!resizingCol) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      const delta = e.clientX - startX;
-      setColumns(prev => prev.map(c => 
-        c.key === resizingCol 
-          ? { ...c, width: Math.max(50, startWidth + delta) } 
-          : c
-      ));
-    };
-    const handleMouseUp = () => setResizingCol(null);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingCol, startX, startWidth]);
 
   const handleAddResolvedItem = () => {
     reloadLibrary();
@@ -324,47 +219,10 @@ export default function App() {
     resetColumns,
   });
 
-  // Visual Theme mapping helper
-  const getThemeClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-slate-50 text-slate-900 border-zinc-200 scheme-light';
-      case 'monokai':
-        return 'bg-zinc-950 text-amber-100 border-neutral-800 font-mono';
-      case 'code-dark':
-      default:
-        return 'bg-[#1e1e1e] text-[#cccccc] border-[#2b2b2b] scheme-dark';
-    }
-  };
-
-  const getSubpanelClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-zinc-100 border-r border-zinc-200';
-      case 'monokai':
-        return 'bg-stone-900 border-r border-stone-800';
-      case 'code-dark':
-      default:
-        return 'bg-[#252526] border-r border-[#2b2b2b]';
-    }
-  };
-
-  const getTableClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-white text-slate-800 divide-zinc-200';
-      case 'monokai':
-        return 'bg-zinc-900 text-stone-250 divide-stone-800';
-      case 'code-dark':
-      default:
-        return 'bg-[#1e1e1e] text-[#cccccc] divide-[#2b2b2b]';
-    }
-  };
-
   const activeSelectedItem = items.find(it => it.id === selectedItemId) || null;
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden text-xs ${getThemeClass()}`}>
+    <div className={`h-screen flex flex-col overflow-hidden text-xs ${THEME_CLASSES[theme].app}`}>
       
       {/* Top Menu Bar */}
       <div className="h-9 bg-[#323233] flex items-center px-3 border-b border-[#2b2b2b] text-xs space-x-4 shrink-0 select-none">
@@ -408,7 +266,7 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         
         {/* 2. Left Activity rail & Sidebar Explorer */}
-        <div className={`w-60 flex flex-col shrink-0 ${getSubpanelClass()}`}>
+        <div className={`w-60 flex flex-col shrink-0 ${THEME_CLASSES[theme].subpanel}`}>
           <SidebarCollections
             collections={collections}
             selectedCollectionId={selectedCollectionId}
@@ -421,7 +279,7 @@ export default function App() {
         </div>
 
         {/* 3. Main Central Bibliographic Table Area */}
-        <div className={`flex-1 flex flex-col min-w-0 relative ${theme === 'code-dark' ? 'bg-[#1e1e1e]' : 'bg-slate-950/40'}`}>
+        <div className={`flex-1 flex flex-col min-w-0 relative ${THEME_CLASSES[theme].workspace}`}>
           
           {/* List operations bar */}
           <div className={`h-8 px-3.5 border-b flex items-center justify-between text-[11px] shrink-0 ${theme === 'code-dark' ? 'bg-[#252526] border-[#2b2b2b]' : 'border-slate-900 bg-slate-950/80'}`}>
@@ -440,7 +298,7 @@ export default function App() {
             columns={columns}
             items={filteredLibraryItems}
             theme={theme}
-            tableClass={getTableClass()}
+            tableClass={THEME_CLASSES[theme].table}
             selectedItemId={selectedItemId}
             expandedItems={expandedItems}
             sortKey={sortKey}

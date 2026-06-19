@@ -1,8 +1,9 @@
 import type { Command } from './types';
+import type { AppTheme } from './useThemePreference';
 
 export interface AppCommandDeps {
   reloadFromDb: () => void;
-  setTheme: (theme: string) => void;
+  setTheme: (theme: AppTheme) => void;
   exportDatabaseJson: () => void;
   copyCitationFormatted: () => void;
   showAllColumns: () => void;

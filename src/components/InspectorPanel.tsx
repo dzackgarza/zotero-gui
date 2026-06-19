@@ -6,6 +6,7 @@ import * as Select from '@radix-ui/react-select';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { ZoteroItem, ItemType, getItemTypeLabel, Creator } from '../types';
+import type { AppTheme } from '../useThemePreference';
 
 const serializeCreators = (creators: Creator[]): string => {
   return creators
@@ -40,7 +41,7 @@ interface InspectorPanelProps {
   item: ZoteroItem | null;
   allItems: ZoteroItem[];
   onClose: () => void;
-  theme: string;
+  theme: AppTheme;
 }
 
 export default function InspectorPanel({
