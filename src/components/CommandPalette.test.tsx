@@ -59,7 +59,32 @@ describe('CommandPalette command-mode opening', () => {
     expect(document.querySelectorAll('[cmdk-item]').length).toBeLessThanOrEqual(25);
   });
 
-  it('finds a matching database item outside the opening virtual window', async () => {
+  it('does not render an empty virtualized scroll spacer when Ctrl+P opens', () => {
+    const items = Array.from({ length: 100 }, (_, index) => databaseItem(index));
+
+    render(
+      <CommandPalette
+        isOpen
+        items={items}
+        commands={[command]}
+        onClose={() => undefined}
+        onSelectItem={() => undefined}
+      />,
+    );
+
+    const list = document.querySelector('[cmdk-list]');
+    if (!(list instanceof HTMLElement)) {
+      throw new Error('Command palette list did not render');
+    }
+
+    const tallestInlineHeight = Math.max(
+      ...Array.from(list.querySelectorAll<HTMLElement>('div')).map(element => Number.parseFloat(element.style.height) || 0),
+    );
+
+    expect(tallestInlineHeight).toBeLessThanOrEqual(320);
+  });
+
+  it('finds a matching database item outside the opening bounded result set', async () => {
     const items = Array.from({ length: 100 }, (_, index) => databaseItem(index));
 
     render(

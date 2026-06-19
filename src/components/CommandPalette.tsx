@@ -1,5 +1,4 @@
 import React, { useState, useLayoutEffect, useRef, useMemo } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Terminal, Search, BookOpen, Settings, Eye, RefreshCw } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ZoteroItem, Command } from '../types';
@@ -7,12 +6,11 @@ import {
   buildZoteroSearchDocuments,
   formatCreatorsCompact,
   rankZoteroSearchDocumentsForPalette,
+  type ZoteroSearchDocument,
 } from '../utils/fuzzy';
 import { Command as CmdK } from 'cmdk';
 
-const PALETTE_LIST_RECT = { width: 576, height: 288 };
-const PALETTE_ITEM_HEIGHT = 48;
-const PALETTE_OVERSCAN = 6;
+const PALETTE_RESULT_LIMIT = 25;
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -35,7 +33,6 @@ export default function CommandPalette({
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'items' | 'commands'>(opensCommandMode ? 'commands' : 'items');
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (isOpen) {
@@ -55,17 +52,10 @@ export default function CommandPalette({
     [query, searchableDocuments],
   );
 
-  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: mode === 'items' ? rankedItemDocuments.length : 0,
-    getScrollElement: () => listRef.current,
-    estimateSize: () => PALETTE_ITEM_HEIGHT,
-    overscan: PALETTE_OVERSCAN,
-    initialRect: PALETTE_LIST_RECT,
-    observeElementRect: (_, callback) => {
-      callback(PALETTE_LIST_RECT);
-    },
-    getItemKey: index => rankedItemDocuments[index].item.id,
-  });
+  const visibleItemDocuments = useMemo(
+    () => rankedItemDocuments.slice(0, PALETTE_RESULT_LIMIT),
+    [rankedItemDocuments],
+  );
 
   const handleInputChange = (value: string) => {
     if (value.startsWith('>')) {
@@ -138,11 +128,35 @@ export default function CommandPalette({
     </CmdK.Item>
   );
 
+  const renderItem = ({ item }: ZoteroSearchDocument) => (
+    <CmdK.Item
+      key={item.id}
+      value={item.title}
+      onSelect={() => handleItem(item)}
+      className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors text-slate-300 data-[selected=true]:bg-blue-600 data-[selected=true]:text-white"
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <BookOpen className="h-4 w-4 text-sky-400 shrink-0" />
+        <div className="flex flex-col min-w-0 text-xs">
+          <span className="font-semibold text-slate-100 truncate max-w-sm">
+            {item.title}
+          </span>
+          <span className="text-[10px] text-slate-550 mt-0.5 truncate">
+            {formatCreatorsCompact(item.creators)} | {item.date || 'No Date'} | {item.citekey}
+          </span>
+        </div>
+      </div>
+    </CmdK.Item>
+  );
+
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root modal={false} open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
-        <Dialog.Content className="fixed inset-x-0 top-[10%] z-50 flex justify-center pointer-events-none outline-hidden">
+        <div aria-hidden="true" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
+        <Dialog.Content
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="fixed inset-x-0 top-[10%] z-50 flex justify-center pointer-events-none outline-hidden"
+        >
           <CmdK
             label="Command Palette"
             shouldFilter={false}
@@ -164,48 +178,14 @@ export default function CommandPalette({
               />
             </div>
 
-            <CmdK.List ref={listRef} className="max-h-72 overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-slate-800">
+            <CmdK.List className="max-h-72 overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-slate-800">
               <CmdK.Empty className="py-8 text-center text-xs text-slate-550">
                 No matching {mode === 'commands' ? 'commands' : 'documents'} found.
               </CmdK.Empty>
 
-              {mode === 'commands' ? commands.map(renderCommandItem) : (
-                <div
-                  style={{
-                    height: `${rowVirtualizer.getTotalSize()}px`,
-                    position: 'relative',
-                    width: '100%',
-                  }}
-                >
-                  {rowVirtualizer.getVirtualItems().map(virtualRow => {
-                    const item = rankedItemDocuments[virtualRow.index].item;
-                    return (
-                      <CmdK.Item
-                        key={item.id}
-                        value={item.title}
-                        onSelect={() => handleItem(item)}
-                        className="absolute left-0 top-0 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors text-slate-300 data-[selected=true]:bg-blue-600 data-[selected=true]:text-white"
-                        style={{
-                          height: `${virtualRow.size}px`,
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <BookOpen className="h-4 w-4 text-sky-400 shrink-0" />
-                          <div className="flex flex-col min-w-0 text-xs">
-                            <span className="font-semibold text-slate-100 truncate max-w-sm">
-                              {item.title}
-                            </span>
-                            <span className="text-[10px] text-slate-550 mt-0.5 truncate">
-                              {formatCreatorsCompact(item.creators)} | {item.date || 'No Date'} | {item.citekey}
-                            </span>
-                          </div>
-                        </div>
-                      </CmdK.Item>
-                    );
-                  })}
-                </div>
-              )}
+              {mode === 'commands'
+                ? commands.map(renderCommandItem)
+                : visibleItemDocuments.map(renderItem)}
             </CmdK.List>
           </CmdK>
         </Dialog.Content>

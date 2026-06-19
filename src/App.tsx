@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Terminal } from 'lucide-react';
 import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
@@ -13,7 +13,7 @@ import { THEME_CLASSES, useThemePreference } from './useThemePreference';
 import TopBar from './components/TopBar';
 import SidebarCollections from './components/SidebarCollections';
 import InspectorPanel from './components/InspectorPanel';
-import CommandPalette from './components/CommandPalette';
+import CommandPaletteHost, { type CommandPaletteHostHandle } from './components/CommandPaletteHost';
 import AdvancedSearchModal from './components/AdvancedSearchModal';
 import AddByIdentifierModal from './components/AddByIdentifierModal';
 import LibraryTable from './components/LibraryTable';
@@ -50,9 +50,9 @@ export default function App() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
-  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const [isAddByIdentifierOpen, setIsAddByIdentifierOpen] = useState(false);
+  const paletteHostRef = useRef<CommandPaletteHostHandle>(null);
 
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>('title');
@@ -76,27 +76,10 @@ export default function App() {
   // Notifications
   const [toast, setToast] = useState<string | null>(null);
 
-  const [paletteInitialInput, setPaletteInitialInput] = useState('');
-
-  // Global Keydown Hotkeys for Ctrl+P / Cmd+P / Ctrl+Shift+P
+  // Global Escape handling for non-palette overlays.
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
-      // Ctrl+Shift+P / Cmd+Shift+P opens command palette in command mode
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setPaletteInitialInput('>');
-        setIsPaletteOpen(true);
-      }
-      // Ctrl+P / Cmd+P toggles command palette
-      else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setPaletteInitialInput('');
-        setIsPaletteOpen(prev => !prev);
-      }
-      
-      // Escape closes overlays
       if (e.key === 'Escape') {
-        setIsPaletteOpen(false);
         setIsAdvancedSearchOpen(false);
       }
     };
@@ -170,6 +153,24 @@ export default function App() {
       .catch((error: Error) => showToast(error.message));
   };
 
+  const filteredLibraryItems = useMemo(() => selectVisibleLibraryItems({
+    items,
+    collections,
+    selectedCollectionId,
+    selectedTag,
+    searchSettings,
+    sortKey,
+    sortDesc,
+  }), [collections, items, searchSettings, selectedCollectionId, selectedTag, sortDesc, sortKey]);
+
+  const openPaletteFromToolbar = useCallback(() => {
+    const paletteHost = paletteHostRef.current;
+    if (paletteHost === null) {
+      throw new Error('Command palette host is not mounted.');
+    }
+    paletteHost.openItemPalette();
+  }, []);
+
   if (libraryStatus === 'failed') {
     return (
       <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
@@ -189,16 +190,6 @@ export default function App() {
       </div>
     );
   }
-
-  const filteredLibraryItems = selectVisibleLibraryItems({
-    items,
-    collections,
-    selectedCollectionId,
-    selectedTag,
-    searchSettings,
-    sortKey,
-    sortDesc,
-  });
 
   const handleHeaderSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -264,7 +255,7 @@ export default function App() {
         searchSettings={searchSettings}
         onChangeSearchSettings={setSearchSettings}
         onOpenAdvancedSearch={() => setIsAdvancedSearchOpen(true)}
-        onOpenPalette={() => setIsPaletteOpen(true)}
+        onOpenPalette={openPaletteFromToolbar}
         activeCollectionName={getCollectionName()}
         onOpenAddByIdentifier={() => setIsAddByIdentifierOpen(true)}
         theme={theme}
@@ -349,10 +340,8 @@ export default function App() {
       </div>
 
       {/* Ctrl+P palette overlay portal */}
-      <CommandPalette
-        isOpen={isPaletteOpen}
-        onClose={() => setIsPaletteOpen(false)}
-        initialInput={paletteInitialInput}
+      <CommandPaletteHost
+        ref={paletteHostRef}
         items={items}
         onSelectItem={(id) => {
           setSelectedItemId(id);
