@@ -52,6 +52,32 @@ function keyDownConfiguredShortcut(shortcut: KeyboardShortcut): void {
 }
 
 describe('CommandPaletteHost keyboard shortcuts', () => {
+  it('does not index database items while the palette is closed', async () => {
+    let titleReads = 0;
+    const indexedItem: ZoteroItem = {
+      ...item,
+      get title() {
+        titleReads += 1;
+        return 'Indexed Palette Item';
+      },
+    };
+
+    render(
+      <CommandPaletteHost
+        items={[indexedItem]}
+        commands={[command]}
+        onSelectItem={() => undefined}
+      />,
+    );
+
+    expect(titleReads).toBe(0);
+
+    keyDownConfiguredShortcut(KEYBOARD_SHORTCUTS.openItemPalette);
+
+    expect(await screen.findByText('Indexed Palette Item')).toBeInTheDocument();
+    expect(titleReads).toBeGreaterThan(0);
+  });
+
   it('opens item search with the configured item palette command', async () => {
     render(
       <CommandPaletteHost
