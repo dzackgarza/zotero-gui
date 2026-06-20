@@ -44,13 +44,20 @@ const CommandPaletteHost = forwardRef<CommandPaletteHostHandle, CommandPaletteHo
 
     useEffect(() => {
       const handleGlobalKeys = (event: KeyboardEvent) => {
-        if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
+        const key = event.key.toLowerCase();
+        const isPaletteModifier = event.altKey || event.ctrlKey || event.metaKey;
+        if (!isPaletteModifier) {
+          if (event.key === 'Escape') closePalette();
+          return;
+        }
+
+        if (event.shiftKey && key === 'p') {
           event.preventDefault();
           openCommandPalette();
           return;
         }
 
-        if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'p') {
+        if (!event.shiftKey && key === 'p') {
           event.preventDefault();
           toggleItemPalette();
           return;

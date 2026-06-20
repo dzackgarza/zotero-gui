@@ -68,7 +68,7 @@ export default function InspectorPanel({
         <FileText className={`h-10 w-10 mb-2.5 animate-pulse ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-700'}`} />
         <p className={`text-xs font-semibold ${isLight ? 'text-slate-500' : isMonokai ? 'text-[#f8f8f2]' : 'text-slate-400'}`}>No Item Selected</p>
         <p className={`text-[10px] leading-normal text-center mt-1 max-w-xs ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-550'}`}>
-          Select any bibliography row or press <kbd className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-[9px] text-slate-400 font-mono">Ctrl+P</kbd> to inspect detailed metadata.
+          Select any bibliography row or press <kbd className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-[9px] text-slate-400 font-mono">Alt+P</kbd> to inspect detailed metadata.
         </p>
       </div>
     );

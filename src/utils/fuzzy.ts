@@ -1,6 +1,7 @@
 import * as CSL from 'citeproc';
 import Fuse, { type IFuseOptions } from 'fuse.js';
 import fold2ascii from 'fold-to-ascii';
+import { Fzf } from 'fzf';
 import { transliterate } from 'transliteration';
 import { ZoteroItem, AdvancedSearchSettings, Creator } from '../types';
 
@@ -81,7 +82,7 @@ function bbtYearSubstring(item: ZoteroItem): string {
   return year.slice(2, 6);
 }
 
-function fuseOptions(keys: string[], settings: AdvancedSearchSettings): IFuseOptions<ZoteroSearchDocument> {
+function fuseOptions(keys: ZoteroSearchKey[], settings: AdvancedSearchSettings): IFuseOptions<ZoteroSearchDocument> {
   return {
     keys,
     threshold: settings.fuzzyThreshold,
@@ -129,6 +130,39 @@ export interface ZoteroSearchDocument {
   archiveLocation: string;
   callNumber: string;
 }
+
+type ZoteroSearchKey = Exclude<keyof ZoteroSearchDocument, 'item'>;
+
+const SEARCH_DOCUMENT_KEYS = new Set<ZoteroSearchKey>([
+  'title',
+  'creators_compact',
+  'creators',
+  'publicationTitle',
+  'date',
+  'citekey',
+  'itemType',
+  'volume',
+  'issue',
+  'pages',
+  'publisher',
+  'place',
+  'doi',
+  'url',
+  'isbn',
+  'issn',
+  'accessDate',
+  'language',
+  'abstractNote',
+  'tags',
+  'notes',
+  'dateAdded',
+  'dateModified',
+  'extra',
+  'rights',
+  'archive',
+  'archiveLocation',
+  'callNumber',
+]);
 
 const PALETTE_SEARCH_KEYS = [
   'title',
@@ -178,10 +212,19 @@ function enabledSearchKeys(settings: AdvancedSearchSettings): string[] {
     .map(([key]) => key);
 }
 
+function searchKey(value: string): ZoteroSearchKey {
+  if (SEARCH_DOCUMENT_KEYS.has(value as ZoteroSearchKey)) return value as ZoteroSearchKey;
+  throw new Error(`Unsupported Zotero search field: ${value}`);
+}
+
+function searchText(document: ZoteroSearchDocument, keys: ZoteroSearchKey[]): string {
+  return keys.map(key => document[key]).join(' ');
+}
+
 function rankDocuments(
   documents: ZoteroSearchDocument[],
   query: string,
-  keys: string[],
+  keys: ZoteroSearchKey[],
   settings: AdvancedSearchSettings,
 ): ZoteroSearchDocument[] {
   const trimmedQuery = query.trim();
@@ -208,17 +251,25 @@ function rankDocuments(
   return documents.filter(document => matchingIds.has(document.item.id));
 }
 
+function rankPaletteDocuments(documents: ZoteroSearchDocument[], query: string): ZoteroSearchDocument[] {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0) return documents;
+
+  const keys = PALETTE_SEARCH_KEYS.map(searchKey);
+  const fzf = new Fzf(documents, {
+    selector: document => searchText(document, keys),
+    casing: 'case-insensitive',
+    normalize: true,
+  });
+
+  return fzf.find(trimmedQuery).map(result => result.item);
+}
+
 export function rankZoteroSearchDocumentsForPalette(
   documents: ZoteroSearchDocument[],
   query: string,
 ): ZoteroSearchDocument[] {
-  return rankDocuments(documents, query, [...PALETTE_SEARCH_KEYS], {
-    query,
-    matchCase: false,
-    fuzzyThreshold: 0.35,
-    matchType: 'any',
-    searchFields: Object.fromEntries(PALETTE_SEARCH_KEYS.map(key => [key, true])),
-  });
+  return rankPaletteDocuments(documents, query);
 }
 
 export function filterZoteroItems(
@@ -233,7 +284,7 @@ export function filterZoteroItems(
   return rankDocuments(
     buildZoteroSearchDocuments(items),
     settings.query,
-    keys,
+    keys.map(searchKey),
     settings,
   ).map(document => document.item);
 }

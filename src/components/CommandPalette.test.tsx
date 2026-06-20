@@ -42,7 +42,7 @@ Object.defineProperty(Element.prototype, 'scrollIntoView', {
 });
 
 describe('CommandPalette command-mode opening', () => {
-  it('keeps the Ctrl+P opening DOM bounded instead of mounting every database item', () => {
+  it('keeps the item palette opening DOM bounded instead of mounting every database item', () => {
     const items = Array.from({ length: 100 }, (_, index) => databaseItem(index));
 
     render(
@@ -59,7 +59,7 @@ describe('CommandPalette command-mode opening', () => {
     expect(document.querySelectorAll('[cmdk-item]').length).toBeLessThanOrEqual(25);
   });
 
-  it('does not render an empty virtualized scroll spacer when Ctrl+P opens', () => {
+  it('does not render an empty virtualized scroll spacer when item search opens', () => {
     const items = Array.from({ length: 100 }, (_, index) => databaseItem(index));
 
     render(
@@ -104,7 +104,7 @@ describe('CommandPalette command-mode opening', () => {
     expect(document.querySelectorAll('[cmdk-item]').length).toBeLessThanOrEqual(25);
   });
 
-  it('opens Ctrl+Shift+P against commands without mounting database items', () => {
+  it('opens command mode without mounting database items', () => {
     const items = Array.from({ length: 100 }, (_, index) => databaseItem(index));
 
     render(

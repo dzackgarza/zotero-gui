@@ -339,7 +339,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Ctrl+P palette overlay portal */}
+      {/* Command palette overlay portal */}
       <CommandPaletteHost
         ref={paletteHostRef}
         items={items}

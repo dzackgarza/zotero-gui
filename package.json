@@ -34,6 +34,7 @@
     "fast-xml-parser": "^5.9.2",
     "fold-to-ascii": "^5.0.1",
     "fuse.js": "^7.4.2",
+    "fzf": "^0.5.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
