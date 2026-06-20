@@ -66,6 +66,10 @@ const CommandPaletteHost = forwardRef<CommandPaletteHostHandle, CommandPaletteHo
       return () => window.removeEventListener('keydown', handleGlobalKeys, { capture: true });
     }, [closePalette, openCommandPalette, toggleItemPalette]);
 
+    if (!isOpen) {
+      return null;
+    }
+
     return (
       <CommandPalette
         isOpen={isOpen}
