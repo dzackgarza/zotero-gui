@@ -13,5 +13,20 @@
     "timeoutMs": 15000,
     "stdoutByteLimit": 65536,
     "stderrByteLimit": 65536
+  },
+  "keyboardShortcuts": {
+    "openItemPalette": {
+      "key": "p",
+      "modifiers": [
+        "ctrl"
+      ]
+    },
+    "openCommandPalette": {
+      "key": "p",
+      "modifiers": [
+        "ctrl",
+        "shift"
+      ]
+    }
   }
 }

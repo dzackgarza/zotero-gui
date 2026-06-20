@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { KEYBOARD_SHORTCUTS, type KeyboardShortcut } from '../keyboardShortcuts';
 import type { Command, ZoteroItem } from '../types';
 import CommandPaletteHost from './CommandPaletteHost';
 
@@ -39,8 +40,19 @@ Object.defineProperty(Element.prototype, 'scrollIntoView', {
   value: () => undefined,
 });
 
+function keyDownConfiguredShortcut(shortcut: KeyboardShortcut): void {
+  const modifiers = new Set(shortcut.modifiers);
+  fireEvent.keyDown(window, {
+    key: shortcut.key,
+    ctrlKey: modifiers.has('ctrl'),
+    shiftKey: modifiers.has('shift'),
+    altKey: modifiers.has('alt'),
+    metaKey: modifiers.has('meta'),
+  });
+}
+
 describe('CommandPaletteHost keyboard shortcuts', () => {
-  it('opens item search with Alt+P', async () => {
+  it('opens item search with the configured item palette command', async () => {
     render(
       <CommandPaletteHost
         items={[item]}
@@ -49,12 +61,12 @@ describe('CommandPaletteHost keyboard shortcuts', () => {
       />,
     );
 
-    fireEvent.keyDown(window, { key: 'p', altKey: true });
+    keyDownConfiguredShortcut(KEYBOARD_SHORTCUTS.openItemPalette);
 
     expect(await screen.findByText('Palette Item 0')).toBeInTheDocument();
   });
 
-  it('opens command search with Alt+Shift+P', async () => {
+  it('opens command search with the configured command palette command', async () => {
     render(
       <CommandPaletteHost
         items={[item]}
@@ -63,7 +75,7 @@ describe('CommandPaletteHost keyboard shortcuts', () => {
       />,
     );
 
-    fireEvent.keyDown(window, { key: 'p', altKey: true, shiftKey: true });
+    keyDownConfiguredShortcut(KEYBOARD_SHORTCUTS.openCommandPalette);
 
     expect(await screen.findByText('Reload Library from Zotero DB')).toBeInTheDocument();
     expect(screen.queryByText('Palette Item 0')).not.toBeInTheDocument();

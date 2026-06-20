@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
+import { KeyboardShortcutsConfigSchema } from '../keyboardShortcutsSchema.js';
 
 export const AppConfigSchema = z.strictObject({
   server: z.strictObject({
@@ -17,6 +18,7 @@ export const AppConfigSchema = z.strictObject({
     stdoutByteLimit: z.number().int().positive(),
     stderrByteLimit: z.number().int().positive(),
   }),
+  keyboardShortcuts: KeyboardShortcutsConfigSchema,
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

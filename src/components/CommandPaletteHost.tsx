@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
+import { KEYBOARD_SHORTCUTS, keyboardEventMatchesShortcut } from '../keyboardShortcuts';
 import type { Command, ZoteroItem } from '../types';
 import CommandPalette from './CommandPalette';
 
@@ -44,27 +45,20 @@ const CommandPaletteHost = forwardRef<CommandPaletteHostHandle, CommandPaletteHo
 
     useEffect(() => {
       const handleGlobalKeys = (event: KeyboardEvent) => {
-        const key = event.key.toLowerCase();
-        const isPaletteModifier = event.altKey || event.ctrlKey || event.metaKey;
-        if (!isPaletteModifier) {
-          if (event.key === 'Escape') closePalette();
+        if (event.key === 'Escape') {
+          closePalette();
           return;
         }
 
-        if (event.shiftKey && key === 'p') {
+        if (keyboardEventMatchesShortcut(event, KEYBOARD_SHORTCUTS.openCommandPalette)) {
           event.preventDefault();
           openCommandPalette();
           return;
         }
 
-        if (!event.shiftKey && key === 'p') {
+        if (keyboardEventMatchesShortcut(event, KEYBOARD_SHORTCUTS.openItemPalette)) {
           event.preventDefault();
           toggleItemPalette();
-          return;
-        }
-
-        if (event.key === 'Escape') {
-          closePalette();
         }
       };
 
