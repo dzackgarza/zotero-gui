@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { convert as htmlToText, type HtmlToTextOptions } from 'html-to-text';
 import { z } from 'zod';
 import { LibraryPayloadSchema } from '../schemas.js';
 import type { LibraryPayload } from '../schemas.js';
@@ -142,8 +143,19 @@ export class ZoteroDatabaseContractError extends Error {
   }
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const NOTE_TEXT_OPTIONS: HtmlToTextOptions = {
+  wordwrap: false,
+  selectors: [
+    { selector: 'a', options: { ignoreHref: true } },
+    { selector: 'img', format: 'skip' },
+  ],
+};
+
+// Zotero notes are stored as HTML. Convert to plain text with a real HTML
+// parser so entities are decoded and script/style content is dropped, then
+// collapse whitespace for compact single-line display.
+export function noteToPlainText(html: string): string {
+  return htmlToText(html, NOTE_TEXT_OPTIONS).replace(/\s+/g, ' ').trim();
 }
 
 function cleanDate(raw: string | null | undefined): string | undefined {
@@ -415,7 +427,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     const list = notesByItem.get(row.parentItemID) ?? [];
     list.push({
       id: String(row.itemID),
-      note: stripHtml(row.note ?? ''),
+      note: noteToPlainText(row.note ?? ''),
       dateAdded: row.dateAdded ?? '',
       dateModified: row.dateModified ?? '',
     });
