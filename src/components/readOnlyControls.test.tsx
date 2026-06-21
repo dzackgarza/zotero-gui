@@ -5,8 +5,26 @@ import ErrorBoundary from '../ErrorBoundary';
 import SidebarCollections from './SidebarCollections';
 import InspectorPanel from './InspectorPanel';
 import LibraryTable from './LibraryTable';
+import { KEYBOARD_SHORTCUTS } from '../keyboardShortcuts';
 import { useLibraryTable } from '../useLibraryTable';
 import type { AdvancedSearchSettings, Collection, ZoteroItem } from '../types';
+
+// cmdk's command list relies on these browser APIs that jsdom omits; supplying
+// them lets the real command palette render and be driven exactly as the user
+// would. This is environment scaffolding, not a stand-in for app behavior.
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  configurable: true,
+  value: TestResizeObserver,
+});
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: () => undefined,
+});
 
 // Harness that builds the real headless table engine and renders LibraryTable
 // against it, exercising the composed TanStack table rather than a fake.
@@ -249,6 +267,100 @@ describe('read-only GUI controls', () => {
     expect(screen.queryByText('Delete permanently')).not.toBeInTheDocument();
   });
 
+  it('copies BibTeX for a citable selected item via the inspector copy action', async () => {
+    // Real clipboard surface at the boundary: a writer that records what the
+    // user would actually receive. The assertion is on the copied content, not
+    // on a spy call count.
+    const written: string[] = [];
+    Object.assign(navigator, {
+      clipboard: { writeText: (text: string) => { written.push(text); return Promise.resolve(); } },
+    });
+
+    render(
+      <InspectorPanel
+        item={item}
+        allItems={[item]}
+        onClose={vi.fn()}
+        onOpenAttachment={vi.fn()}
+        theme="code-dark"
+      />,
+    );
+
+    const copyButton = screen.getByRole('button', { name: /bibtex/i });
+    fireEvent.click(copyButton);
+
+    // The user-visible outcome: a real BibTeX entry carrying the item's author
+    // lands on the clipboard. An attachment-style guard that disabled the action
+    // for a citable item would leave the clipboard empty and fail here.
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain('Lovelace');
+  });
+
+  it('offers no working BibTeX copy action in the inspector for a non-citable attachment', () => {
+    // An attachment is a selectable item but has no bibliographic citation form.
+    // The inspector must not offer a copy-citation action that, when activated,
+    // tries to cite it. A throwing clipboard writer plus captured window errors
+    // are the discriminators: were a copy control present and clickable (as in
+    // the pre-fix inspector, where the button was always rendered), activating
+    // it would call itemToCsl on the attachment and throw.
+    let clipboardWrites = 0;
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: () => { clipboardWrites += 1; return Promise.resolve(); },
+      },
+    });
+    const captured: unknown[] = [];
+    const onError = (event: ErrorEvent) => { event.preventDefault(); captured.push(event.error ?? event.message); };
+    window.addEventListener('error', onError);
+
+    const attachmentItem: ZoteroItem = {
+      id: 'ATT_ITEM',
+      itemType: 'attachment',
+      title: 'Standalone Scan',
+      creators: [],
+      tags: [],
+      notes: [],
+      attachments: [],
+      collections: [],
+      dateAdded: '2026-06-18T00:00:00Z',
+      dateModified: '2026-06-18T00:00:00Z',
+    };
+
+    render(
+      <InspectorPanel
+        item={attachmentItem}
+        allItems={[attachmentItem]}
+        onClose={vi.fn()}
+        onOpenAttachment={vi.fn()}
+        theme="code-dark"
+      />,
+    );
+
+    // The inspector still shows the attachment's metadata: it is a valid
+    // selection. (The title appears in both the header and the Title detail
+    // field, hence getAllByText.)
+    expect(screen.getAllByText('Standalone Scan').length).toBeGreaterThan(0);
+
+    // Activate every header action the user could reach except Close. Pre-fix
+    // this hits the always-rendered copy button and throws while citing the
+    // attachment; post-fix there is no such control to hit.
+    const header = screen.getByText('Item Inspector').closest('div')?.parentElement;
+    if (header === null || header === undefined) {
+      throw new Error('Inspector header region not found.');
+    }
+    for (const button of within(header).getAllByRole('button')) {
+      if (button.textContent?.includes('✕')) continue;
+      fireEvent.click(button);
+    }
+
+    window.removeEventListener('error', onError);
+
+    // No citation was ever attempted for the non-citable item: nothing was
+    // written to the clipboard and no error escaped.
+    expect(clipboardWrites).toBe(0);
+    expect(captured).toEqual([]);
+  });
+
   it('renders attached note text and routes inspector attachment opens', () => {
     const onOpenAttachment = vi.fn();
 
@@ -284,5 +396,130 @@ describe('read-only GUI controls', () => {
     fireEvent.click(screen.getByText('Local PDF'));
 
     expect(onOpenAttachment).toHaveBeenCalledWith('ATTACH12');
+  });
+});
+
+describe('App APA-citation copy command respects item citability', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Library with two selectable items: one citable journal article and one
+  // standalone attachment. Both appear as rows the user can select.
+  function citableAndAttachmentLibrary(): Response {
+    return jsonResponse({
+      items: [
+        {
+          id: 'CITABLE_ITEM',
+          itemType: 'journalArticle',
+          title: 'Citable Journal Paper',
+          creators: [{ firstName: 'Sophie', lastName: 'Germain', creatorType: 'author' }],
+          date: '1816',
+          publicationTitle: 'Mémoires',
+          tags: [],
+          notes: [],
+          attachments: [],
+          collections: [],
+          dateAdded: '2026-06-18T00:00:00Z',
+          dateModified: '2026-06-18T00:00:00Z',
+        },
+        {
+          id: 'ATTACHMENT_ITEM',
+          itemType: 'attachment',
+          title: 'Standalone Attachment File',
+          creators: [],
+          tags: [],
+          notes: [],
+          attachments: [],
+          collections: [],
+          dateAdded: '2026-06-18T00:00:00Z',
+          dateModified: '2026-06-18T00:00:00Z',
+        },
+      ],
+      collections: [],
+    });
+  }
+
+  function renderAppWithCitationLibrary(): void {
+    const fetchStub = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/startup') return Promise.resolve(startupOk());
+      if (url === '/api/library') return Promise.resolve(citableAndAttachmentLibrary());
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+    );
+  }
+
+  async function runCopyApaCommand(): Promise<void> {
+    fireEvent.keyDown(window, {
+      key: KEYBOARD_SHORTCUTS.openCommandPalette.key,
+      ctrlKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('ctrl'),
+      shiftKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('shift'),
+      altKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('alt'),
+      metaKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('meta'),
+    });
+    fireEvent.click(await screen.findByText('Copy Selected APA Citation'));
+  }
+
+  it('copies an APA citation when a citable item is selected', async () => {
+    const written: string[] = [];
+    Object.assign(navigator, {
+      clipboard: { writeText: (text: string) => { written.push(text); return Promise.resolve(); } },
+    });
+    renderAppWithCitationLibrary();
+
+    // Select the citable journal article, then run the copy-APA command.
+    fireEvent.click(await screen.findByText('Citable Journal Paper'));
+    await runCopyApaCommand();
+
+    // The real APA citation carrying the author surname reaches the clipboard.
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain('Germain');
+    expect(screen.queryByText('Application Render Error')).not.toBeInTheDocument();
+  });
+
+  it('does not throw or copy a citation when a non-citable attachment is selected', async () => {
+    // A throwing writer proves the citation action is never invoked for the
+    // attachment: were the guard absent, App would call toFormattedCitation on
+    // an attachment, which throws (no CSL type).
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: () => { throw new Error('clipboard must not be written for a non-citable item'); },
+      },
+    });
+
+    // React surfaces an uncaught throw from an event handler as a window
+    // 'error' event (via reportError). Recording those events makes the missing
+    // guard a deterministic failure here: if copyCitationFormatted invoked the
+    // citation util on the attachment, itemToCsl's throw lands in this list.
+    const captured: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      event.preventDefault();
+      captured.push(event.error ?? event.message);
+    };
+    window.addEventListener('error', onError);
+
+    renderAppWithCitationLibrary();
+
+    // Select the standalone attachment, then run the copy-APA command.
+    fireEvent.click(await screen.findByText('Standalone Attachment File'));
+    await runCopyApaCommand();
+    // Let any deferred error dispatch flush before asserting.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    window.removeEventListener('error', onError);
+
+    // The command was a safe no-op for the non-citable selection: no error was
+    // raised, and the library stayed rendered (no ErrorBoundary crash screen).
+    expect(captured).toEqual([]);
+    expect(screen.getAllByText('Standalone Attachment File').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Application Render Error')).not.toBeInTheDocument();
   });
 });

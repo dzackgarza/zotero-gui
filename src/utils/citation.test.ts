@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Cite } from '@citation-js/core';
 import '@citation-js/plugin-bibtex';
-import { toBibTeX, toFormattedCitation } from './citation';
+import { isCitable, toBibTeX, toFormattedCitation } from './citation';
 import { ItemType, ZoteroItem } from '../types';
 
 // A minimal ZoteroItem factory: only the fields under test are interesting;
@@ -155,5 +155,107 @@ describe('non-citable item types fail loud rather than defaulting', () => {
     const attachment = makeItem({ itemType: 'attachment', title: 'scan.pdf' });
     expect(() => toBibTeX(attachment)).toThrow();
     expect(() => toFormattedCitation(attachment)).toThrow();
+  });
+});
+
+describe('copying a citation requires a name-bearing creator', () => {
+  // The user story: pressing "copy citation"/"copy BibTeX" for an item whose
+  // only creator is a non-author/non-editor role (translator, contributor,
+  // inventor, …) must fail loudly. Such an item has no bibliographic name, so
+  // the rendered citation would be nameless — the same authorless-citation error
+  // the import gate (parseBibTeXToMetadata) already rejects. The copy path must
+  // not silently emit a degenerate, nameless citation, and must not invent a
+  // placeholder author.
+  it('throws when the only creator is a translator (no author, no editor)', () => {
+    const translatorOnly = makeItem({
+      itemType: 'book',
+      title: 'The Iliad',
+      creators: [{ firstName: 'Emily', lastName: 'Wilson', creatorType: 'translator' }],
+      publisher: 'Norton',
+      date: '2023',
+    });
+
+    // Both copy entrypoints inherit the throw from itemToCsl.
+    expect(() => toBibTeX(translatorOnly)).toThrow();
+    expect(() => toFormattedCitation(translatorOnly)).toThrow();
+  });
+
+  it('throws when the only creator is a contributor (no author, no editor)', () => {
+    const contributorOnly = makeItem({
+      itemType: 'journalArticle',
+      title: 'A Survey of Heights',
+      creators: [{ firstName: 'Joseph', lastName: 'Silverman', creatorType: 'contributor' }],
+      publicationTitle: 'Surveys in Number Theory',
+      date: '2010',
+    });
+
+    expect(() => toBibTeX(contributorOnly)).toThrow();
+    expect(() => toFormattedCitation(contributorOnly)).toThrow();
+  });
+
+  it('renders an item that has an author (the citation carries the surname)', () => {
+    const authored = makeItem({
+      itemType: 'book',
+      title: 'Algebraic Number Theory',
+      creators: [{ firstName: 'Jürgen', lastName: 'Neukirch', creatorType: 'author' }],
+      publisher: 'Springer',
+      date: '1999',
+    });
+
+    expect(toBibTeX(authored)).toContain('Neukirch');
+    expect(toFormattedCitation(authored)).toContain('Neukirch');
+  });
+
+  it('renders an edited volume that has an editor but no author', () => {
+    // An edited volume is bibliographically VALID: the editor is the
+    // name-bearing creator. It must still render — only the truly nameless
+    // case throws.
+    const editedVolume = makeItem({
+      itemType: 'book',
+      title: 'The Princeton Companion to Mathematics',
+      creators: [{ firstName: 'Timothy', lastName: 'Gowers', creatorType: 'editor' }],
+      publisher: 'Princeton University Press',
+      date: '2008',
+    });
+
+    expect(toBibTeX(editedVolume)).toContain('Gowers');
+    expect(toFormattedCitation(editedVolume)).toContain('Gowers');
+  });
+});
+
+describe('isCitable distinguishes works that have a bibliographic form', () => {
+  // The citability predicate the UI consults to decide whether to offer the
+  // copy-citation actions. It is the type-level inverse of itemToCsl's
+  // throw-for-non-citable-type branch: a citable type renders, an attachment
+  // (a raw file, not a citable work) does not.
+  it('is true for a bibliographic work type and false for an attachment', () => {
+    const book = makeItem({ itemType: 'book', title: 'Citable Work' });
+    const attachment = makeItem({ itemType: 'attachment', title: 'scan.pdf' });
+
+    expect(isCitable(book)).toBe(true);
+    expect(isCitable(attachment)).toBe(false);
+  });
+
+  it('agrees with itemToCsl: a non-citable type throws and a citable type renders', () => {
+    // Prove the predicate is the same throw-vs-render decision, not an
+    // independent hardcoded list. Each item carries a real author so only the
+    // TYPE-level decision is exercised (the nameless-creator throw is separate).
+    const probe = (itemType: ItemType): ZoteroItem => makeItem({
+      itemType,
+      title: 'Probe Title',
+      creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+    });
+
+    // The non-citable type: isCitable false, and rendering it throws.
+    const attachment = probe('attachment');
+    expect(isCitable(attachment)).toBe(false);
+    expect(() => toBibTeX(attachment)).toThrow();
+
+    // Citable types: isCitable true, and rendering them does NOT throw.
+    for (const itemType of ['journalArticle', 'book', 'conferencePaper', 'thesis', 'webpage'] as const) {
+      const item = probe(itemType);
+      expect(isCitable(item), `${itemType} must be citable`).toBe(true);
+      expect(() => toBibTeX(item), `${itemType} must render`).not.toThrow();
+    }
   });
 });

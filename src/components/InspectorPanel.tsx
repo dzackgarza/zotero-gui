@@ -5,7 +5,7 @@ import {
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { formatKeyboardShortcut, KEYBOARD_SHORTCUTS } from '../keyboardShortcuts';
 import { ZoteroItem, getItemTypeLabel, Creator } from '../types';
-import { toBibTeX } from '../utils/citation';
+import { isCitable, toBibTeX } from '../utils/citation';
 import type { AppTheme } from '../useThemePreference';
 
 const serializeCreators = (creators: Creator[]): string => {
@@ -82,6 +82,13 @@ export default function InspectorPanel({
     other => other.id !== item.id && other.citekey?.trim().toLowerCase() === item.citekey?.trim().toLowerCase()
   );
 
+  // Whether this item has a bibliographic citation form at all. A non-citable
+  // item (e.g. a standalone attachment) has no CSL type, so toBibTeX would
+  // throw; the copy-citation affordance is therefore not offered for it. The
+  // decision comes from the citation module's single source of truth, never a
+  // hardcoded item-type check here.
+  const itemIsCitable = isCitable(item);
+
   // BibTeX via the shared Citation.js mapping: the @entrytype reflects the
   // item's real itemType and every field is escaped/omitted by the library.
   const copyBibtex = () => {
@@ -103,29 +110,32 @@ export default function InspectorPanel({
             <span>Item Inspector</span>
           </span>
           <div className="flex items-center gap-1">
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={copyBibtex}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
-                >
-                  {copied ? (
-                    <span className="text-[10px] text-green-400 font-mono">Copied!</span>
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  Generate BibTeX citation
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
+            {itemIsCitable && (
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    onClick={copyBibtex}
+                    aria-label="Copy BibTeX citation"
+                    className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
+                  >
+                    {copied ? (
+                      <span className="text-[10px] text-green-400 font-mono">Copied!</span>
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    side="top"
+                    className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
+                  >
+                    Generate BibTeX citation
+                    <Tooltip.Arrow className="fill-slate-800" />
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            )}
 
             <button
               onClick={onClose}

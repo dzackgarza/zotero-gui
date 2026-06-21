@@ -4,7 +4,7 @@ import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems } from './librarySelectors';
 import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
-import { toFormattedCitation } from './utils/citation';
+import { isCitable, toFormattedCitation } from './utils/citation';
 import { isDefaultSearchField } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
@@ -119,6 +119,14 @@ export default function App() {
     const selectedItem = items.find(it => it.id === selectedItemId);
     if (!selectedItem) {
       showToast('Please select a bibliography item first.');
+      return;
+    }
+    // A non-citable selection (e.g. a standalone attachment) has no
+    // bibliographic citation form; toFormattedCitation would throw. Do not
+    // invoke the citation action for it — the citation module's citability
+    // predicate is the single source of truth for this decision.
+    if (!isCitable(selectedItem)) {
+      showToast('This item type cannot be cited.');
       return;
     }
     const citation = toFormattedCitation(selectedItem);

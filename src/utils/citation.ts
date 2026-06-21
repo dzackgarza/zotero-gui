@@ -122,6 +122,16 @@ function assignIfPresent(record: CslRecord, key: CslStringField, value: string |
   }
 }
 
+// Whether an item has a bibliographic citation form at all. This is the
+// type-level inverse of itemToCsl's "no CSL type → throw" branch: it reads the
+// SAME ITEM_TYPE_TO_CSL map, so an item is citable exactly when itemToCsl would
+// not reject it on type grounds (a non-null CSL type). The UI consults this to
+// decide whether to offer the copy-citation actions, instead of invoking a
+// citation util on a non-citable item and catching an uncaught throw.
+export function isCitable(item: ZoteroItem): boolean {
+  return ITEM_TYPE_TO_CSL[item.itemType] !== null;
+}
+
 // Map a ZoteroItem to a single CSL-JSON record. This is the ONE place the
 // domain item is translated; both toBibTeX and toFormattedCitation consume it.
 export function itemToCsl(item: ZoteroItem): CslRecord {
@@ -138,7 +148,20 @@ export function itemToCsl(item: ZoteroItem): CslRecord {
     record.id = item.citekey.trim();
   }
 
+  // A citation with no name-bearing creator is bibliographically degenerate:
+  // it renders with no author/editor at all. The owner's rule — already enforced
+  // at the import gate (parseBibTeXToMetadata requires at least one author) —
+  // is that an authorless citation is an error. Enforce the same rule here so
+  // both toBibTeX and toFormattedCitation fail loudly rather than emitting a
+  // nameless entry. An edited volume (editor present, no author) IS valid; only
+  // the truly nameless case (no author AND no editor) throws. No placeholder
+  // author is fabricated.
   const { author, editor } = cslNamesByRole(item.creators);
+  if (author.length === 0 && editor.length === 0) {
+    throw new Error(
+      `Item "${item.title ?? item.id}" has no author or editor; a citation requires at least one name-bearing creator.`,
+    );
+  }
   if (author.length > 0) record.author = author;
   if (editor.length > 0) record.editor = editor;
 
