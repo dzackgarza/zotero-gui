@@ -4,7 +4,7 @@ import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
 import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
-import { formatCreatorsCompact } from './utils/fuzzy';
+import { toFormattedCitation } from './utils/citation';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
 import { useColumnLayout } from './useColumnLayout';
@@ -129,15 +129,14 @@ export default function App() {
     showToast('Database backup exported to JSON!');
   };
 
-  // Generate citation formatting
+  // Generate an APA citation via the shared Citation.js mapping (citeproc).
   const copyCitationFormatted = () => {
     const selectedItem = items.find(it => it.id === selectedItemId);
     if (!selectedItem) {
       showToast('Please select a bibliography item first.');
       return;
     }
-    const compactAuthor = formatCreatorsCompact(selectedItem.creators);
-    const citation = `${compactAuthor} (${selectedItem.date || 'N.D.'}). ${selectedItem.title}. ${selectedItem.publicationTitle || ''}.`;
+    const citation = toFormattedCitation(selectedItem);
     navigator.clipboard.writeText(citation).then(() => {
       showToast('APA Citation copied to clipboard!');
     });

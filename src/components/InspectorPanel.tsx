@@ -5,6 +5,7 @@ import {
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { formatKeyboardShortcut, KEYBOARD_SHORTCUTS } from '../keyboardShortcuts';
 import { ZoteroItem, getItemTypeLabel, Creator } from '../types';
+import { toBibTeX } from '../utils/citation';
 import type { AppTheme } from '../useThemePreference';
 
 const serializeCreators = (creators: Creator[]): string => {
@@ -81,23 +82,10 @@ export default function InspectorPanel({
     other => other.id !== item.id && other.citekey?.trim().toLowerCase() === item.citekey?.trim().toLowerCase()
   );
 
-  // Clipboard citation formatting (simplified BibTeX)
+  // BibTeX via the shared Citation.js mapping: the @entrytype reflects the
+  // item's real itemType and every field is escaped/omitted by the library.
   const copyBibtex = () => {
-    const title = item.title ?? '';
-    const mainCreator = item.creators[0] ? item.creators[0].lastName.toLowerCase() : 'anonymous';
-    const cleanTitle = title.replace(/\s+/g, '_').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
-    const year = item.date || 'unknown';
-    const entryKey = item.citekey || `${mainCreator}_${cleanTitle}_${year}`;
-
-    const bibtex = `@article{${entryKey},
-  title = {${title}},
-  author = {${item.creators.map(c => `${c.lastName}, ${c.firstName}`).join(' and ')}},
-  journal = {${item.publicationTitle || ''}},
-  year = {${year}},
-  doi = {${item.doi || ''}},
-  url = {${item.url || ''}}
-}`;
-
+    const bibtex = toBibTeX(item);
     navigator.clipboard.writeText(bibtex).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
