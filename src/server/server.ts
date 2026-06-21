@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { CreatedItemResponseSchema, LibraryPayloadSchema } from '../schemas.js';
+import { CreatedItemResponseSchema, LibraryPayloadSchema, StartupStatusSchema } from '../schemas.js';
 import type { LibraryPayload } from '../schemas.js';
 import {
   pluginAcceptsInput,
@@ -16,6 +16,7 @@ type ApiErrorKind =
   | 'attachment_path_missing'
   | 'resolver_not_found'
   | 'resolver_input_rejected'
+  | 'zotero_unavailable'
   | 'upstream_boundary_failed'
   | 'zotero_visibility_failed'
   | 'internal_error';
@@ -95,6 +96,16 @@ function requireAttachmentWithPath(payload: LibraryPayload, attachmentId: string
   throw new ApiError('attachment_not_found', 404, `Attachment ${attachmentId} is not present in the loaded library`);
 }
 
+async function requireZoteroRunning(importEndpoint: string, fetchImpl: typeof fetch): Promise<void> {
+  const versionUrl = new URL('/version', importEndpoint);
+  const response = await fetchImpl(versionUrl).catch((error: Error) => {
+    throw new ApiError('zotero_unavailable', 502, error.message);
+  });
+  if (!response.ok) {
+    throw new ApiError('zotero_unavailable', 502, `Zotero write plugin version check failed with HTTP ${response.status}`);
+  }
+}
+
 function classifyError(error: Error): { kind: ApiErrorKind; status: number; message: string } {
   if (error instanceof ApiError) {
     return { kind: error.kind, status: error.status, message: error.message };
@@ -113,6 +124,15 @@ export function createApp(deps: AppDeps) {
   app.get('/api/library', (_req, res, next) => {
     Promise.resolve()
       .then(() => res.json(LibraryPayloadSchema.parse(deps.loadLibrary())))
+      .catch(next);
+  });
+
+  app.get('/api/startup', (_req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        await requireZoteroRunning(deps.importEndpoint, deps.fetchImpl);
+        res.json(StartupStatusSchema.parse({ zotero: { running: true } }));
+      })
       .catch(next);
   });
 

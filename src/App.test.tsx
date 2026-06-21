@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
@@ -22,13 +22,39 @@ function libraryResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderAppWithLibraryResponse(response: Response): void {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+function startupResponse(status = 200, kind = 'zotero_unavailable'): Response {
+  if (status === 200) {
+    return new Response(JSON.stringify({ zotero: { running: true } }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return new Response(JSON.stringify({
+    error: {
+      kind,
+      message: 'Zotero write plugin version check failed with HTTP 502',
+    },
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function renderAppWithFetchResponses(...responses: Response[]): void {
+  const fetchMock = vi.fn();
+  for (const response of responses) {
+    fetchMock.mockResolvedValueOnce(response);
+  }
+  vi.stubGlobal('fetch', fetchMock);
   render(
     <ErrorBoundary>
       <App />
     </ErrorBoundary>,
   );
+}
+
+function renderAppWithLibraryResponse(response: Response): void {
+  renderAppWithFetchResponses(startupResponse(), response);
 }
 
 describe('App library loading', () => {
@@ -91,10 +117,15 @@ describe('App library loading', () => {
   });
 
   it('surfaces /api/library HTTP failures instead of corrupting item state', async () => {
-    renderAppWithLibraryResponse(libraryResponse({ error: 'Database query failed' }, 500));
+    renderAppWithLibraryResponse(libraryResponse({
+      error: {
+        kind: 'internal_error',
+        message: 'Database query failed',
+      },
+    }, 500));
 
     expect(await screen.findByText('Zotero Library Load Failed')).toBeInTheDocument();
-    expect(screen.getByText('Library API failed with HTTP 500')).toBeInTheDocument();
+    expect(screen.getByText('Database query failed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /reload library/i })).toBeInTheDocument();
   });
 
@@ -103,5 +134,33 @@ describe('App library loading', () => {
 
     expect(await screen.findByText('Zotero Library Load Failed')).toBeInTheDocument();
     expect(screen.getByText(/items/)).toBeInTheDocument();
+  });
+
+  it('reloads the library after Zotero is started', async () => {
+    renderAppWithFetchResponses(
+      startupResponse(502),
+      startupResponse(),
+      libraryResponse({
+        items: [{
+          id: 'ITEM123',
+          itemType: 'book',
+          title: 'Reloaded Zotero Item',
+          creators: [],
+          tags: [],
+          notes: [],
+          attachments: [],
+          collections: [],
+          dateAdded: '2026-06-21T00:00:00Z',
+          dateModified: '2026-06-21T00:00:00Z',
+        }],
+        collections: [],
+      }),
+    );
+
+    expect(await screen.findByText('Zotero is not running')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /reload library/i }));
+
+    expect(await screen.findByText('Reloaded Zotero Item')).toBeInTheDocument();
   });
 });

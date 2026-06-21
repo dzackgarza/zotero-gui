@@ -70,6 +70,19 @@ export const LibraryPayloadSchema = z.strictObject({
   collections: z.array(CollectionSchema),
 });
 
+export const StartupStatusSchema = z.strictObject({
+  zotero: z.strictObject({
+    running: z.literal(true),
+  }),
+});
+
+export const ApiErrorResponseSchema = z.strictObject({
+  error: z.strictObject({
+    kind: z.string().min(1),
+    message: z.string().min(1),
+  }),
+});
+
 export const AcceptedInputDescriptorSchema = z.strictObject({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -91,5 +104,6 @@ export const CreatedItemResponseSchema = z.strictObject({
 });
 
 export type LibraryPayload = z.infer<typeof LibraryPayloadSchema>;
+export type StartupStatus = z.infer<typeof StartupStatusSchema>;
 export type ResolverPluginMetadata = z.infer<typeof ResolverPluginMetadataSchema>;
 export type CreatedItemResponse = z.infer<typeof CreatedItemResponseSchema>;

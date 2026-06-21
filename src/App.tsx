@@ -172,10 +172,18 @@ export default function App() {
   }, []);
 
   if (libraryStatus === 'failed') {
+    const isZoteroUnavailable = libraryLoadError.kind === 'zotero_unavailable';
     return (
       <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
         <section className="w-full max-w-2xl border border-red-500/40 bg-[#252526] p-6 shadow-2xl">
-          <h1 className="text-lg font-semibold text-red-400">Zotero Library Load Failed</h1>
+          <h1 className="text-lg font-semibold text-red-400">
+            {isZoteroUnavailable ? 'Zotero is not running' : 'Zotero Library Load Failed'}
+          </h1>
+          {isZoteroUnavailable && (
+            <p className="mt-3 text-sm text-slate-200">
+              Start Zotero, then reload the library.
+            </p>
+          )}
           <p className="mt-3 font-mono text-xs text-red-200">
             {libraryLoadError.message}
           </p>

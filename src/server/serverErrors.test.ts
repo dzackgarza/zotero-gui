@@ -110,6 +110,10 @@ async function openAttachment(attachmentId: string): Promise<Response> {
   return fetch(`${baseUrl}/api/attachments/${attachmentId}/open`, { method: 'POST' });
 }
 
+async function getStartup(): Promise<Response> {
+  return fetch(`${baseUrl}/api/startup`);
+}
+
 async function expectErrorKind(response: Response, status: number, kind: string): Promise<void> {
   expect(response.status).toBe(status);
   const payload = await response.json();
@@ -193,6 +197,16 @@ describe('/api/items/from-source error semantics', () => {
       400,
       'resolver_input_rejected',
     );
+  });
+
+  it('checks Zotero write plugin availability before startup succeeds', async () => {
+    importMode = 'fail';
+    await expectErrorKind(await getStartup(), 502, 'zotero_unavailable');
+
+    importMode = 'success';
+    const response = await getStartup();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ zotero: { running: true } });
   });
 
   it('classifies Zotero write failures and created-item visibility failures as upstream boundary errors', async () => {
