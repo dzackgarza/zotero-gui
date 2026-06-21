@@ -10,7 +10,7 @@ import {
 } from '../utils/fuzzy';
 import { Command as CmdK } from 'cmdk';
 
-const PALETTE_RESULT_LIMIT = 25;
+export const PALETTE_RESULT_LIMIT = 25;
 
 interface CommandPaletteProps {
   isOpen: boolean;

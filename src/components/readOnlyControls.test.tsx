@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import TopBar from './TopBar';
+import App from '../App';
+import ErrorBoundary from '../ErrorBoundary';
 import SidebarCollections from './SidebarCollections';
 import InspectorPanel from './InspectorPanel';
 import LibraryTable from './LibraryTable';
@@ -80,6 +81,81 @@ const item: ZoteroItem = {
   dateModified: '2026-06-18T00:00:00Z',
 };
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+const startupOk = (): Response => jsonResponse({ zotero: { running: true } });
+
+// Representative library payload: one journal article that lives in a real
+// Zotero collection key. Driving Add-Item while that collection is selected
+// proves the App composes the live collection key into the outbound import
+// payload (not a hardcoded empty array).
+function libraryWithCollection(): Response {
+  return jsonResponse({
+    items: [{
+      id: 'ITEM_LIB',
+      itemType: 'journalArticle',
+      title: 'Small gaps between primes',
+      creators: [{ firstName: 'James', lastName: 'Maynard', creatorType: 'author' }],
+      date: '2015',
+      publicationTitle: 'Annals of Mathematics',
+      tags: [],
+      notes: [],
+      attachments: [],
+      collections: ['COLL_NT'],
+      dateAdded: '2026-06-18T00:00:00Z',
+      dateModified: '2026-06-18T00:00:00Z',
+    }],
+    collections: [{ id: 'COLL_NT', name: 'Number theory', parentId: undefined }],
+  });
+}
+
+// Representative resolver manifest served at the /api/resolver-plugins seam.
+// The id chosen here is what the App must forward verbatim as resolverId; the
+// test asserts the captured request carries exactly this id.
+function resolverManifest(): Response {
+  return jsonResponse([{
+    id: 'crossref-doi',
+    name: 'Crossref DOI',
+    acceptedInputs: [{
+      id: 'doi',
+      label: 'DOI',
+      example: '10.1090/noti1234',
+      pattern: '^10\\.',
+    }],
+  }]);
+}
+
+// Valid CreatedItemResponse so the success path runs to completion (modal
+// closes, library reloads). A malformed body would fail the schema parse and
+// the success branch would never fire.
+function createdItemResponse(): Response {
+  return jsonResponse({ key: 'NEWKEY01', itemId: 4242, title: 'Resolved Paper' });
+}
+
+// URL-routing fetch stub: the legitimate server-route seam. Each endpoint
+// returns its own representative response regardless of call interleaving, and
+// every call is recorded so the test can inspect the outbound request the App
+// actually composed for the import route.
+function installRoutingFetchStub(): Array<{ url: string; init?: RequestInit }> {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetchStub = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url === '/api/startup') return Promise.resolve(startupOk());
+    if (url === '/api/library') return Promise.resolve(libraryWithCollection());
+    if (url === '/api/resolver-plugins') return Promise.resolve(resolverManifest());
+    if (url === '/api/items/from-source') return Promise.resolve(createdItemResponse());
+    throw new Error(`Unexpected fetch to ${url}`);
+  });
+  vi.stubGlobal('fetch', fetchStub);
+  return calls;
+}
+
 describe('read-only GUI controls', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -87,25 +163,48 @@ describe('read-only GUI controls', () => {
     localStorage.clear();
   });
 
-  it('routes the top-bar add control only to identifier ingestion', () => {
-    const onOpenAddByIdentifier = vi.fn();
+  it('routes the top-bar Add-Item action through the real identifier-ingestion request', async () => {
+    const calls = installRoutingFetchStub();
 
     render(
-      <TopBar
-        searchSettings={searchSettings}
-        onChangeSearchSettings={vi.fn()}
-        onOpenAdvancedSearch={vi.fn()}
-        onOpenPalette={vi.fn()}
-        activeCollectionName="My Library"
-        onOpenAddByIdentifier={onOpenAddByIdentifier}
-        theme="code-dark"
-        setTheme={vi.fn()}
-      />,
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
     );
 
+    // Drive the real composition: select a real collection so the import target
+    // is a live collection key, then open the Add-Item modal from the top bar.
+    fireEvent.click(await screen.findByText('Number theory'));
     fireEvent.click(screen.getByRole('button', { name: 'Add Item' }));
 
-    expect(onOpenAddByIdentifier).toHaveBeenCalledOnce();
+    // The modal must hydrate its plugin options from the resolver seam.
+    await screen.findByRole('option', { name: 'Crossref DOI' });
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'crossref-doi' } });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '10.1090/noti1234' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add Item' }));
+
+    // A correctly-wired App emits exactly one POST to the owned ingestion route.
+    // A dead callback, wrong handler, or non-routing path emits none and fails.
+    await waitFor(() => {
+      expect(
+        calls.filter(call => call.url === '/api/items/from-source'),
+      ).toHaveLength(1);
+    });
+
+    const importCall = calls.find(call => call.url === '/api/items/from-source');
+    if (importCall?.init === undefined) {
+      throw new Error('Add-Item did not issue an /api/items/from-source request');
+    }
+    expect(importCall.init.method).toBe('POST');
+    expect(JSON.parse(String(importCall.init.body))).toEqual({
+      resolverId: 'crossref-doi',
+      input: '10.1090/noti1234',
+      collections: ['COLL_NT'],
+    });
+
+    // Read-only contract: the Add-Item affordance is identifier ingestion only,
+    // never a local item-type creation menu.
     expect(screen.queryByText('Journal Article')).not.toBeInTheDocument();
     expect(screen.queryByText('Conference Paper')).not.toBeInTheDocument();
   });
