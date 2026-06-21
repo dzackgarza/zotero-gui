@@ -209,21 +209,45 @@ describe('/api/items/from-source error semantics', () => {
     expect(await response.json()).toEqual({ zotero: { running: true } });
   });
 
-  it('classifies Zotero write failures and created-item visibility failures as upstream boundary errors', async () => {
+  it('rejects from-source requests whose collection_keys contain a view sentinel', async () => {
+    // A sentinel id ('all' and the derived views) is a UI-only library view, not
+    // a real Zotero collection key. The UI must never send one as a collection
+    // key; if it does, the server rejects it loudly rather than forwarding a
+    // non-existent collection to the Zotero write plugin.
+    importMode = 'success';
+    for (const sentinel of ['all', 'duplicates', 'no-pdf', 'no-extraction', 'nonstandard-citekey']) {
+      await expectErrorKind(
+        await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [sentinel] }),
+        400,
+        'invalid_request',
+      );
+    }
+  });
+
+  it('classifies a genuine Zotero write-boundary failure as an upstream boundary error', async () => {
     importMode = 'fail';
     await expectErrorKind(
-      await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: ['all'] }),
+      await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
       502,
       'upstream_boundary_failed',
     );
+  });
 
+  it('returns the created item built from the write-boundary result without re-reading the library', async () => {
     importMode = 'success';
+    // The freshly-written key is NOT yet visible in the eventually-consistent
+    // library snapshot. Success must be determined solely from the authoritative
+    // write-boundary result, never from a racy read-back of loadLibrary().
     libraryPayload = { items: [], collections: [{ id: 'all', name: 'My Library' }] };
-    await expectErrorKind(
-      await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: ['all'] }),
-      502,
-      'zotero_visibility_failed',
-    );
+
+    const response = await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      key: 'NEWKEY',
+      itemId: 9001,
+      title: 'Created Route Item',
+    });
   });
 
   it('opens a loaded attachment through the route launcher boundary', async () => {

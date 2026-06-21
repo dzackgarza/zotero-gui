@@ -148,6 +148,51 @@ describe('App library loading', () => {
     expect(screen.getByText(/items/)).toBeInTheDocument();
   });
 
+  it('reconciles a stale selected collection after a reload drops it instead of crashing', async () => {
+    const itemInCollection = {
+      itemType: 'journalArticle' as const,
+      creators: [],
+      tags: [],
+      notes: [],
+      attachments: [],
+      dateAdded: '2026-06-21T00:00:00Z',
+      dateModified: '2026-06-21T00:00:00Z',
+    };
+
+    renderAppWithFetchResponses(
+      // Initial load: a collection the user can select.
+      startupResponse(),
+      libraryResponse({
+        items: [
+          { ...itemInCollection, id: 'ITEM_IN', title: 'Selected Collection Paper', collections: ['COLL_GONE'] },
+          { ...itemInCollection, id: 'ITEM_OTHER', title: 'Other Library Paper', collections: [] },
+        ],
+        collections: [{ id: 'COLL_GONE', name: 'Soon Deleted', parentId: undefined }],
+      }),
+      // Reload triggered by the sync button: the previously-selected collection
+      // no longer exists in the live library.
+      startupResponse(),
+      libraryResponse({
+        items: [
+          { ...itemInCollection, id: 'ITEM_OTHER', title: 'Other Library Paper', collections: [] },
+        ],
+        collections: [],
+      }),
+    );
+
+    // Select the collection that will be dropped by the reload.
+    fireEvent.click(await screen.findByText('Soon Deleted'));
+    expect(await screen.findByText('Selected Collection Paper')).toBeInTheDocument();
+
+    // Trigger the live reload that drops the selected collection.
+    fireEvent.click(screen.getByRole('button', { name: /sync library now/i }));
+
+    // The stale selection must reconcile to My Library (All) and render the
+    // surviving library, never surface the ErrorBoundary crash screen.
+    expect(await screen.findByText('Other Library Paper')).toBeInTheDocument();
+    expect(screen.queryByText('Application Render Error')).not.toBeInTheDocument();
+  });
+
   it('reloads the library after Zotero is started', async () => {
     renderAppWithFetchResponses(
       startupResponse(502),

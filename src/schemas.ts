@@ -98,9 +98,14 @@ export const ResolverPluginMetadataSchema = z.strictObject({
 
 export const ResolverPluginMetadataListSchema = z.array(ResolverPluginMetadataSchema);
 
+// Built solely from the authoritative Zotero write-boundary result
+// (item_key / item_id / titles[0]). The route does not re-read the
+// eventually-consistent library snapshot to confirm the write, so this
+// response carries only what the write boundary itself returns.
 export const CreatedItemResponseSchema = z.strictObject({
   key: z.string().min(1),
-  item: ZoteroItemSchema,
+  itemId: z.number().int(),
+  title: z.string(),
 });
 
 export type LibraryPayload = z.infer<typeof LibraryPayloadSchema>;

@@ -3,6 +3,7 @@ import { RefreshCw, Terminal } from 'lucide-react';
 import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
+import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
 import { formatCreatorsCompact } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
@@ -153,15 +154,29 @@ export default function App() {
       .catch((error: Error) => showToast(error.message));
   };
 
+  // Reconcile the selection against live collections BEFORE it drives view
+  // derivation. A live reload can drop the selected collection; the stale id
+  // must not reach selectItemsForCollection (whose unknown-id guard throws).
+  // Deriving the corrected id during render keeps the selection a correct
+  // function of live data; the effect below syncs it back into state so the
+  // sidebar highlight and active-view name stay consistent.
+  const reconciledCollectionId = reconcileSelectedLibraryView(collections, selectedCollectionId);
+
+  useEffect(() => {
+    if (reconciledCollectionId !== selectedCollectionId) {
+      setSelectedCollectionId(reconciledCollectionId);
+    }
+  }, [reconciledCollectionId, selectedCollectionId]);
+
   const filteredLibraryItems = useMemo(() => selectVisibleLibraryItems({
     items,
     collections,
-    selectedCollectionId,
+    selectedCollectionId: reconciledCollectionId,
     selectedTag,
     searchSettings,
     sortKey,
     sortDesc,
-  }), [collections, items, searchSettings, selectedCollectionId, selectedTag, sortDesc, sortKey]);
+  }), [collections, items, searchSettings, reconciledCollectionId, selectedTag, sortDesc, sortKey]);
 
   const openPaletteFromToolbar = useCallback(() => {
     const paletteHost = paletteHostRef.current;
@@ -224,11 +239,11 @@ export default function App() {
   };
 
   const getCollectionName = () => {
-    if (selectedCollectionId === 'duplicates') return 'Duplicate Entries';
-    if (selectedCollectionId === 'no-pdf') return 'No PDF Attachment';
-    if (selectedCollectionId === 'no-extraction') return 'No Extraction';
-    if (selectedCollectionId === 'nonstandard-citekey') return 'Nonstandard Citation Key';
-    const found = collections.find(c => c.id === selectedCollectionId);
+    if (reconciledCollectionId === 'duplicates') return 'Duplicate Entries';
+    if (reconciledCollectionId === 'no-pdf') return 'No PDF Attachment';
+    if (reconciledCollectionId === 'no-extraction') return 'No Extraction';
+    if (reconciledCollectionId === 'nonstandard-citekey') return 'Nonstandard Citation Key';
+    const found = collections.find(c => c.id === reconciledCollectionId);
     return found ? found.name : 'My Library';
   };
 
@@ -387,7 +402,7 @@ export default function App() {
         isOpen={isAddByIdentifierOpen}
         onClose={() => setIsAddByIdentifierOpen(false)}
         onAddResolvedItem={handleAddResolvedItem}
-        collections={collections.some(collection => collection.id === selectedCollectionId) ? [selectedCollectionId] : []}
+        collections={selectModalImportCollections(collections, reconciledCollectionId)}
         theme={theme}
       />
 

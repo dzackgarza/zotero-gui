@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { CreatedItemResponseSchema, LibraryPayloadSchema, StartupStatusSchema } from '../schemas.js';
 import type { LibraryPayload } from '../schemas.js';
+import { isLibraryViewSentinel } from '../libraryViews.js';
 import {
   pluginAcceptsInput,
   resolverPluginMetadata,
@@ -18,7 +19,6 @@ type ApiErrorKind =
   | 'resolver_input_rejected'
   | 'zotero_unavailable'
   | 'upstream_boundary_failed'
-  | 'zotero_visibility_failed'
   | 'internal_error';
 
 class ApiError extends Error {
@@ -32,10 +32,15 @@ class ApiError extends Error {
   }
 }
 
+// collection_keys must be real Zotero collection keys only. A UI-only view
+// sentinel ('all' and the derived views) reaching this boundary is an invariant
+// violation: the UI must resolve sentinels to the empty array (library root)
+// before posting. Forwarding a sentinel would write into a non-existent
+// collection, so it is rejected loudly rather than dropped.
 const FromSourceRequestSchema = z.strictObject({
   input: z.string().trim().min(1),
   resolverId: z.string().trim().min(1),
-  collections: z.array(z.string().min(1)),
+  collections: z.array(z.string().min(1).refine(key => !isLibraryViewSentinel(key))),
 });
 
 const OpenAttachmentParamsSchema = z.strictObject({
@@ -73,14 +78,6 @@ function requireAcceptedInput(plugin: ResolverPluginConfig, input: string): void
   if (!pluginAcceptsInput(plugin, input)) {
     throw new ApiError('resolver_input_rejected', 400, `Resolver ${plugin.id} does not accept the supplied input`);
   }
-}
-
-function requireCreatedItem(payload: LibraryPayload, key: string) {
-  const item = payload.items.find(candidate => candidate.id === key);
-  if (!item) {
-    throw new ApiError('zotero_visibility_failed', 502, `Created Zotero item ${key} was not visible after import`);
-  }
-  return item;
 }
 
 function requireAttachmentWithPath(payload: LibraryPayload, attachmentId: string): Attachment {
@@ -152,8 +149,16 @@ export function createApp(deps: AppDeps) {
         ).catch((error: Error) => {
           throw new ApiError('upstream_boundary_failed', 502, error.message);
         });
-        const item = requireCreatedItem(LibraryPayloadSchema.parse(deps.loadLibrary()), result.item_key);
-        res.json(CreatedItemResponseSchema.parse({ key: result.item_key, item }));
+        // Success is determined solely from the authoritative write-boundary
+        // result. The library snapshot is eventually consistent, so re-reading
+        // loadLibrary() here would race the DB flush and falsely report a
+        // successful write as not-visible. The write boundary already returns
+        // the created key, id, and title under a strict schema.
+        res.json(CreatedItemResponseSchema.parse({
+          key: result.item_key,
+          itemId: result.item_id,
+          title: result.titles[0],
+        }));
       })
       .catch(next);
   });

@@ -65,6 +65,15 @@ describe('library selectors', () => {
     item('trashed-grandchild-item', 'Deleted Algebra', ['grandchild'], ['algebra'], true),
   ];
 
+  it('throws on an unknown or stale collection id that is neither a sentinel nor present', () => {
+    // The selector is a loud invariant guard: an id that is not a view sentinel
+    // and not a present collection must never silently render as empty. App
+    // state reconciliation is responsible for ensuring such an id never arrives.
+    expect(() => selectItemsForCollection(items, collections, 'GONE999')).toThrow(
+      'Unknown library view or collection id: GONE999',
+    );
+  });
+
   it('selects collection descendants through grandchildren and uses the same count path', () => {
     const selected = selectItemsForCollection(items, collections, 'root');
 
