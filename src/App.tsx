@@ -171,6 +171,21 @@ export default function App() {
     paletteHost.openItemPalette();
   }, []);
 
+  if (libraryStatus === 'loading') {
+    return (
+      <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
+        <section
+          role="status"
+          aria-label="Loading Zotero database"
+          className="flex flex-col items-center gap-4 text-slate-200"
+        >
+          <RefreshCw className="h-8 w-8 animate-spin text-sky-400" />
+          <p className="text-sm font-semibold">Loading Zotero database</p>
+        </section>
+      </div>
+    );
+  }
+
   if (libraryStatus === 'failed') {
     const isZoteroUnavailable = libraryLoadError.kind === 'zotero_unavailable';
     return (

@@ -64,6 +64,18 @@ describe('App library loading', () => {
     localStorage.clear();
   });
 
+  it('shows a spinner while the initial database load is pending', () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>(() => undefined)));
+    render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByRole('status', { name: /loading zotero database/i })).toBeInTheDocument();
+    expect(screen.getByText('Loading Zotero database')).toBeInTheDocument();
+  });
+
   it('renders Zotero library items returned by /api/library', async () => {
     renderAppWithLibraryResponse(libraryResponse({
       items: [{
