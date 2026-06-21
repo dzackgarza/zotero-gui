@@ -1,10 +1,15 @@
-import { bookBibTeX } from './isbn-lib.mjs';
+import {
+  authorName,
+  bookBibTeX,
+  editionAuthorKeys,
+  editionPublisher,
+  editionTitle,
+  editionYear,
+  invariant,
+  normalizeIsbn,
+} from './isbn-lib.mjs';
 
-function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+const OPEN_LIBRARY = 'https://openlibrary.org';
 
 async function readStdin() {
   let input = '';
@@ -12,14 +17,36 @@ async function readStdin() {
   for await (const chunk of process.stdin) {
     input += chunk;
   }
-  const isbn = input.trim().replace(/^isbn:?\s*/i, '').replace(/[- ]/g, '');
-  invariant(isbn.length > 0, 'ISBN resolver input must not be empty');
-  return isbn;
+  return normalizeIsbn(input);
+}
+
+async function fetchJson(url, message) {
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  invariant(response.ok, `${message} (HTTP ${response.status})`);
+  return response.json();
 }
 
 const isbn = await readStdin();
-const query = encodeURIComponent(`bath.ISBN=^${isbn}`);
-const response = await fetch(`https://lx2.loc.gov/sru/lcdb?operation=searchRetrieve&version=1.1&query=${query}&maximumRecords=1`);
-invariant(response.ok, `Library of Congress ISBN lookup failed with HTTP ${response.status}`);
+const edition = await fetchJson(
+  `${OPEN_LIBRARY}/isbn/${isbn}.json`,
+  `Open Library has no record for ISBN ${isbn}`,
+);
 
-process.stdout.write(bookBibTeX(await response.text(), isbn));
+const authors = [];
+for (const key of editionAuthorKeys(edition)) {
+  const record = await fetchJson(
+    `${OPEN_LIBRARY}${key}.json`,
+    `Open Library author lookup failed for ${key}`,
+  );
+  authors.push(authorName(record));
+}
+
+process.stdout.write(
+  bookBibTeX({
+    isbn,
+    title: editionTitle(edition),
+    authors,
+    publisher: editionPublisher(edition),
+    year: editionYear(edition),
+  }),
+);

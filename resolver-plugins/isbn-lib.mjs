@@ -1,95 +1,73 @@
-import { XMLParser } from 'fast-xml-parser';
-
-function invariant(condition, message) {
+export function invariant(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
 }
 
-function array(value, message) {
-  invariant(value, message);
-  return Array.isArray(value) ? value : [value];
+export function normalizeIsbn(input) {
+  const isbn = input.trim().replace(/^isbn:?\s*/i, '').replace(/[-\s]/g, '');
+  invariant(isbn.length > 0, 'ISBN resolver input must not be empty');
+  return isbn;
 }
 
 function text(value, message) {
   invariant(typeof value === 'string' && value.trim().length > 0, message);
-  return value.trim();
+  return value.replace(/\s+/g, ' ').trim();
 }
 
-function subfields(field, code) {
-  return array(field.subfield, `MARC field ${field['@_tag']} must contain subfields`)
-    .filter(subfield => subfield['@_code'] === code)
-    .map(subfield => text(subfield['#text'], `MARC field ${field['@_tag']}$${code} must contain text`));
+export function editionTitle(edition) {
+  const main = text(edition.title, 'Open Library edition must contain a title');
+  if (typeof edition.subtitle === 'string' && edition.subtitle.trim().length > 0) {
+    return `${main}: ${text(edition.subtitle, 'Open Library subtitle must be text')}`;
+  }
+  return main;
 }
 
-function firstField(record, tag) {
-  const field = array(record.datafield, 'LoC MARC record must contain data fields')
-    .find(datafield => datafield['@_tag'] === tag);
-  invariant(field, `LoC MARC record must contain ${tag}`);
-  return field;
+export function editionPublisher(edition) {
+  invariant(
+    Array.isArray(edition.publishers) && edition.publishers.length > 0,
+    'Open Library edition must contain a publisher',
+  );
+  return text(edition.publishers[0], 'Open Library publisher must be text');
 }
 
-function values(record, tag, code) {
-  return array(record.datafield, 'LoC MARC record must contain data fields')
-    .filter(datafield => datafield['@_tag'] === tag)
-    .flatMap(datafield => subfields(datafield, code));
-}
-
-function cleanMarcValue(value) {
-  return value
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([:;,])/g, '$1')
-    .replace(/[ /,.;:]+$/g, '')
-    .trim();
-}
-
-function title(record) {
-  const field = firstField(record, '245');
-  const mainTitle = subfields(field, 'a')[0];
-  const subtitle = subfields(field, 'b')[0];
-  return cleanMarcValue(`${mainTitle} ${subtitle}`);
-}
-
-function author(record) {
-  const field = firstField(record, '100');
-  return cleanMarcValue(subfields(field, 'a')[0]);
-}
-
-function publisher(record) {
-  return cleanMarcValue(subfields(firstField(record, '260'), 'b')[0]);
-}
-
-function year(record) {
-  const publicationDate = subfields(firstField(record, '260'), 'c')[0];
-  const match = /\d{4}/.exec(publicationDate);
-  invariant(match, 'LoC MARC publication date must contain a year');
+export function editionYear(edition) {
+  invariant(
+    typeof edition.publish_date === 'string',
+    'Open Library edition must contain a publish_date',
+  );
+  const match = /\d{4}/.exec(edition.publish_date);
+  invariant(match, 'Open Library publish_date must contain a four-digit year');
   return match[0];
 }
 
-function isbns(record) {
-  const found = values(record, '020', 'a').map(cleanMarcValue);
-  invariant(found.length > 0, 'LoC MARC record must contain ISBN values');
-  return found.join(' ');
+export function editionAuthorKeys(edition) {
+  invariant(
+    Array.isArray(edition.authors) && edition.authors.length > 0,
+    'Open Library edition must contain authors',
+  );
+  return edition.authors.map(author => {
+    invariant(
+      author && typeof author.key === 'string' && author.key.length > 0,
+      'Open Library author entry must contain a key',
+    );
+    return author.key;
+  });
 }
 
-export function bookBibTeX(xmlText, isbn) {
-  const parser = new XMLParser({
-    ignoreAttributes: false,
-    removeNSPrefix: true,
-    parseTagValue: false,
-    parseAttributeValue: false,
-  });
-  const parsed = parser.parse(xmlText);
-  const result = parsed.searchRetrieveResponse;
-  invariant(Number(result.numberOfRecords) > 0, `Library of Congress did not return ISBN ${isbn}`);
-  const record = result.records.record.recordData.record;
-  invariant(record, 'Library of Congress ISBN lookup must return a MARC record');
+export function authorName(record) {
+  return text(record.name, 'Open Library author record must contain a name');
+}
 
-  return `@book{isbn_${isbn},
-  title = {${title(record)}},
-  author = {${author(record)}},
-  publisher = {${publisher(record)}},
-  year = {${year(record)}},
-  isbn = {${isbns(record)}}
-}`;
+export function bookBibTeX({ isbn, title, authors, publisher, year }) {
+  invariant(authors.length > 0, 'ISBN resolver must resolve at least one author');
+  const fields = [
+    ['title', title],
+    ['author', authors.join(' and ')],
+    ['publisher', publisher],
+    ['year', year],
+    ['isbn', isbn],
+  ];
+  const body = fields.map(([name, value]) => `  ${name} = {${value}}`).join(',\n');
+  return `@book{isbn_${isbn},\n${body}\n}`;
 }
