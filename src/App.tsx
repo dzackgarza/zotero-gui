@@ -52,7 +52,6 @@ export default function App() {
     return {
       query: '',
       matchCase: false,
-      fuzzyThreshold: 0.5,
       matchType: 'all',
       searchFields: fields
     };

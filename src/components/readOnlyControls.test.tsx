@@ -39,7 +39,6 @@ function LibraryTableHarness({
 const searchSettings: AdvancedSearchSettings = {
   query: '',
   matchCase: false,
-  fuzzyThreshold: 0.5,
   matchType: 'all',
   searchFields: {
     title: true,

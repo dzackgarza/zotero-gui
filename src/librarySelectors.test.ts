@@ -12,7 +12,6 @@ function searchSettings(query: string): AdvancedSearchSettings {
   return {
     query,
     matchCase: false,
-    fuzzyThreshold: 0.5,
     matchType: 'all',
     searchFields: {
       title: true,

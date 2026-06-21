@@ -1,5 +1,4 @@
 import * as CSL from 'citeproc';
-import Fuse, { type IFuseOptions } from 'fuse.js';
 import fold2ascii from 'fold-to-ascii';
 import { Fzf } from 'fzf';
 import { transliterate } from 'transliteration';
@@ -98,15 +97,6 @@ function bbtCleanCitekey(value: string): string {
 function bbtYearSubstring(item: ZoteroItem): string {
   const year = item.date?.match(/\d{4}/)?.[0] || '';
   return year.slice(2, 6);
-}
-
-function fuseOptions(keys: ZoteroSearchKey[], settings: AdvancedSearchSettings): IFuseOptions<ZoteroSearchDocument> {
-  return {
-    keys,
-    threshold: settings.fuzzyThreshold,
-    ignoreLocation: true,
-    isCaseSensitive: settings.matchCase,
-  };
 }
 
 /**
@@ -288,24 +278,22 @@ function rankDocuments(
   if (trimmedQuery.length === 0) return documents;
   if (keys.length === 0) return [];
 
-  const fuse = new Fuse(documents, fuseOptions(keys, settings));
+  const fzf = new Fzf(documents, {
+    selector: document => searchText(document, keys),
+    casing: settings.matchCase ? 'case-sensitive' : 'case-insensitive',
+    normalize: true,
+  });
 
-  if (settings.matchType === 'any') {
-    return fuse.search(trimmedQuery).map(result => result.item);
-  }
-
+  // One fuzzy engine (fzf) for both modes. Each whitespace token is matched
+  // independently; "all" keeps items every token matches (token-AND), "any"
+  // keeps items at least one token matches (token-OR).
   const tokens = trimmedQuery.split(/\s+/).filter(Boolean);
-  const matchingIds = new Set(documents.map(document => document.item.id));
-  for (const token of tokens) {
-    const tokenMatches = new Set(fuse.search(token).map(result => result.item.item.id));
-    for (const id of matchingIds) {
-      if (!tokenMatches.has(id)) {
-        matchingIds.delete(id);
-      }
-    }
-  }
+  const matchesByToken = tokens.map(token => new Set(fzf.find(token).map(result => result.item.item.id)));
+  const matchesItem = settings.matchType === 'any'
+    ? (id: string): boolean => matchesByToken.some(ids => ids.has(id))
+    : (id: string): boolean => matchesByToken.every(ids => ids.has(id));
 
-  return documents.filter(document => matchingIds.has(document.item.id));
+  return documents.filter(document => matchesItem(document.item.id));
 }
 
 function rankPaletteDocuments(documents: ZoteroSearchDocument[], query: string): ZoteroSearchDocument[] {

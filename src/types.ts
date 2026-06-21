@@ -159,7 +159,6 @@ export interface ColumnDefinition {
 export interface AdvancedSearchSettings {
   query: string;
   matchCase: boolean;
-  fuzzyThreshold: number; // 0 (strict) to 1 (very broad/fuzzy)
   matchType: 'all' | 'any'; // AND vs OR logic
   searchFields: Record<string, boolean>;
 }

@@ -41,7 +41,6 @@ function advancedSettings(
   return {
     query,
     matchCase: false,
-    fuzzyThreshold: 0.3,
     matchType,
     searchFields,
   };
@@ -75,37 +74,36 @@ describe('palette fuzzy ranking', () => {
 });
 
 describe('advanced search ranking', () => {
-  // The 'all' and 'any' modes diverge on the SAME query, fields, and
-  // threshold. 'all' tokenizes and intersects per-token Fuse matches;
-  // 'any' runs the whole query as a single Fuse search. The two items and a
-  // 0.3 threshold are chosen (against observed Fuse behavior) so the result
-  // sets differ, making the matchType contract falsifiable.
+  // User story: advanced search narrows the library by the words a user types,
+  // over the fields they enable. "all" requires every word to match the item;
+  // "any" keeps items that match at least one word. Both run on the one fuzzy
+  // engine (fzf), per whitespace token.
   const RANKING_ITEMS = [
     item('riemann', 'Riemann Surfaces and Theta Functions', 'Rie01'),
-    item('theta-lat', 'Theta Functions of Lattices', 'The02'),
+    item('lattices', 'Theta Functions of Lattices', 'The02'),
+    item('groups', 'Quantum Groups', 'Qua03'),
   ];
 
-  // matchType 'all' is token-AND: every whitespace token must match the item.
-  // 'theta' matches both titles; 'lattices' matches only theta-lat, so the
-  // intersection is exactly theta-lat.
-  it('intersects per-token matches under matchType "all"', () => {
-    const settings = advancedSettings('theta lattices', 'all', { title: true });
+  it('matchType "all" keeps only items every typed word matches', () => {
+    // "theta" matches both theta-bearing titles; "lattices" only the second,
+    // so the AND of the two words is exactly that item.
+    const matched = filterZoteroItems(
+      RANKING_ITEMS,
+      advancedSettings('theta lattices', 'all', { title: true }),
+    ).map(result => result.id);
 
-    const matched = filterZoteroItems(RANKING_ITEMS, settings).map(result => result.id);
-
-    expect(matched).toEqual(['theta-lat']);
+    expect(matched).toEqual(['lattices']);
   });
 
-  // matchType 'any' runs the whole query as one Fuse search; at threshold 0.3
-  // the concatenated 'theta lattices' fuzzy-matches neither title, so the same
-  // query that yields theta-lat under 'all' yields nothing under 'any'. This
-  // pins that the two modes are genuinely distinct, not aliases.
-  it('searches the whole query as one match under matchType "any"', () => {
-    const settings = advancedSettings('theta lattices', 'any', { title: true });
+  it('matchType "any" keeps items matching at least one typed word', () => {
+    // "lattices" matches the second item; "groups" matches the third; neither
+    // matches the first. The OR of the two words is both.
+    const matched = filterZoteroItems(
+      RANKING_ITEMS,
+      advancedSettings('lattices groups', 'any', { title: true }),
+    ).map(result => result.id).sort();
 
-    const matched = filterZoteroItems(RANKING_ITEMS, settings).map(result => result.id);
-
-    expect(matched).toEqual([]);
+    expect(matched).toEqual(['groups', 'lattices']);
   });
 
   // Field scoping is honored: a token present only in an unsearched field must
