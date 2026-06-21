@@ -4,8 +4,36 @@ import TopBar from './TopBar';
 import SidebarCollections from './SidebarCollections';
 import InspectorPanel from './InspectorPanel';
 import LibraryTable from './LibraryTable';
-import { DEFAULT_COLUMNS } from '../data/samples';
+import { useLibraryTable } from '../useLibraryTable';
 import type { AdvancedSearchSettings, Collection, ZoteroItem } from '../types';
+
+// Harness that builds the real headless table engine and renders LibraryTable
+// against it, exercising the composed TanStack table rather than a fake.
+function LibraryTableHarness({
+  items,
+  expandedItems,
+  onOpenAttachment,
+}: {
+  items: ZoteroItem[];
+  expandedItems: Set<string>;
+  onOpenAttachment: (attachmentId: string) => void;
+}) {
+  const table = useLibraryTable(items);
+  return (
+    <LibraryTable
+      table={table}
+      theme="code-dark"
+      tableClass=""
+      selectedItemId={null}
+      expandedItems={expandedItems}
+      searchSettings={searchSettings}
+      onSelectItem={vi.fn()}
+      onOpenAttachment={onOpenAttachment}
+      onResetFilters={vi.fn()}
+      onToggleExpand={vi.fn()}
+    />
+  );
+}
 
 const searchSettings: AdvancedSearchSettings = {
   query: '',
@@ -56,6 +84,7 @@ describe('read-only GUI controls', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   it('routes the top-bar add control only to identifier ingestion', () => {
@@ -141,31 +170,10 @@ describe('read-only GUI controls', () => {
     const onOpenAttachment = vi.fn();
 
     render(
-      <LibraryTable
-        columns={DEFAULT_COLUMNS}
+      <LibraryTableHarness
         items={[item]}
-        theme="code-dark"
-        tableClass=""
-        selectedItemId={null}
         expandedItems={new Set([item.id])}
-        sortKey="title"
-        sortDesc={false}
-        draggedColKey={null}
-        resizingCol={null}
-        searchSettings={searchSettings}
-        onSelectItem={vi.fn()}
         onOpenAttachment={onOpenAttachment}
-        onResetFilters={vi.fn()}
-        onToggleExpand={vi.fn()}
-        onColumnDragStart={vi.fn()}
-        onColumnDragOver={vi.fn()}
-        onColumnDrop={vi.fn()}
-        onHeaderSort={vi.fn()}
-        onResizeStart={vi.fn()}
-        onToggleColumn={vi.fn()}
-        onSetAllColumns={vi.fn()}
-        onResetColumns={vi.fn()}
-        onMoveColumn={vi.fn()}
       />,
     );
 

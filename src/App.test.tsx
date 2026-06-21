@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
+import { clientStorageKey } from './clientStorage';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { PALETTE_SEARCH_KEYS } from './utils/fuzzy';
 
@@ -105,10 +106,16 @@ describe('App library loading', () => {
     expect(screen.getByText('Maynard')).toBeInTheDocument();
   });
 
-  it('ignores unversioned persisted column state from earlier browser sessions', async () => {
-    localStorage.setItem('zotero_columns', JSON.stringify([
-      { key: 'title', label: 'Title', visible: true, width: 280 },
-      { key: 'creators_compact', label: 'Creators', visible: true, width: 180 },
+  it('fails loud on outdated persisted column state instead of silently resetting', () => {
+    // A column layout persisted by an earlier schema (the old hand-rolled
+    // array-of-columns shape) under the live storage key no longer matches the
+    // current versioned contract. No-fallback policy: this must surface the
+    // ErrorBoundary, not silently revert to DEFAULT_COLUMNS — a silent reset
+    // would discard the user's saved layout and hide the contract break.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    localStorage.setItem(clientStorageKey('columns'), JSON.stringify([
+      { key: 'title', visible: true, width: 280 },
+      { key: 'creators_compact', visible: true, width: 180 },
     ]));
 
     renderAppWithLibraryResponse(libraryResponse({
@@ -127,7 +134,9 @@ describe('App library loading', () => {
       collections: [],
     }));
 
-    expect(await screen.findByText('Persisted State Regression')).toBeInTheDocument();
+    expect(screen.getByText('Application Render Error')).toBeInTheDocument();
+    expect(screen.queryByText('Persisted State Regression')).not.toBeInTheDocument();
+    consoleError.mockRestore();
   });
 
   it('surfaces /api/library HTTP failures instead of corrupting item state', async () => {

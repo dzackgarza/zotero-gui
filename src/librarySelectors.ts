@@ -9,8 +9,6 @@ export interface VisibleLibraryItemsInput {
   selectedCollectionId: string;
   selectedTag: string | null;
   searchSettings: AdvancedSearchSettings;
-  sortKey: SortKey;
-  sortDesc: boolean;
 }
 
 export function activeLibraryItems(items: ZoteroItem[]): ZoteroItem[] {
@@ -158,7 +156,11 @@ export function selectTagCloud(items: ZoteroItem[], limit: number): [string, num
     .slice(0, limit);
 }
 
-function sortableValue(item: ZoteroItem, sortKey: SortKey): string {
+// Canonical case-insensitive string projection used to compare two items on a
+// given column. This is the single comparison source of truth for library
+// sorting: the @tanstack/react-table sortingFn (see columnModel.ts) consumes it,
+// so header-click sort order is defined here and nowhere else.
+export function sortableValue(item: ZoteroItem, sortKey: SortKey): string {
   if (sortKey === 'creators_compact') {
     return formatCreatorsCompact(item.creators).toLowerCase();
   }
@@ -178,35 +180,18 @@ function sortableValue(item: ZoteroItem, sortKey: SortKey): string {
   return value ? String(value).toLowerCase() : '';
 }
 
-export function sortLibraryItems(items: ZoteroItem[], sortKey: SortKey, sortDesc: boolean): ZoteroItem[] {
-  return [...items].sort((left, right) => {
-    const leftValue = sortableValue(left, sortKey);
-    const rightValue = sortableValue(right, sortKey);
-
-    if (leftValue < rightValue) {
-      return sortDesc ? 1 : -1;
-    }
-    if (leftValue > rightValue) {
-      return sortDesc ? -1 : 1;
-    }
-    return 0;
-  });
-}
-
+// Filtering pipeline only. Row ordering is owned by the table's sorting state
+// (TanStack), driven by sortableValue above — there is no second sort here.
 export function selectVisibleLibraryItems({
   items,
   collections,
   selectedCollectionId,
   selectedTag,
   searchSettings,
-  sortKey,
-  sortDesc,
 }: VisibleLibraryItemsInput): ZoteroItem[] {
   const selectedItems = selectItemsForCollection(items, collections, selectedCollectionId);
   const tagFilteredItems = selectedTag
     ? selectedItems.filter(item => item.tags.includes(selectedTag))
     : selectedItems;
-  const searchFilteredItems = filterZoteroItems(tagFilteredItems, searchSettings);
-
-  return sortLibraryItems(searchFilteredItems, sortKey, sortDesc);
+  return filterZoteroItems(tagFilteredItems, searchSettings);
 }

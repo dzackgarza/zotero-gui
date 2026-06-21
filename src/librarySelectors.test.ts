@@ -4,6 +4,7 @@ import {
   nonstandardCitekeyItems,
   selectItemsForCollection,
   selectVisibleLibraryItems,
+  sortableValue,
 } from './librarySelectors';
 import type { AdvancedSearchSettings, Collection, ZoteroItem } from './types';
 
@@ -85,21 +86,37 @@ describe('library selectors', () => {
     expect(countItemsForCollection(items, collections, 'root')).toBe(selected.length);
   });
 
-  it('applies collection tree, tag, search, and sort in one selector path', () => {
+  it('applies collection tree, tag, and search filters in one selector path', () => {
+    // The selector now owns filtering only; row ordering belongs to the table's
+    // sorting state. This proves the collection-tree + tag + search filters
+    // compose: the 'algebra' tag and query keep only the two algebra items in
+    // the root tree, dropping the topology grandchild and the trashed item.
     const selected = selectVisibleLibraryItems({
       items,
       collections,
       selectedCollectionId: 'root',
       selectedTag: 'algebra',
       searchSettings: searchSettings('algebra'),
-      sortKey: 'title',
-      sortDesc: true,
     });
 
-    expect(selected.map(selectedItem => selectedItem.id)).toEqual([
-      'root-item',
-      'child-item',
-    ]);
+    expect(new Set(selected.map(selectedItem => selectedItem.id))).toEqual(
+      new Set(['root-item', 'child-item']),
+    );
+  });
+
+  it('projects case-insensitive comparison keys per column for table sorting', () => {
+    // sortableValue is the single comparison source consumed by the TanStack
+    // sortingFn. Title projection is case-folded; creators_compact uses the
+    // compact author formatter; arrays join their entries; absent values sort
+    // as the empty string.
+    const titledItem = item('cased', 'ZEBRA Theory', [], [], false);
+    const taggedItem = { ...titledItem, tags: ['Algebra', 'Topology'] };
+    const titlelessItem: ZoteroItem = { ...titledItem, title: undefined };
+
+    expect(sortableValue(titledItem, 'title')).toBe('zebra theory');
+    expect(sortableValue(titledItem, 'creators_compact')).toBe('lovelace');
+    expect(sortableValue(taggedItem, 'tags')).toBe('algebra topology');
+    expect(sortableValue(titlelessItem, 'title')).toBe('');
   });
 
   it('accepts generated citekeys with standard disambiguation suffixes', () => {

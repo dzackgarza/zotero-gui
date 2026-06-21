@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Terminal } from 'lucide-react';
 import { AdvancedSearchSettings } from './types';
 import { DEFAULT_COLUMNS } from './data/samples';
-import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
+import { selectVisibleLibraryItems } from './librarySelectors';
 import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
 import { toFormattedCitation } from './utils/citation';
 import { isDefaultSearchField } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
-import { useColumnLayout } from './useColumnLayout';
+import { resetColumnLayout, useLibraryTable } from './useLibraryTable';
 import { THEME_CLASSES, useThemePreference } from './useThemePreference';
 
 // Top level components
@@ -32,19 +32,6 @@ export default function App() {
   } = useLibraryApi();
 
   const [theme, setTheme] = useThemePreference();
-  const {
-    columns,
-    draggedColKey,
-    resizingCol,
-    handleColumnDragStart,
-    handleColumnDragOver,
-    handleColumnDrop,
-    handleResizeStart,
-    moveColumn,
-    resetColumns,
-    setAllColumns,
-    toggleColumn,
-  } = useColumnLayout();
 
   // --- UI Interactivity/Focus States ---
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -55,10 +42,6 @@ export default function App() {
   const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
   const [isAddByIdentifierOpen, setIsAddByIdentifierOpen] = useState(false);
   const paletteHostRef = useRef<CommandPaletteHostHandle>(null);
-
-  // Sorting
-  const [sortKey, setSortKey] = useState<SortKey>('title');
-  const [sortDesc, setSortDesc] = useState(false);
 
   // Search setups
   const [searchSettings, setSearchSettings] = useState<AdvancedSearchSettings>(() => {
@@ -117,6 +100,8 @@ export default function App() {
 
   // Core backup exports
   const exportDatabaseJson = () => {
+    const { columnVisibility, columnOrder, columnSizing } = libraryTable.getState();
+    const columns = { columnVisibility, columnOrder, columnSizing };
     const dataStr = JSON.stringify({ items, collections, columns }, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -174,9 +159,11 @@ export default function App() {
     selectedCollectionId: reconciledCollectionId,
     selectedTag,
     searchSettings,
-    sortKey,
-    sortDesc,
-  }), [collections, items, searchSettings, reconciledCollectionId, selectedTag, sortDesc, sortKey]);
+  }), [collections, items, searchSettings, reconciledCollectionId, selectedTag]);
+
+  // Headless table engine (column visibility/order/sizing/sorting + persistence).
+  // Sorting state lives here and orders rows via the columnModel sortingFn.
+  const libraryTable = useLibraryTable(filteredLibraryItems);
 
   const openPaletteFromToolbar = useCallback(() => {
     const paletteHost = paletteHostRef.current;
@@ -229,15 +216,6 @@ export default function App() {
     );
   }
 
-  const handleHeaderSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDesc(prev => !prev);
-    } else {
-      setSortKey(key);
-      setSortDesc(false);
-    }
-  };
-
   const getCollectionName = () => {
     if (reconciledCollectionId === 'duplicates') return 'Duplicate Entries';
     if (reconciledCollectionId === 'no-pdf') return 'No PDF Attachment';
@@ -253,8 +231,8 @@ export default function App() {
     setTheme,
     exportDatabaseJson,
     copyCitationFormatted,
-    showAllColumns: () => setAllColumns(true),
-    resetColumns,
+    showAllColumns: () => libraryTable.toggleAllColumnsVisible(true),
+    resetColumns: () => resetColumnLayout(libraryTable),
   });
 
   const activeSelectedItem = items.find(it => it.id === selectedItemId) || null;
@@ -333,16 +311,11 @@ export default function App() {
           </div>
 
           <LibraryTable
-            columns={columns}
-            items={filteredLibraryItems}
+            table={libraryTable}
             theme={theme}
             tableClass={THEME_CLASSES[theme].table}
             selectedItemId={selectedItemId}
             expandedItems={expandedItems}
-            sortKey={sortKey}
-            sortDesc={sortDesc}
-            draggedColKey={draggedColKey}
-            resizingCol={resizingCol}
             searchSettings={searchSettings}
             onSelectItem={setSelectedItemId}
             onOpenAttachment={openAttachment}
@@ -351,15 +324,6 @@ export default function App() {
               setSelectedTag(null);
             }}
             onToggleExpand={toggleExpand}
-            onColumnDragStart={handleColumnDragStart}
-            onColumnDragOver={handleColumnDragOver}
-            onColumnDrop={handleColumnDrop}
-            onHeaderSort={handleHeaderSort}
-            onResizeStart={handleResizeStart}
-            onToggleColumn={toggleColumn}
-            onSetAllColumns={setAllColumns}
-            onResetColumns={resetColumns}
-            onMoveColumn={moveColumn}
           />
         </div>
 
@@ -394,7 +358,7 @@ export default function App() {
         settings={searchSettings}
         onChangeSettings={setSearchSettings}
         allItems={items}
-        columns={columns}
+        columns={DEFAULT_COLUMNS}
       />
 
       {/* Add by identifier modal portal */}
