@@ -4,9 +4,11 @@ import '@citation-js/plugin-bibtex';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
 import { bookBibTeX } from '../resolver-plugins/isbn-lib.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
-import { articleBibTeX } from '../resolver-plugins/zbmath-lib.mjs';
+import { articleBibTeX, parseZblNumber } from '../resolver-plugins/zbmath-lib.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
 import { doiRequestUrl } from '../resolver-plugins/doi.mjs';
+// @ts-expect-error: resolver libs are plain .mjs without type declarations.
+import { arxivIdFromInput } from '../resolver-plugins/arxiv.mjs';
 import { parseBibTeXToMetadata } from './utils/bibtexParser';
 
 // A title loaded with every BibTeX special character: braces (including an
@@ -163,5 +165,54 @@ describe('doiRequestUrl (DOI resolver) percent-encodes the suffix', () => {
     expect(url).toBe('https://doi.org/10.1234/foo%23bar');
     expect(new URL(url).hash).toBe('');
     expect(new URL(url).pathname).toBe('/10.1234/foo%23bar');
+  });
+});
+
+describe('parseZblNumber (zbMath resolver) strips the AN prefix the server accepts', () => {
+  // pluginAcceptsInput tests the manifest pattern with the `i` flag, so the
+  // server accepts the zbMATH AN prefix case-insensitively: `AN:`, `An:`, `aN:`,
+  // and `an:` are all contract-valid inputs. The plugin must strip the prefix
+  // case-insensitively so EVERY accepted input produces the same bare zbMATH
+  // number that the resolver sends upstream as `an:<number>`. A lowercase-only
+  // strip leaves `AN:0139.24606` intact, which is re-sent as `an:AN:0139.24606`
+  // and never resolves.
+  it('yields the same bare number for every accepted case of the bare AN prefix', () => {
+    const bare = parseZblNumber('an:0139.24606');
+    expect(bare).toBe('0139.24606');
+    expect(parseZblNumber('AN:0139.24606')).toBe(bare);
+    expect(parseZblNumber('An:0139.24606')).toBe(bare);
+    expect(parseZblNumber('aN:0139.24606')).toBe(bare);
+  });
+
+  it('strips an uppercase/mixed AN prefix from the `?q=` URL form too', () => {
+    const fromLower = parseZblNumber('https://zbmath.org/?q=an:0787.14001');
+    expect(fromLower).toBe('0787.14001');
+    expect(parseZblNumber('https://zbmath.org/?q=AN:0787.14001')).toBe(fromLower);
+    expect(parseZblNumber('https://zbmath.org/?q=An:0787.14001')).toBe(fromLower);
+  });
+
+  it('leaves an already-bare number unchanged', () => {
+    expect(parseZblNumber('0139.24606')).toBe('0139.24606');
+  });
+});
+
+describe('arxivIdFromInput (arXiv resolver) normalizes every accepted URL form', () => {
+  // The manifest accepts both bare IDs and arXiv URLs whose path tail is matched
+  // by `[^\s]+`, so a PDF link may carry a `.pdf` suffix plus a query string or
+  // fragment. The query/fragment must be removed BEFORE the `.pdf` suffix: if
+  // `.pdf` is stripped first it is no longer at the end of the string and
+  // survives, leaving a malformed id like `2401.01234.pdf` that fails the
+  // upstream request. Every accepted form must extract the same bare id.
+  it.each([
+    ['2401.01234', '2401.01234'],
+    ['arXiv:2401.01234', '2401.01234'],
+    ['https://arxiv.org/abs/2401.01234', '2401.01234'],
+    ['https://arxiv.org/pdf/2401.01234', '2401.01234'],
+    ['https://arxiv.org/pdf/2401.01234.pdf', '2401.01234'],
+    ['https://arxiv.org/pdf/2401.01234.pdf?download=1', '2401.01234'],
+    ['https://arxiv.org/pdf/2401.01234.pdf#section', '2401.01234'],
+    ['https://arxiv.org/abs/math.AG/0601001', 'math.AG/0601001'],
+  ])('extracts %s -> %s', (input, expected) => {
+    expect(arxivIdFromInput(input)).toBe(expected);
   });
 });

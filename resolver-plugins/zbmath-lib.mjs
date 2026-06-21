@@ -1,36 +1,26 @@
 import { Cite } from '@citation-js/core';
 import '@citation-js/plugin-bibtex';
-import { invariant, text } from './utils.mjs';
+import { citeName, invariant, text } from './utils.mjs';
 export { invariant };
+
+// The server accepts the zbMATH "AN:" identifier prefix case-insensitively (the
+// manifest pattern is matched with the `i` flag in pluginAcceptsInput), in both
+// the bare `AN:1234.56789` form and the `?q=AN:...` URL form. The plugin must
+// therefore strip the prefix case-insensitively so every accepted input yields
+// the bare zbMATH number; a literal lowercase-only strip would re-send an
+// unstripped `AN:` to zbMATH (e.g. `an:AN:...`) and never resolve.
+const AN_PREFIX = /^an:/i;
 
 export function parseZblNumber(input) {
   if (input.startsWith('http://') || input.startsWith('https://')) {
     const url = new URL(input);
     const query = url.searchParams.get('q');
     invariant(query, 'ZBMath URL must contain a q parameter');
-    const prefix = 'an:';
-    invariant(query.startsWith(prefix), 'ZBMath URL q parameter must start with an:');
-    return query.slice(prefix.length).trim();
+    invariant(AN_PREFIX.test(query), 'ZBMath URL q parameter must start with an:');
+    return query.replace(AN_PREFIX, '').trim();
   }
 
-  const prefix = 'an:';
-  return input.startsWith(prefix) ? input.slice(prefix.length).trim() : input.trim();
-}
-
-// Citation.js's BibTeX output module escapes braces in string fields (title,
-// journal) but emits CSL name fields by wrapping the raw value in `{...}`
-// WITHOUT escaping interior braces. A `{`/`}` inside an author name therefore
-// produces unbalanced BibTeX (e.g. `author = {{Bourbaki }collective{}}`) that
-// the validation gate truncates, silently dropping the title. A brace is never
-// legitimate content in a personal name, so reject it loudly rather than emit
-// corrupt BibTeX. This is not a sanitizing replace: the input is invalid.
-function citeName(name) {
-  const value = text(name, 'ZBMath author must contain a name');
-  invariant(
-    !value.includes('{') && !value.includes('}'),
-    `ZBMath author name must not contain a BibTeX brace delimiter: ${value}`,
-  );
-  return value;
+  return input.replace(AN_PREFIX, '').trim();
 }
 
 // zbMath returns `year` as free-text. Extract the four-digit year the same way
@@ -87,7 +77,7 @@ export function articleBibTeX(document, zblNumber) {
     'citation-key': `zbl_${zblNumber.replaceAll('.', '_')}`,
     type: 'article-journal',
     title: title(document),
-    author: authors(document).map(name => ({ literal: citeName(name) })),
+    author: authors(document).map(name => ({ literal: citeName(name, 'ZBMath author must contain a name') })),
     'container-title': text(source.title, 'ZBMath source must contain a journal title'),
     issued: { 'date-parts': [[year(document)]] },
   };

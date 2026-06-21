@@ -1,28 +1,12 @@
 import { Cite } from '@citation-js/core';
 import '@citation-js/plugin-bibtex';
-import { invariant, text } from './utils.mjs';
+import { citeName, invariant, text } from './utils.mjs';
 export { invariant };
 
 export function normalizeIsbn(input) {
   const isbn = input.trim().replace(/^isbn:?\s*/i, '').replace(/[-\s]/g, '');
   invariant(isbn.length > 0, 'ISBN resolver input must not be empty');
   return isbn;
-}
-
-// Citation.js's BibTeX output module escapes braces in string fields (title,
-// publisher) but emits CSL name fields by wrapping the raw value in `{...}`
-// WITHOUT escaping interior braces. A `{`/`}` inside an author name therefore
-// produces unbalanced BibTeX (e.g. `author = {{Smith }}}`) that the validation
-// gate truncates, silently dropping the title. A brace is never legitimate
-// content in a personal name, so reject it loudly rather than emit corrupt
-// BibTeX. This is not a sanitizing replace: the input is invalid and fails.
-function citeName(name) {
-  const value = text(name, 'ISBN resolver author name must be text');
-  invariant(
-    !value.includes('{') && !value.includes('}'),
-    `ISBN resolver author name must not contain a BibTeX brace delimiter: ${value}`,
-  );
-  return value;
 }
 
 // Open Library Books API (jscmd=data) returns one object keyed by the requested
@@ -75,7 +59,7 @@ export function bookBibTeX({ isbn, title, authors, publisher, year }) {
       'citation-key': `isbn_${isbn}`,
       type: 'book',
       title,
-      author: authors.map(name => ({ literal: citeName(name) })),
+      author: authors.map(name => ({ literal: citeName(name, 'ISBN resolver author name must be text') })),
       publisher,
       issued: { 'date-parts': [[Number.parseInt(year, 10)]] },
       ISBN: isbn,
