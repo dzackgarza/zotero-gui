@@ -106,11 +106,15 @@ function libraryWithCollection(): Response {
       tags: [],
       notes: [],
       attachments: [],
-      collections: ['COLL_NT'],
+      // In-app membership uses the internal numeric collectionID (as a string).
+      collections: ['42'],
       dateAdded: '2026-06-18T00:00:00Z',
       dateModified: '2026-06-18T00:00:00Z',
     }],
-    collections: [{ id: 'COLL_NT', name: 'Number theory', parentId: undefined }],
+    // Sidebar selection id (numeric collectionID) is deliberately distinct from
+    // the real Zotero collection key, so the import-composition assertion proves
+    // the App forwards the key, never the numeric id.
+    collections: [{ id: '42', name: 'Number theory', parentId: undefined, key: 'NTKEYAB12' }],
   });
 }
 
@@ -197,10 +201,12 @@ describe('read-only GUI controls', () => {
       throw new Error('Add-Item did not issue an /api/items/from-source request');
     }
     expect(importCall.init.method).toBe('POST');
+    // The import must carry the real Zotero collection key (NTKEYAB12), not the
+    // numeric sidebar selection id (42).
     expect(JSON.parse(String(importCall.init.body))).toEqual({
       resolverId: 'crossref-doi',
       input: '10.1090/noti1234',
-      collections: ['COLL_NT'],
+      collections: ['NTKEYAB12'],
     });
 
     // Read-only contract: the Add-Item affordance is identifier ingestion only,

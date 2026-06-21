@@ -7,20 +7,24 @@ import {
 } from './libraryViews';
 import type { Collection } from './types';
 
+// The sidebar selection id is the internal numeric collectionID (as a string);
+// the real Zotero collection key is the separate alphanumeric `key`. They are
+// deliberately distinct here so the import-boundary test proves it carries the
+// key, never the selection id.
 const collections: Collection[] = [
   // The server prepends this synthetic My Library view as a fake collection.
   { id: 'all', name: 'My Library' },
-  { id: 'COLL123', name: 'Number theory' },
-  { id: 'COLL456', name: 'Geometry', parentId: 'COLL123' },
+  { id: '100', name: 'Number theory', key: 'NTKEY100' },
+  { id: '101', name: 'Geometry', parentId: '100', key: 'GEOKEY101' },
 ];
 
 describe('library view sentinels', () => {
-  it('classifies every sidebar view id as a sentinel and real keys as non-sentinels', () => {
+  it('classifies every sidebar view id as a sentinel and real selection ids as non-sentinels', () => {
     for (const sentinel of LIBRARY_VIEW_SENTINELS) {
       expect(isLibraryViewSentinel(sentinel)).toBe(true);
     }
-    expect(isLibraryViewSentinel('COLL123')).toBe(false);
-    expect(isLibraryViewSentinel('COLL456')).toBe(false);
+    expect(isLibraryViewSentinel('100')).toBe(false);
+    expect(isLibraryViewSentinel('101')).toBe(false);
   });
 });
 
@@ -38,19 +42,29 @@ describe('selectModalImportCollections', () => {
     expect(selectModalImportCollections(collections, 'nonstandard-citekey')).toEqual([]);
   });
 
-  it('imports into the selected real collection key', () => {
-    expect(selectModalImportCollections(collections, 'COLL123')).toEqual(['COLL123']);
-    expect(selectModalImportCollections(collections, 'COLL456')).toEqual(['COLL456']);
+  it('imports into the selected collection using its real Zotero key, not the numeric selection id', () => {
+    // Selection id 100 -> real key NTKEY100; selection id 101 -> real key
+    // GEOKEY101. The numeric id must never be what is forwarded.
+    expect(selectModalImportCollections(collections, '100')).toEqual(['NTKEY100']);
+    expect(selectModalImportCollections(collections, '101')).toEqual(['GEOKEY101']);
   });
 
   it('imports to the library root when the selection is not a present collection', () => {
-    expect(selectModalImportCollections(collections, 'GONE999')).toEqual([]);
+    expect(selectModalImportCollections(collections, '999')).toEqual([]);
+  });
+
+  it('fails loud when a selected real collection has no resolvable Zotero key', () => {
+    const keyless: Collection[] = [
+      { id: 'all', name: 'My Library' },
+      { id: '100', name: 'Keyless Collection' },
+    ];
+    expect(() => selectModalImportCollections(keyless, '100')).toThrow();
   });
 });
 
 describe('reconcileSelectedLibraryView', () => {
   it('keeps a valid real collection selection unchanged', () => {
-    expect(reconcileSelectedLibraryView(collections, 'COLL456')).toBe('COLL456');
+    expect(reconcileSelectedLibraryView(collections, '101')).toBe('101');
   });
 
   it('keeps every view sentinel selection unchanged', () => {
@@ -62,9 +76,9 @@ describe('reconcileSelectedLibraryView', () => {
   it('resets a stale collection selection to the My Library root view', () => {
     const afterReload: Collection[] = [
       { id: 'all', name: 'My Library' },
-      { id: 'COLL123', name: 'Number theory' },
+      { id: '100', name: 'Number theory', key: 'NTKEY100' },
     ];
-    // COLL456 was dropped by the reload; the stale id must reconcile to 'all'.
-    expect(reconcileSelectedLibraryView(afterReload, 'COLL456')).toBe('all');
+    // 101 was dropped by the reload; the stale id must reconcile to 'all'.
+    expect(reconcileSelectedLibraryView(afterReload, '101')).toBe('all');
   });
 });

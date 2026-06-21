@@ -7,6 +7,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { LibraryPayload } from '../schemas';
+import { selectModalImportCollections } from '../libraryViews';
 import { createApp } from './server';
 import type { ResolverExecutionConfig, ResolverPluginConfig } from './resolverPlugins';
 
@@ -16,6 +17,8 @@ let baseUrl: string;
 let importEndpoint: string;
 let importMode: 'fail' | 'success' = 'fail';
 let libraryPayload: LibraryPayload;
+let lastImportCollectionKeys: unknown;
+let libraryLoadFault: Error | null = null;
 let attachmentOpenLogPath: string;
 let attachmentOpenerPath: string;
 
@@ -128,7 +131,17 @@ describe('/api/items/from-source error semantics', () => {
     attachmentOpenerPath = writeAttachmentOpener(dir);
     libraryPayload = { items: [], collections: [{ id: 'all', name: 'My Library' }] };
 
-    importServer = http.createServer((_req, res) => {
+    importServer = http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk as Buffer));
+      req.on('end', () => {
+      // Capture the collection_keys the write boundary actually receives, so a
+      // test can prove the real Zotero collection key (not a numeric id) reached
+      // the write plugin. /version (startup check) sends no body.
+      if (chunks.length > 0) {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { collection_keys?: unknown };
+        lastImportCollectionKeys = body.collection_keys;
+      }
       if (importMode === 'fail') {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('import failed');
@@ -151,12 +164,19 @@ describe('/api/items/from-source error semantics', () => {
         item_ids: [9001],
         titles: ['Created Route Item'],
       }));
+      });
     });
     const importBaseUrl = await startServer(importServer);
     importEndpoint = `${importBaseUrl}/write`;
 
     const app = createApp({
-      loadLibrary: () => libraryPayload,
+      loadLibrary: () => {
+        // A genuine internal fault (a non-ApiError thrown deep in the load path)
+        // must still classify as 500. The flag injects exactly that real fault
+        // through the real route + error middleware.
+        if (libraryLoadFault) throw libraryLoadFault;
+        return libraryPayload;
+      },
       resolverPlugins: [plugin([process.execPath, resolverPath])],
       resolverExecution: execution(dir),
       importEndpoint,
@@ -222,6 +242,56 @@ describe('/api/items/from-source error semantics', () => {
         'invalid_request',
       );
     }
+  });
+
+  it('forwards the real Zotero collection key (not the numeric selection id) to the write boundary', async () => {
+    importMode = 'success';
+    // A live collections payload: the sidebar selection id is the internal
+    // numeric collectionID; the real Zotero key is the separate alphanumeric
+    // `key`. The import boundary must carry the key.
+    const collections = [
+      { id: 'all', name: 'My Library' },
+      { id: '100', name: 'Number Theory', key: 'NTKEY100' },
+    ];
+
+    // Selecting the real collection by its numeric selection id resolves to the
+    // real key through the same composition the UI uses.
+    const realImport = selectModalImportCollections(collections, '100');
+    lastImportCollectionKeys = undefined;
+    await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: realImport });
+    expect(lastImportCollectionKeys).toEqual(['NTKEY100']);
+    // The numeric selection id must never reach the write plugin.
+    expect(lastImportCollectionKeys).not.toContain('100');
+
+    // A My Library (sentinel) selection imports into the library root: an empty
+    // collection list.
+    const rootImport = selectModalImportCollections(collections, 'all');
+    lastImportCollectionKeys = undefined;
+    await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: rootImport });
+    expect(lastImportCollectionKeys).toEqual([]);
+  });
+
+  it('classifies a malformed JSON request body as a 400 invalid_request, not a 500', async () => {
+    importMode = 'success';
+    // express.json() throws on an unparseable body. That is a client fault and
+    // must classify into the API's 400 invalid_request kind by the error's
+    // structural identity, not fall through to the catch-all 500.
+    const malformed = await fetch(`${baseUrl}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{ this is not valid json',
+    });
+    await expectErrorKind(malformed, 400, 'invalid_request');
+  });
+
+  it('still classifies a genuine internal fault as a 500 internal_error', async () => {
+    // A non-ApiError thrown inside the load path is a server fault and must
+    // remain a 500 internal_error: the body-parser 400 reclassification must not
+    // swallow real internal faults into a client-error code.
+    libraryLoadFault = new Error('synthetic internal fault');
+    const response = await fetch(`${baseUrl}/api/library`);
+    libraryLoadFault = null;
+    await expectErrorKind(response, 500, 'internal_error');
   });
 
   it('classifies a genuine Zotero write-boundary failure as an upstream boundary error', async () => {

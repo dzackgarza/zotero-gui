@@ -29,6 +29,10 @@ export const CollectionSchema = z.strictObject({
   name: z.string(),
   parentId: z.string().optional(),
   icon: z.string().optional(),
+  // Real Zotero collection key (collections.key). Present on real collections;
+  // absent on the synthetic 'all' My Library root view, which has no real key.
+  // The import boundary uses this key; sidebar selection/filtering use `id`.
+  key: z.string().optional(),
 });
 
 export const ZoteroItemSchema = z.strictObject({

@@ -140,6 +140,11 @@ export interface Collection {
   name: string;
   parentId?: string; // For nested sub-collections
   icon?: string;
+  // Real Zotero collection key (collections.key). Used only at the import
+  // boundary; sidebar selection and in-app membership/filtering use `id` (the
+  // internal numeric collectionID as a string). Absent on the synthetic 'all'
+  // My Library root view.
+  key?: string;
 }
 
 // Columns definition for table Customization

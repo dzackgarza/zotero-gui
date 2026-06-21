@@ -103,9 +103,23 @@ async function requireZoteroRunning(importEndpoint: string, fetchImpl: typeof fe
   }
 }
 
+// express.json() rejects an unparseable JSON body by throwing an error carrying
+// the structural identity { type: 'entity.parse.failed', status: 400 }. That is
+// a client fault (a malformed request body), not a server fault, so it is
+// classified by that structural identity into the API's own 400 invalid_request
+// kind rather than the catch-all 500. Classification is by structure, never by
+// the error message string.
+function isBodyParseFailure(error: Error): boolean {
+  const candidate = error as { type?: unknown; status?: unknown };
+  return candidate.type === 'entity.parse.failed' && candidate.status === 400;
+}
+
 function classifyError(error: Error): { kind: ApiErrorKind; status: number; message: string } {
   if (error instanceof ApiError) {
     return { kind: error.kind, status: error.status, message: error.message };
+  }
+  if (isBodyParseFailure(error)) {
+    return { kind: 'invalid_request', status: 400, message: 'Invalid request body: malformed JSON' };
   }
   return { kind: 'internal_error', status: 500, message: error.message };
 }

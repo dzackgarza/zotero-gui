@@ -3,8 +3,9 @@ import { AddressInfo } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LibraryPayloadSchema } from '../schemas';
+import { itemsWithoutPdf } from '../librarySelectors';
 import { createApp } from './server';
-import { assertZoteroDatabaseContract, queryLibrary, ZoteroDatabaseContractError } from './zoteroRepository';
+import { loadValidatedLibrary, ZoteroDatabaseContractError } from './zoteroRepository';
 
 let server: Server;
 let baseUrl: string;
@@ -27,17 +28,20 @@ function createFixtureDb(): DatabaseSync {
     CREATE TABLE itemCreators (itemID INTEGER NOT NULL, creatorID INTEGER NOT NULL, creatorTypeID INTEGER NOT NULL, orderIndex INTEGER NOT NULL);
     CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE itemTags (itemID INTEGER NOT NULL, tagID INTEGER NOT NULL);
-    CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT NOT NULL, parentCollectionID INTEGER);
+    CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT NOT NULL, parentCollectionID INTEGER, key TEXT);
     CREATE TABLE deletedCollections (collectionID INTEGER PRIMARY KEY);
     CREATE TABLE collectionItems (itemID INTEGER NOT NULL, collectionID INTEGER NOT NULL);
 
-    INSERT INTO libraries VALUES (1, 'user');
+    INSERT INTO libraries VALUES (1, 'user'), (2, 'feed');
     INSERT INTO itemTypes VALUES (1, 'book'), (2, 'journalArticle'), (3, 'note'), (4, 'attachment');
     INSERT INTO fields VALUES (1, 'title'), (2, 'date'), (3, 'publisher'), (4, 'url');
     INSERT INTO creatorTypes VALUES (1, 'author');
     INSERT INTO creators VALUES (1, 'Emmy', 'Noether');
     INSERT INTO tags VALUES (1, 'algebraic-geometry'), (2, 'needs-pdf');
-    INSERT INTO collections VALUES (100, 1, 'Root Collection', NULL), (101, 1, 'Nested Collection', 100);
+    -- Numeric collectionID is deliberately distinct from the alphanumeric real
+    -- Zotero key, so a test proving the import boundary carries the key (not the
+    -- numeric id) can tell them apart.
+    INSERT INTO collections VALUES (100, 1, 'Root Collection', NULL, 'ROOTKEY1'), (101, 1, 'Nested Collection', 100, 'NESTKEY2');
 
     INSERT INTO items VALUES (1, 'BOOK1234', 1, 1, '2026-01-01 00:00:00', '2026-01-02 00:00:00');
     INSERT INTO itemDataValues VALUES (1, 'Fixture Book'), (2, '2026'), (3, 'Fixture Press'), (4, 'Child Note'), (5, 'Attachment PDF'), (6, 'https://example.test/paper.pdf'), (7, 'Trashed Article'), (8, 'Standalone PDF'), (9, 'https://example.test/standalone.pdf');
@@ -64,9 +68,13 @@ function createFixtureDb(): DatabaseSync {
   return db;
 }
 
+// Exercises the single real load path (loadValidatedLibrary) callers use, which
+// runs the structural preflight AND the full library pipeline once. A contract
+// violation of the given kind must surface as a typed ZoteroDatabaseContractError
+// from that one load.
 function expectContractFailure(db: DatabaseSync, kind: ZoteroDatabaseContractError['kind']): void {
   try {
-    assertZoteroDatabaseContract(db);
+    loadValidatedLibrary(db);
   } catch (error) {
     expect(error).toBeInstanceOf(ZoteroDatabaseContractError);
     if (error instanceof ZoteroDatabaseContractError) {
@@ -80,8 +88,7 @@ function expectContractFailure(db: DatabaseSync, kind: ZoteroDatabaseContractErr
 describe('Zotero DB contract preflight', () => {
   it('accepts the supported fixture schema and mapped rows', () => {
     const db = createFixtureDb();
-    assertZoteroDatabaseContract(db);
-    const payload = queryLibrary(db);
+    const payload = loadValidatedLibrary(db);
     expect(payload.items.map(item => item.id)).toEqual(['ATTACH99', 'TRASH123', 'BOOK1234']);
   });
 
@@ -119,12 +126,16 @@ describe('Zotero DB contract preflight', () => {
 
   it('fails before serving when representative rows do not match owned row schemas', () => {
     const malformedRows = createFixtureDb();
+    // Keep every required column (including key) so the only contract deviation
+    // under test is the NULL collectionName, a row-shape violation surfaced by
+    // the single library pipeline as invalid_rows (not a missing_column from the
+    // structural preflight).
     malformedRows.exec(`
       DELETE FROM collectionItems;
       DELETE FROM collections;
       ALTER TABLE collections RENAME TO collections_old;
-      CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT, parentCollectionID INTEGER);
-      INSERT INTO collections VALUES (100, 1, NULL, NULL);
+      CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT, parentCollectionID INTEGER, key TEXT);
+      INSERT INTO collections VALUES (100, 1, NULL, NULL, 'ROOTKEY1');
       DROP TABLE collections_old;
     `);
     expectContractFailure(malformedRows, 'invalid_rows');
@@ -135,8 +146,7 @@ describe('Zotero DB contract preflight', () => {
     db.exec(`
       INSERT INTO items VALUES (6, 'NOTITLE1', 1, 1, '2026-03-01 00:00:00', '2026-03-02 00:00:00');
     `);
-    assertZoteroDatabaseContract(db);
-    const payload = queryLibrary(db);
+    const payload = loadValidatedLibrary(db);
 
     const noTitle = payload.items.find(item => item.id === 'NOTITLE1');
     if (noTitle === undefined) {
@@ -169,14 +179,92 @@ describe('Zotero DB contract preflight', () => {
     `);
     expectContractFailure(standaloneNote, 'standalone_note');
   });
+
+  it('fails before serving when the DB contains more than one non-feed library', () => {
+    // The app's item identity is the bare items.key, unique only within a single
+    // library, but the library query spans all non-feed libraries. A second
+    // non-feed (here, 'group') library makes the bare-key identity ambiguous, so
+    // the contract must reject it loudly rather than silently span both.
+    const multiLibrary = createFixtureDb();
+    multiLibrary.exec("INSERT INTO libraries VALUES (3, 'group')");
+    expectContractFailure(multiLibrary, 'multiple_libraries');
+  });
+});
+
+describe('trashed attachments are excluded from surfacing', () => {
+  it('drops a trashed child attachment from its parent and counts the parent as PDF-less', () => {
+    const db = createFixtureDb();
+    // ATTACH12 is BOOK1234's only (PDF) child attachment in the fixture. Trash it
+    // by putting its itemID in deletedItems, exactly as Zotero's Trash does.
+    db.exec('INSERT INTO deletedItems VALUES (3)');
+
+    const payload = loadValidatedLibrary(db);
+    const book = payload.items.find(item => item.id === 'BOOK1234');
+    if (book === undefined) {
+      throw new Error('expected BOOK1234 to remain a top-level item');
+    }
+    // The trashed attachment must not be attached to the parent at all.
+    expect(book.attachments).toEqual([]);
+
+    // The no-PDF view counts presence of a PDF attachment; with the only
+    // attachment trashed, BOOK1234 has no present PDF and is surfaced as missing.
+    const pdfLess = itemsWithoutPdf(payload.items);
+    expect(pdfLess.map(item => item.id)).toContain('BOOK1234');
+  });
+
+  it('drops a trashed standalone attachment from surfacing', () => {
+    const db = createFixtureDb();
+    // ATTACH99 (itemID 5) is the fixture's standalone attachment. Trash it.
+    db.exec('INSERT INTO deletedItems VALUES (5)');
+
+    const payload = loadValidatedLibrary(db);
+    const standalone = payload.items.find(item => item.id === 'ATTACH99');
+    if (standalone === undefined) {
+      throw new Error('expected the standalone attachment item to remain a top-level item');
+    }
+    // The trashed standalone attachment must not be surfaced as a present
+    // attachment on its own item.
+    expect(standalone.attachments).toEqual([]);
+  });
+});
+
+describe('single load runs the library pipeline once', () => {
+  it('executes the top-level item query exactly once per validated load', () => {
+    const real = createFixtureDb();
+    const topLevelItemQueries: string[] = [];
+    // Real DatabaseSync wrapped to OBSERVE (not replace) prepared statements:
+    // every prepare delegates to the real DB and executes real SQL. We only
+    // count preparations of the top-level item SELECT, whose double execution
+    // is the exact symptom of validate-then-query running the pipeline twice.
+    const observed = new Proxy(real, {
+      get(target, property, receiver) {
+        if (property === 'prepare') {
+          return (sql: string) => {
+            if (sql.includes('FROM items i') && sql.includes('AS itemType')) {
+              topLevelItemQueries.push(sql);
+            }
+            return target.prepare(sql);
+          };
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+
+    const payload = loadValidatedLibrary(observed);
+
+    // A correct single-execution load prepares the top-level item query once.
+    // The pre-fix validate-then-query path prepared (and ran) it twice.
+    expect(topLevelItemQueries).toHaveLength(1);
+    // And the single execution still produces the real payload.
+    expect(payload.items.map(item => item.id)).toEqual(['ATTACH99', 'TRASH123', 'BOOK1234']);
+  });
 });
 
 describe('/api/library', () => {
   beforeAll(async () => {
     const db = createFixtureDb();
-    assertZoteroDatabaseContract(db);
     const app = createApp({
-      loadLibrary: () => queryLibrary(db),
+      loadLibrary: () => loadValidatedLibrary(db),
       resolverPlugins: [],
       resolverExecution: {
         cwd: process.cwd(),
@@ -217,10 +305,13 @@ describe('/api/library', () => {
     expect(response.status).toBe(200);
     const payload = LibraryPayloadSchema.parse(await response.json());
 
+    // The sidebar selection id stays the internal numeric collectionID; the real
+    // Zotero collection key (collections.key) is published separately as `key`
+    // for the import boundary. The synthetic 'all' My Library view has no key.
     expect(payload.collections).toEqual([
       { id: 'all', name: 'My Library' },
-      { id: '100', name: 'Root Collection' },
-      { id: '101', name: 'Nested Collection', parentId: '100' },
+      { id: '100', name: 'Root Collection', key: 'ROOTKEY1' },
+      { id: '101', name: 'Nested Collection', parentId: '100', key: 'NESTKEY2' },
     ]);
     expect(payload.items).toHaveLength(3);
     expect(payload.items[0]).toMatchObject({

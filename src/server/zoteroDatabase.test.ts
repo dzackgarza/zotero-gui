@@ -25,7 +25,7 @@ function createMutableFixtureDb(): string {
     CREATE TABLE itemCreators (itemID INTEGER NOT NULL, creatorID INTEGER NOT NULL, creatorTypeID INTEGER NOT NULL, orderIndex INTEGER NOT NULL);
     CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE itemTags (itemID INTEGER NOT NULL, tagID INTEGER NOT NULL);
-    CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT NOT NULL, parentCollectionID INTEGER);
+    CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT NOT NULL, parentCollectionID INTEGER, key TEXT);
     CREATE TABLE deletedCollections (collectionID INTEGER PRIMARY KEY);
     CREATE TABLE collectionItems (itemID INTEGER NOT NULL, collectionID INTEGER NOT NULL);
 

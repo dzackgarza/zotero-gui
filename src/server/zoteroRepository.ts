@@ -95,6 +95,7 @@ const RawCollectionRowSchema = z.strictObject({
   collectionID: z.number(),
   collectionName: z.string(),
   parentCollectionID: z.number().nullable(),
+  key: z.string(),
 });
 
 const REQUIRED_COLUMNS = new Map<string, string[]>([
@@ -113,7 +114,7 @@ const REQUIRED_COLUMNS = new Map<string, string[]>([
   ['itemCreators', ['itemID', 'creatorID', 'creatorTypeID', 'orderIndex']],
   ['tags', ['tagID', 'name']],
   ['itemTags', ['itemID', 'tagID']],
-  ['collections', ['collectionID', 'libraryID', 'collectionName', 'parentCollectionID']],
+  ['collections', ['collectionID', 'libraryID', 'collectionName', 'parentCollectionID', 'key']],
   ['deletedCollections', ['collectionID']],
   ['collectionItems', ['itemID', 'collectionID']],
 ]);
@@ -132,6 +133,7 @@ export type ZoteroDatabaseContractErrorKind =
   | 'unsupported_item_type'
   | 'standalone_note'
   | 'broken_link'
+  | 'multiple_libraries'
   | 'invalid_rows';
 
 export class ZoteroDatabaseContractError extends Error {
@@ -262,6 +264,25 @@ function assertCoherentLinks(db: DatabaseSync): void {
   `, 'Zotero DB contract has broken collection item links');
 }
 
+// This app's item identity is the bare Zotero item key (items.key), which is
+// unique only WITHIN a single Zotero library. The library query spans all
+// non-feed libraries, so more than one non-feed library makes the bare-key
+// identity ambiguous (two libraries can each hold a distinct item with the same
+// key). The app's identity model is only valid for a single non-feed library,
+// so this asserts that assumption loudly rather than silently spanning multiple
+// libraries with an ambiguous identity.
+function assertSingleNonFeedLibrary(db: DatabaseSync): void {
+  const row = CountRowSchema.parse(
+    db.prepare("SELECT COUNT(*) AS count FROM libraries WHERE type != 'feed'").get(),
+  );
+  if (row.count !== 1) {
+    throw new ZoteroDatabaseContractError(
+      'multiple_libraries',
+      `Zotero DB contract: app requires exactly one non-feed library for bare-key item identity, found ${row.count}`,
+    );
+  }
+}
+
 function assertNoStandaloneNotes(db: DatabaseSync): void {
   const row = CountRowSchema.parse(
     db.prepare('SELECT COUNT(*) AS count FROM itemNotes WHERE parentItemID IS NULL').get(),
@@ -274,14 +295,34 @@ function assertNoStandaloneNotes(db: DatabaseSync): void {
   }
 }
 
-export function assertZoteroDatabaseContract(db: DatabaseSync): void {
+// Structural preflight: schema shape, field contracts, item-type support, link
+// coherence, single-library identity, and standalone-note rejection. These are
+// cheap PRAGMA/COUNT/DISTINCT probes only. The expensive full library pipeline
+// (queryLibrary) is NOT run here: contract validation and payload production are
+// a single pipeline execution in loadValidatedLibrary, so a normal load no
+// longer runs the query set twice.
+function assertStructuralContract(db: DatabaseSync): void {
   assertRequiredTablesAndColumns(db);
   assertRequiredFieldNames(db);
+  assertSingleNonFeedLibrary(db);
   assertNoStandaloneNotes(db);
   assertObservedItemTypes(db);
   assertCoherentLinks(db);
+}
+
+export function assertZoteroDatabaseContract(db: DatabaseSync): void {
+  assertStructuralContract(db);
+}
+
+// One load that both validates the Zotero DB contract AND returns the payload in
+// a single execution of the full library pipeline. Structural contract
+// violations surface as their typed kinds from the preflight; row-shape
+// violations during the single queryLibrary run surface as 'invalid_rows'. The
+// pipeline (queryLibrary) executes exactly once per call.
+export function loadValidatedLibrary(db: DatabaseSync): LibraryPayload {
+  assertStructuralContract(db);
   try {
-    queryLibrary(db);
+    return queryLibrary(db);
   } catch (error) {
     if (error instanceof ZoteroDatabaseContractError) {
       throw error;
@@ -384,6 +425,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     LEFT JOIN fields f ON id2.fieldID = f.fieldID
     LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
     WHERE a.parentItemID IS NOT NULL
+    AND a.itemID NOT IN (SELECT itemID FROM deletedItems)
     GROUP BY a.itemID
     ORDER BY a.parentItemID
   `).all());
@@ -402,12 +444,13 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     LEFT JOIN fields f ON id2.fieldID = f.fieldID
     LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
     WHERE a.parentItemID IS NULL
+    AND a.itemID NOT IN (SELECT itemID FROM deletedItems)
     GROUP BY a.itemID
     ORDER BY a.itemID
   `).all());
 
   const rawCollections = z.array(RawCollectionRowSchema).parse(db.prepare(`
-    SELECT c.collectionID, c.collectionName, c.parentCollectionID
+    SELECT c.collectionID, c.collectionName, c.parentCollectionID, c.key
     FROM collections c
     JOIN libraries l ON c.libraryID = l.libraryID
     LEFT JOIN deletedCollections dc ON c.collectionID = dc.collectionID
@@ -510,6 +553,11 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
       id: String(row.collectionID),
       name: row.collectionName,
       parentId: row.parentCollectionID != null ? String(row.parentCollectionID) : undefined,
+      // Real Zotero collection key (collections.key). The sidebar selection and
+      // in-app membership/filtering use the internal numeric `id`; the import
+      // boundary must instead carry this key, which is what the Zotero write
+      // plugin requires as a collection_keys entry.
+      key: row.key,
     })),
   ];
 

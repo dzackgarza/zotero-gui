@@ -7,7 +7,7 @@ import {
   runResolverPlugin,
   type ResolverPluginConfig,
 } from './resolverPlugins.js';
-import { assertZoteroDatabaseContract, queryLibrary } from './zoteroRepository.js';
+import { loadValidatedLibrary, queryLibrary } from './zoteroRepository.js';
 
 type DiagnosticCommand = 'doctor' | 'resolvers' | 'add-item';
 
@@ -31,8 +31,7 @@ async function requireWritePluginVersion(config: AppConfig): Promise<void> {
 function assertConfiguredDatabase(config: AppConfig): void {
   const db = new DatabaseSync(config.zotero.databaseUri);
   try {
-    assertZoteroDatabaseContract(db);
-    const library = queryLibrary(db);
+    const library = loadValidatedLibrary(db);
     console.log(`Zotero DB contract ok: ${library.items.length} items, ${library.collections.length} collections`);
   } finally {
     db.close();
