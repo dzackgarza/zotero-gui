@@ -7,6 +7,11 @@ test *args:
 test-prod-env:
     NODE_ENV=production npm run test
 
+# Offline gate run by the global pre-push hook. Excludes the live Zotero /
+# resolver diagnostics, which require the local Zotero DB, write plugin, and
+# network and are run on demand via the diagnostic-live-* recipes.
+test-ci: lint test test-prod-env build
+
 lint:
     npm run lint
 
