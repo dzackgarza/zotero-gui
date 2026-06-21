@@ -11,7 +11,7 @@
         {
           "id": "doi",
           "label": "DOI",
-          "example": "10.1007/s00222-024-01234-5",
+          "example": "10.1007/BF01388432",
           "pattern": "^(?:https?://(?:dx\\.)?doi\\.org/)?10\\.\\d{4,9}/\\S+$"
         }
       ]
@@ -65,7 +65,7 @@
         {
           "id": "zbmath-an",
           "label": "ZBMath AN",
-          "example": "an:0787.14001",
+          "example": "an:0139.24606",
           "pattern": "^(?:an:)?\\d{4}\\.\\d{5}$"
         },
         {
