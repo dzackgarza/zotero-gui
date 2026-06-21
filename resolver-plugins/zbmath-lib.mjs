@@ -26,6 +26,34 @@ function text(value, message) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+// Citation.js's BibTeX output module escapes braces in string fields (title,
+// journal) but emits CSL name fields by wrapping the raw value in `{...}`
+// WITHOUT escaping interior braces. A `{`/`}` inside an author name therefore
+// produces unbalanced BibTeX (e.g. `author = {{Bourbaki }collective{}}`) that
+// the validation gate truncates, silently dropping the title. A brace is never
+// legitimate content in a personal name, so reject it loudly rather than emit
+// corrupt BibTeX. This is not a sanitizing replace: the input is invalid.
+function citeName(name) {
+  const value = text(name, 'ZBMath author must contain a name');
+  invariant(
+    !value.includes('{') && !value.includes('}'),
+    `ZBMath author name must not contain a BibTeX brace delimiter: ${value}`,
+  );
+  return value;
+}
+
+// zbMath returns `year` as free-text. Extract the four-digit year the same way
+// the ISBN resolver does for Open Library's free-text publish_date, and throw
+// loudly when none is present. `Number.parseInt` is wrong here: it yields NaN
+// for "circa 2019" (serialized as `year = {NaN}`) and silently truncates
+// "2020a" to a partially-parsed value.
+function year(document) {
+  const raw = text(document.year, 'ZBMath document must contain a year');
+  const match = /\d{4}/.exec(raw);
+  invariant(match, `ZBMath year must contain a four-digit year: ${raw}`);
+  return Number.parseInt(match[0], 10);
+}
+
 function title(document) {
   invariant(document.title && typeof document.title === 'object', 'ZBMath document must contain title data');
   const mainTitle = text(document.title.title, 'ZBMath document must contain a title');
@@ -68,9 +96,9 @@ export function articleBibTeX(document, zblNumber) {
     'citation-key': `zbl_${zblNumber.replaceAll('.', '_')}`,
     type: 'article-journal',
     title: title(document),
-    author: authors(document).map(name => ({ literal: name })),
+    author: authors(document).map(name => ({ literal: citeName(name) })),
     'container-title': text(source.title, 'ZBMath source must contain a journal title'),
-    issued: { 'date-parts': [[Number.parseInt(text(document.year, 'ZBMath document must contain a year'), 10)]] },
+    issued: { 'date-parts': [[year(document)]] },
   };
 
   const doiValue = doi(document);

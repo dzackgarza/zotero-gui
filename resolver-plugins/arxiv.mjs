@@ -22,6 +22,11 @@ async function readStdin() {
 }
 
 const arxivId = await readStdin();
+// The manifest accepts old-style IDs (e.g. `math.AG/0601001`), whose `/` is part
+// of the identifier, not a path separator. encodeURIComponent escapes it to
+// `%2F`. Verified against arxiv.org: `https://arxiv.org/bibtex/math.AG%2F0601001`
+// returns HTTP 200 with the same BibTeX as the raw-slash form, so encoding the
+// slash is correct and deterministic for both new- and old-style IDs.
 const response = await fetch(`https://arxiv.org/bibtex/${encodeURIComponent(arxivId)}`);
 invariant(response.ok, `arXiv BibTeX export failed with HTTP ${response.status}`);
 

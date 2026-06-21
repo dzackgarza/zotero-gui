@@ -5,13 +5,16 @@ import '@citation-js/plugin-bibtex';
 import { bookBibTeX } from '../resolver-plugins/isbn-lib.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
 import { articleBibTeX } from '../resolver-plugins/zbmath-lib.mjs';
+// @ts-expect-error: resolver libs are plain .mjs without type declarations.
+import { doiRequestUrl } from '../resolver-plugins/doi.mjs';
 import { parseBibTeXToMetadata } from './utils/bibtexParser';
 
-// A title loaded with every BibTeX special character that the old hand-rolled
-// `{${value}}` interpolation could not escape: braces (including an UNBALANCED
-// one, which made the old splicer emit BibTeX that the project gate parser
-// rejected with "Token mismatch, expected }"), ampersand, dollar, percent,
-// hash, underscore, and backslash.
+// A title loaded with every BibTeX special character: braces (including an
+// UNBALANCED one), ampersand, dollar, percent, hash, underscore, and backslash.
+// Citation.js's BibTeX output module fully escapes these in string fields such
+// as `title`/`publisher` (e.g. `}` -> `\textbraceright{}`) and they round-trip
+// cleanly through the project gate parser. Name fields are the exception and are
+// covered by the dedicated brace-rejection tests below.
 const HOSTILE_TITLE = 'On {Quantum Groups & $L$-functions: 50% off #1 a_b \\delta Survey';
 
 function reparseSingle(bibtex: string): { title: string; author: Array<{ literal?: string; family?: string }> } {
@@ -55,6 +58,24 @@ describe('bookBibTeX (ISBN resolver) serializes via Citation.js', () => {
       }),
     ).toThrow();
   });
+
+  // Citation.js's BibTeX output module escapes braces in the title/publisher
+  // fields but emits CSL name fields by wrapping the raw string in `{...}`
+  // WITHOUT escaping interior braces. A `}` in an author name therefore yields
+  // unbalanced BibTeX ("author = {{Smith }}}") that the gate parser truncates,
+  // dropping the title. A brace is never legitimate content in a personal name,
+  // so the resolver must reject it loudly rather than emit corrupt BibTeX.
+  it('throws on an author name containing a BibTeX brace delimiter', () => {
+    expect(() =>
+      bookBibTeX({
+        isbn: '9780387902449',
+        title: 'A Perfectly Fine Title',
+        authors: ['Smith }'],
+        publisher: 'Addison-Wesley',
+        year: '1984',
+      }),
+    ).toThrow();
+  });
 });
 
 describe('articleBibTeX (zbMath resolver) serializes via Citation.js', () => {
@@ -90,5 +111,57 @@ describe('articleBibTeX (zbMath resolver) serializes via Citation.js', () => {
     expect(data.issue).toBe('2');
     expect(data.page).toBe('492-517');
     expect(data.DOI).toBe('10.2307/1970722');
+  });
+
+  // Same name-field hazard as the ISBN resolver: Citation.js cannot escape a
+  // brace inside an author name, so the resolver must reject it loudly.
+  it('throws on an author name containing a BibTeX brace delimiter', () => {
+    const braceAuthorDocument = {
+      ...zbmathDocument,
+      contributors: { authors: [{ name: 'Bourbaki }collective{' }] },
+    };
+    expect(() => articleBibTeX(braceAuthorDocument, '0139.24606')).toThrow();
+  });
+
+  // zbMath returns `year` as a free-text string. `Number.parseInt('circa 2019')`
+  // is NaN, which the old code serialized as `year = {NaN}`. The resolver must
+  // require a real four-digit year and throw when none is present, rather than
+  // emitting a NaN year.
+  it('throws when the year field contains no four-digit year', () => {
+    const noYearDocument = { ...zbmathDocument, year: 'circa nineteen-sixty-eight' };
+    expect(() => articleBibTeX(noYearDocument, '0139.24606')).toThrow();
+  });
+
+  it('extracts the four-digit year embedded in a free-text year string', () => {
+    const messyYearDocument = { ...zbmathDocument, year: 'published 1968 (reprint)' };
+    const bibtex = articleBibTeX(messyYearDocument, '0139.24606');
+    const data = new Cite(bibtex).data[0] as { issued: { 'date-parts': number[][] } };
+    expect(data.issued['date-parts'][0][0]).toBe(1968);
+  });
+});
+
+describe('doiRequestUrl (DOI resolver) percent-encodes the suffix', () => {
+  // A DOI suffix may legitimately contain URI-reserved characters. `encodeURI`
+  // leaves `?` and `#` unescaped, so the URL parser reinterprets them as the
+  // query/fragment boundary and the suffix is lost from the path, resolving the
+  // wrong identifier. The suffix must be percent-encoded so reserved characters
+  // travel as path data, while the `10.xxxx/` namespace slash is preserved.
+  it('preserves the namespace slash for a simple DOI', () => {
+    expect(doiRequestUrl('10.1007/BF01388432')).toBe('https://doi.org/10.1007/BF01388432');
+  });
+
+  it('percent-encodes a `?` in the suffix instead of starting a query string', () => {
+    const url = doiRequestUrl('10.1234/foo?bar');
+    expect(url).toBe('https://doi.org/10.1234/foo%3Fbar');
+    // The reserved character must NOT leak into the URL query component.
+    expect(new URL(url).search).toBe('');
+    expect(new URL(url).pathname).toBe('/10.1234/foo%3Fbar');
+  });
+
+  it('percent-encodes a `#` in the suffix instead of starting a fragment', () => {
+    const url = doiRequestUrl('10.1234/foo#bar');
+    expect(url).toBe('https://doi.org/10.1234/foo%23bar');
+    expect(new URL(url).hash).toBe('');
+    expect(new URL(url).pathname).toBe('/10.1234/foo%23bar');
   });
 });
