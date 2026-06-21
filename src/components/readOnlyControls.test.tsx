@@ -68,8 +68,8 @@ const searchSettings: AdvancedSearchSettings = {
 };
 
 const collections: Collection[] = [
-  { id: 'root', name: 'Root' },
-  { id: 'child', name: 'Child', parentId: 'root' },
+  { kind: 'real', id: 'root', name: 'Root', key: 'ROOTKEY' },
+  { kind: 'real', id: 'child', name: 'Child', parentId: 'root', key: 'CHILDKEY' },
 ];
 
 const item: ZoteroItem = {
@@ -131,7 +131,7 @@ function libraryWithCollection(): Response {
     // Sidebar selection id (numeric collectionID) is deliberately distinct from
     // the real Zotero collection key, so the import-composition assertion proves
     // the App forwards the key, never the numeric id.
-    collections: [{ id: '42', name: 'Number theory', parentId: undefined, key: 'NTKEYAB12' }],
+    collections: [{ kind: 'real', id: '42', name: 'Number theory', parentId: undefined, key: 'NTKEYAB12' }],
   });
 }
 

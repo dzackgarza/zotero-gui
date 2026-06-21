@@ -7,6 +7,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { LibraryPayload } from '../schemas';
+import type { Collection } from '../types';
 import { selectModalImportCollections } from '../libraryViews';
 import { createApp } from './server';
 import type { ResolverExecutionConfig, ResolverPluginConfig } from './resolverPlugins';
@@ -129,7 +130,7 @@ describe('/api/items/from-source error semantics', () => {
     const resolverPath = writeResolver(dir);
     attachmentOpenLogPath = path.join(dir, 'opened-attachments.log');
     attachmentOpenerPath = writeAttachmentOpener(dir);
-    libraryPayload = { items: [], collections: [{ id: 'all', name: 'My Library' }] };
+    libraryPayload = { items: [], collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }] };
 
     importServer = http.createServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -249,9 +250,9 @@ describe('/api/items/from-source error semantics', () => {
     // A live collections payload: the sidebar selection id is the internal
     // numeric collectionID; the real Zotero key is the separate alphanumeric
     // `key`. The import boundary must carry the key.
-    const collections = [
-      { id: 'all', name: 'My Library' },
-      { id: '100', name: 'Number Theory', key: 'NTKEY100' },
+    const collections: Collection[] = [
+      { kind: 'library-root', id: 'all', name: 'My Library' },
+      { kind: 'real', id: '100', name: 'Number Theory', key: 'NTKEY100' },
     ];
 
     // Selecting the real collection by its numeric selection id resolves to the
@@ -308,7 +309,7 @@ describe('/api/items/from-source error semantics', () => {
     // The freshly-written key is NOT yet visible in the eventually-consistent
     // library snapshot. Success must be determined solely from the authoritative
     // write-boundary result, never from a racy read-back of loadLibrary().
-    libraryPayload = { items: [], collections: [{ id: 'all', name: 'My Library' }] };
+    libraryPayload = { items: [], collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }] };
 
     const response = await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] });
 
@@ -322,7 +323,7 @@ describe('/api/items/from-source error semantics', () => {
 
   it('opens a loaded attachment through the route launcher boundary', async () => {
     libraryPayload = {
-      collections: [{ id: 'all', name: 'My Library' }],
+      collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }],
       items: [{
         id: 'ITEM123',
         itemType: 'book',
@@ -350,7 +351,7 @@ describe('/api/items/from-source error semantics', () => {
 
   it('rejects unknown attachments and attachments without local paths before launching', async () => {
     libraryPayload = {
-      collections: [{ id: 'all', name: 'My Library' }],
+      collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }],
       items: [{
         id: 'ITEM123',
         itemType: 'book',

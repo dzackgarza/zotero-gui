@@ -135,17 +135,41 @@ export interface ZoteroItem {
   inTrash?: boolean;
 }
 
-export interface Collection {
+// A collection is one of two genuinely different kinds, distinguished by `kind`:
+//
+//  - The synthetic 'all' My Library root VIEW the server prepends so the sidebar
+//    can render it. It is not a real Zotero collection, so it has no real Zotero
+//    key and no parent.
+//  - A REAL Zotero collection, which always carries its real Zotero collection
+//    key (collections.key). The import boundary forwards this key verbatim to the
+//    Zotero write plugin as a collection_keys entry; sidebar selection and in-app
+//    membership/filtering use the internal numeric collectionID (as a string) via
+//    `id`.
+//
+// Modeling these as a discriminated union makes a keyless real collection
+// unrepresentable: `key` is non-optional on the real variant, so a real
+// collection missing its key is a compile-time error rather than a value the
+// import path must defend against at runtime.
+
+interface CollectionBase {
   id: string;
   name: string;
-  parentId?: string; // For nested sub-collections
   icon?: string;
-  // Real Zotero collection key (collections.key). Used only at the import
-  // boundary; sidebar selection and in-app membership/filtering use `id` (the
-  // internal numeric collectionID as a string). Absent on the synthetic 'all'
-  // My Library root view.
-  key?: string;
 }
+
+export interface LibraryRootCollection extends CollectionBase {
+  kind: 'library-root';
+}
+
+export interface RealCollection extends CollectionBase {
+  kind: 'real';
+  parentId?: string; // For nested sub-collections
+  // Real Zotero collection key (collections.key), required on every real
+  // collection. Used only at the import boundary.
+  key: string;
+}
+
+export type Collection = LibraryRootCollection | RealCollection;
 
 // Columns definition for table Customization
 export interface ColumnDefinition {

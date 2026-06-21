@@ -1,3 +1,5 @@
+import type { Collection, RealCollection } from './types';
+
 // Single source of truth for UI-only "library view" sentinel ids.
 //
 // These ids name views the UI renders in the sidebar (My Library / All, plus
@@ -28,16 +30,20 @@ export function isLibraryViewSentinel(id: string): id is LibraryViewSentinel {
   return SENTINEL_SET.has(id);
 }
 
-// The real present collection matching a selected sidebar id, or undefined when
-// the id is a view sentinel or no live collection has that id. The sidebar
+// The REAL Zotero collection matching a selected sidebar id, or undefined when
+// the id is a view sentinel or no real collection has that id. The sidebar
 // selection id is the internal numeric collectionID (as a string); the matched
-// collection carries the real Zotero collection key separately.
-function selectedRealCollection<T extends { id: string }>(
-  collections: T[],
+// real collection carries the real Zotero collection key in its `key` field,
+// which the discriminated Collection type guarantees is present.
+function selectedRealCollection(
+  collections: readonly Collection[],
   selectedCollectionId: string,
-): T | undefined {
+): RealCollection | undefined {
   if (isLibraryViewSentinel(selectedCollectionId)) return undefined;
-  return collections.find(collection => collection.id === selectedCollectionId);
+  return collections.find(
+    (collection): collection is RealCollection =>
+      collection.kind === 'real' && collection.id === selectedCollectionId,
+  );
 }
 
 // The value passed to the Add-by-identifier modal as `collections`, which the
@@ -47,23 +53,20 @@ function selectedRealCollection<T extends { id: string }>(
 // (collections.key), not the internal numeric collectionID used as the sidebar
 // selection id. So a selected real collection imports into that collection's
 // real key. When the active selection is a view sentinel (My Library / All or
-// any derived view), import targets the library root: the empty array is the
-// real Zotero semantic for "no collection". A sentinel id must never reach the
-// write plugin as a collection key.
+// any derived view), or the synthetic library-root collection, import targets
+// the library root: the empty array is the real Zotero semantic for "no
+// collection". A sentinel id must never reach the write plugin as a key.
 //
-// A selected real collection with no resolvable key is an invariant violation
-// (the repository always publishes a real key for non-synthetic collections);
-// it fails loud rather than silently importing into the library root or
-// forwarding the numeric id.
+// A keyless real collection is unrepresentable: the discriminated Collection
+// type makes `key` non-optional on the real variant and the schema boundary
+// rejects a real collection without a key, so a real collection here always
+// carries a forwardable key. There is no keyless-real case to defend at runtime.
 export function selectModalImportCollections(
-  collections: { id: string; key?: string }[],
+  collections: readonly Collection[],
   selectedCollectionId: string,
 ): string[] {
   const collection = selectedRealCollection(collections, selectedCollectionId);
   if (collection === undefined) return [];
-  if (collection.key === undefined || collection.key.length === 0) {
-    throw new Error(`Selected collection ${selectedCollectionId} has no resolvable Zotero collection key`);
-  }
   return [collection.key];
 }
 

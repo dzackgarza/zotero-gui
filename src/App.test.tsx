@@ -96,9 +96,11 @@ describe('App library loading', () => {
         dateModified: '2026-06-18T00:00:00Z',
       }],
       collections: [{
+        kind: 'real',
         id: 'COLL123',
         name: 'Number theory',
         parentId: undefined,
+        key: 'COLLKEY123',
       }],
     }));
 
@@ -178,7 +180,7 @@ describe('App library loading', () => {
           { ...itemInCollection, id: 'ITEM_IN', title: 'Selected Collection Paper', collections: ['COLL_GONE'] },
           { ...itemInCollection, id: 'ITEM_OTHER', title: 'Other Library Paper', collections: [] },
         ],
-        collections: [{ id: 'COLL_GONE', name: 'Soon Deleted', parentId: undefined, key: 'GONEKEY1' }],
+        collections: [{ kind: 'real', id: 'COLL_GONE', name: 'Soon Deleted', parentId: undefined, key: 'GONEKEY1' }],
       }),
       // Reload triggered by the sync button: the previously-selected collection
       // no longer exists in the live library.

@@ -51,10 +51,10 @@ function item(
 
 describe('library selectors', () => {
   const collections: Collection[] = [
-    { id: 'root', name: 'Root' },
-    { id: 'child', name: 'Child', parentId: 'root' },
-    { id: 'grandchild', name: 'Grandchild', parentId: 'child' },
-    { id: 'sibling', name: 'Sibling' },
+    { kind: 'real', id: 'root', name: 'Root', key: 'ROOTKEY' },
+    { kind: 'real', id: 'child', name: 'Child', parentId: 'root', key: 'CHILDKEY' },
+    { kind: 'real', id: 'grandchild', name: 'Grandchild', parentId: 'child', key: 'GRANDKEY' },
+    { kind: 'real', id: 'sibling', name: 'Sibling', key: 'SIBKEY' },
   ];
 
   const items: ZoteroItem[] = [

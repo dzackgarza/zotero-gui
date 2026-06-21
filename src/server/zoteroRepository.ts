@@ -408,6 +408,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     FROM itemNotes n
     JOIN items i ON n.itemID = i.itemID
     WHERE n.parentItemID IS NOT NULL
+    AND n.itemID NOT IN (SELECT itemID FROM deletedItems)
     ORDER BY n.parentItemID
   `).all());
 
@@ -548,15 +549,17 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
   }));
 
   const collections: Collection[] = [
-    { id: 'all', name: 'My Library' },
-    ...rawCollections.map(row => ({
+    // Synthetic My Library root VIEW: not a real Zotero collection, so no key.
+    { kind: 'library-root', id: 'all', name: 'My Library' },
+    ...rawCollections.map((row): Collection => ({
+      kind: 'real',
       id: String(row.collectionID),
       name: row.collectionName,
       parentId: row.parentCollectionID != null ? String(row.parentCollectionID) : undefined,
-      // Real Zotero collection key (collections.key). The sidebar selection and
-      // in-app membership/filtering use the internal numeric `id`; the import
-      // boundary must instead carry this key, which is what the Zotero write
-      // plugin requires as a collection_keys entry.
+      // Real Zotero collection key (collections.key), required on every real
+      // collection. The sidebar selection and in-app membership/filtering use the
+      // internal numeric `id`; the import boundary must instead carry this key,
+      // which is what the Zotero write plugin requires as a collection_keys entry.
       key: row.key,
     })),
   ];

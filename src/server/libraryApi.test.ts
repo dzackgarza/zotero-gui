@@ -228,6 +228,35 @@ describe('trashed attachments are excluded from surfacing', () => {
   });
 });
 
+describe('trashed child notes are excluded from surfacing', () => {
+  it('drops a trashed child note from its parent while keeping a non-trashed sibling note', () => {
+    const db = createFixtureDb();
+    // BOOK1234 (itemID 1) already owns one child note: NOTE1234 (itemID 2).
+    // Add a SECOND child note (itemID 9), then trash ONLY the original note by
+    // putting its itemID in deletedItems, exactly as Zotero's Trash does. The
+    // surviving note proves the query still surfaces non-trashed notes (so the
+    // exclusion is targeted, not a blanket drop), and the trashed note proves
+    // the deletedItems anti-join is applied symmetrically with attachments.
+    db.exec(`
+      INSERT INTO itemDataValues VALUES (10, 'Kept Note Body');
+      INSERT INTO items VALUES (9, 'NOTE5678', 3, 1, '2026-01-11 00:00:00', '2026-01-12 00:00:00');
+      INSERT INTO itemNotes VALUES (9, 1, '<p>Live Note</p>');
+      INSERT INTO deletedItems VALUES (2);
+    `);
+
+    const payload = loadValidatedLibrary(db);
+    const book = payload.items.find(item => item.id === 'BOOK1234');
+    if (book === undefined) {
+      throw new Error('expected BOOK1234 to remain a top-level item');
+    }
+
+    const noteIds = book.notes.map(note => note.id);
+    // The trashed note (itemID 2) must be gone; the live note (itemID 9) kept.
+    expect(noteIds).toEqual(['9']);
+    expect(book.notes[0]?.note).toBe('Live Note');
+  });
+});
+
 describe('single load runs the library pipeline once', () => {
   it('executes the top-level item query exactly once per validated load', () => {
     const real = createFixtureDb();
@@ -309,9 +338,9 @@ describe('/api/library', () => {
     // Zotero collection key (collections.key) is published separately as `key`
     // for the import boundary. The synthetic 'all' My Library view has no key.
     expect(payload.collections).toEqual([
-      { id: 'all', name: 'My Library' },
-      { id: '100', name: 'Root Collection', key: 'ROOTKEY1' },
-      { id: '101', name: 'Nested Collection', parentId: '100', key: 'NESTKEY2' },
+      { kind: 'library-root', id: 'all', name: 'My Library' },
+      { kind: 'real', id: '100', name: 'Root Collection', key: 'ROOTKEY1' },
+      { kind: 'real', id: '101', name: 'Nested Collection', parentId: '100', key: 'NESTKEY2' },
     ]);
     expect(payload.items).toHaveLength(3);
     expect(payload.items[0]).toMatchObject({

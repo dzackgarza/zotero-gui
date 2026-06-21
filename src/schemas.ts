@@ -24,16 +24,32 @@ export const AttachmentSchema = z.strictObject({
   path: z.string().optional(),
 });
 
-export const CollectionSchema = z.strictObject({
+// Discriminated on `kind`. The synthetic library-root VIEW carries no real Zotero
+// key; a REAL collection always carries its real Zotero collection key. This
+// runtime boundary therefore guarantees `key` presence on every real collection,
+// matching the Collection type: a keyless real collection cannot parse, so it can
+// never reach the import boundary.
+export const LibraryRootCollectionSchema = z.strictObject({
+  kind: z.literal('library-root'),
   id: z.string(),
   name: z.string(),
-  parentId: z.string().optional(),
   icon: z.string().optional(),
-  // Real Zotero collection key (collections.key). Present on real collections;
-  // absent on the synthetic 'all' My Library root view, which has no real key.
-  // The import boundary uses this key; sidebar selection/filtering use `id`.
-  key: z.string().optional(),
 });
+
+export const RealCollectionSchema = z.strictObject({
+  kind: z.literal('real'),
+  id: z.string(),
+  name: z.string(),
+  icon: z.string().optional(),
+  parentId: z.string().optional(),
+  // Required: the import boundary forwards this verbatim to the Zotero write plugin.
+  key: z.string().min(1),
+});
+
+export const CollectionSchema = z.discriminatedUnion('kind', [
+  LibraryRootCollectionSchema,
+  RealCollectionSchema,
+]);
 
 export const ZoteroItemSchema = z.strictObject({
   id: z.string(),

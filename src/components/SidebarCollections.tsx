@@ -86,8 +86,8 @@ export default function SidebarCollections({
     const count = getItemCount(col.id);
     const isSelected = selectedCollectionId === col.id;
 
-    // Render child sub-collections
-    const childNodes = collections.filter(c => c.parentId === col.id);
+    // Render child sub-collections. Only real collections have a parent.
+    const childNodes = collections.filter(c => c.kind === 'real' && c.parentId === col.id);
 
     return (
       <div key={col.id} className="space-y-0.5">
@@ -123,7 +123,9 @@ export default function SidebarCollections({
     );
   };
 
-  const rootCollections = collections.filter(c => !c.parentId && c.id !== 'all');
+  // Top-level real collections: real collections with no parent. The synthetic
+  // library-root view is not a real collection and is rendered separately.
+  const rootCollections = collections.filter(c => c.kind === 'real' && c.parentId === undefined);
   const tagCloud = selectTagCloud(items, 15);
 
   return (

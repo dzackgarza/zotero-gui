@@ -25,7 +25,11 @@ export function collectionDescendantIds(collections: Collection[], collectionId:
       throw new Error('Collection traversal reached an empty collection id');
     }
 
-    const children = collections.filter(collection => collection.parentId === parentId);
+    // Only real collections have a parent; the synthetic library-root view never
+    // appears as a child of any collection.
+    const children = collections.filter(
+      collection => collection.kind === 'real' && collection.parentId === parentId,
+    );
     children.forEach(child => {
       if (descendants.has(child.id)) {
         throw new Error(`Collection cycle detected at ${child.id}`);

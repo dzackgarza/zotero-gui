@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CollectionSchema } from './schemas';
 import {
   LIBRARY_VIEW_SENTINELS,
   isLibraryViewSentinel,
@@ -13,9 +14,9 @@ import type { Collection } from './types';
 // key, never the selection id.
 const collections: Collection[] = [
   // The server prepends this synthetic My Library view as a fake collection.
-  { id: 'all', name: 'My Library' },
-  { id: '100', name: 'Number theory', key: 'NTKEY100' },
-  { id: '101', name: 'Geometry', parentId: '100', key: 'GEOKEY101' },
+  { kind: 'library-root', id: 'all', name: 'My Library' },
+  { kind: 'real', id: '100', name: 'Number theory', key: 'NTKEY100' },
+  { kind: 'real', id: '101', name: 'Geometry', parentId: '100', key: 'GEOKEY101' },
 ];
 
 describe('library view sentinels', () => {
@@ -53,12 +54,30 @@ describe('selectModalImportCollections', () => {
     expect(selectModalImportCollections(collections, '999')).toEqual([]);
   });
 
-  it('fails loud when a selected real collection has no resolvable Zotero key', () => {
-    const keyless: Collection[] = [
-      { id: 'all', name: 'My Library' },
-      { id: '100', name: 'Keyless Collection' },
-    ];
-    expect(() => selectModalImportCollections(keyless, '100')).toThrow();
+  it('rejects a real collection without a key at the schema boundary, so a keyless real collection never reaches the import path', () => {
+    // The previously-optional key let a keyless real collection flow to the
+    // import boundary, where only a runtime guard stopped it. The discriminated
+    // contract now rejects it at the parse boundary: a real collection missing
+    // its key fails to parse, so it can never reach selectModalImportCollections.
+    // (A keyless real collection is also a compile-time error: the literal
+    // `{ kind: 'real', id, name }` does not type-check because `key` is required.)
+    const keylessReal = { kind: 'real', id: '100', name: 'Keyless Collection' };
+    const result = CollectionSchema.safeParse(keylessReal);
+    expect(result.success).toBe(false);
+
+    // The synthetic library-root view legitimately has no key and parses fine.
+    const libraryRoot = { kind: 'library-root', id: 'all', name: 'My Library' };
+    expect(CollectionSchema.safeParse(libraryRoot).success).toBe(true);
+
+    // A real collection WITH a key parses, and the parsed value carries the key
+    // to the import boundary verbatim.
+    const realWithKey = CollectionSchema.parse({
+      kind: 'real',
+      id: '100',
+      name: 'Number theory',
+      key: 'NTKEY100',
+    });
+    expect(selectModalImportCollections([realWithKey], '100')).toEqual(['NTKEY100']);
   });
 });
 
@@ -75,8 +94,8 @@ describe('reconcileSelectedLibraryView', () => {
 
   it('resets a stale collection selection to the My Library root view', () => {
     const afterReload: Collection[] = [
-      { id: 'all', name: 'My Library' },
-      { id: '100', name: 'Number theory', key: 'NTKEY100' },
+      { kind: 'library-root', id: 'all', name: 'My Library' },
+      { kind: 'real', id: '100', name: 'Number theory', key: 'NTKEY100' },
     ];
     // 101 was dropped by the reload; the stale id must reconcile to 'all'.
     expect(reconcileSelectedLibraryView(afterReload, '101')).toBe('all');
