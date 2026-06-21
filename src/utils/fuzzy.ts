@@ -164,13 +164,42 @@ const SEARCH_DOCUMENT_KEYS = new Set<ZoteroSearchKey>([
   'callNumber',
 ]);
 
-const PALETTE_SEARCH_KEYS = [
+/**
+ * The single source of truth for the "default searchable fields" contract.
+ *
+ * This is the canonical key subset for two distinct, explicitly-owned ranking
+ * modes that both project items through {@link buildZoteroSearchDocuments} and
+ * both validate against {@link SEARCH_DOCUMENT_KEYS}:
+ *
+ *   - The command palette (Fzf subsequence ranking, e.g. 'agtf' matches
+ *     "Algebraic Geometry and Theta Functions") — see {@link rankPaletteDocuments}.
+ *   - Advanced search's *default* enabled fields (Fuse threshold + token
+ *     all/any ranking) — App seeds AdvancedSearchSettings.searchFields from
+ *     this set via {@link isDefaultSearchField}.
+ *
+ * The two modes use different engines because their UX is intentionally
+ * different (subsequence palette vs. configurable-threshold advanced search),
+ * but neither owns its own key list: both read this one. Any consumer that
+ * needs "the fields searched by default" must derive from here — re-listing
+ * the keys elsewhere reintroduces the split-truth this constant exists to
+ * eliminate.
+ */
+export const PALETTE_SEARCH_KEYS = [
   'title',
   'creators_compact',
   'publicationTitle',
   'date',
   'citekey',
 ] as const;
+
+/**
+ * Whether a projection key is in the canonical default-searchable set.
+ * App seeds the advanced-search default field toggles from this predicate so
+ * the palette key contract and the advanced-search defaults cannot diverge.
+ */
+export function isDefaultSearchField(key: string): boolean {
+  return (PALETTE_SEARCH_KEYS as readonly string[]).includes(key);
+}
 
 export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDocument[] {
   return items.map(item => ({

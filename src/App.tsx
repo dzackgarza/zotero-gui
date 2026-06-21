@@ -5,6 +5,7 @@ import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems, type SortKey } from './librarySelectors';
 import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
 import { toFormattedCitation } from './utils/citation';
+import { isDefaultSearchField } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
 import { useColumnLayout } from './useColumnLayout';
@@ -63,7 +64,7 @@ export default function App() {
   const [searchSettings, setSearchSettings] = useState<AdvancedSearchSettings>(() => {
     const fields: Record<string, boolean> = {};
     DEFAULT_COLUMNS.forEach(col => {
-      fields[col.key] = ['title', 'creators_compact', 'publicationTitle', 'date', 'citekey'].includes(col.key);
+      fields[col.key] = isDefaultSearchField(col.key);
     });
     return {
       query: '',

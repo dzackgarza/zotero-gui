@@ -64,6 +64,7 @@ export default function TopBar({
                 <Tooltip.Trigger asChild>
                   <button
                     onClick={onOpenAdvancedSearch}
+                    aria-label="Advanced Search Scopes"
                     className={`p-1 rounded transition-colors cursor-pointer ${
                       isScopingApplied
                         ? 'text-sky-400 bg-sky-500/10 hover:bg-sky-500/20'

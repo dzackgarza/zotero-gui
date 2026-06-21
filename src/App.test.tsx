@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
+import { DEFAULT_COLUMNS } from './data/samples';
+import { PALETTE_SEARCH_KEYS } from './utils/fuzzy';
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -219,5 +221,61 @@ describe('App library loading', () => {
     fireEvent.click(screen.getByRole('button', { name: /reload library/i }));
 
     expect(await screen.findByText('Reloaded Zotero Item')).toBeInTheDocument();
+  });
+});
+
+describe('App default search-field scoping', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // Desync guard: App seeds AdvancedSearchSettings.searchFields from the single
+  // canonical key source (PALETTE_SEARCH_KEYS in utils/fuzzy). This proves the
+  // *rendered* default-enabled scope equals that source exactly. If a future
+  // edit re-hardcodes a divergent default field list in App (the banned
+  // split-truth), the checked checkboxes in the Advanced Search modal will no
+  // longer match the canonical source and this test fails.
+  it('seeds the advanced-search default scope from the canonical palette key source', async () => {
+    renderAppWithLibraryResponse(libraryResponse({
+      items: [{
+        id: 'ITEM_SCOPE',
+        itemType: 'journalArticle',
+        title: 'Scope Seeding Witness',
+        creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+        date: '1843',
+        publicationTitle: 'Scientific Memoirs',
+        tags: [],
+        notes: [],
+        attachments: [],
+        collections: [],
+        dateAdded: '2026-06-21T00:00:00Z',
+        dateModified: '2026-06-21T00:00:00Z',
+      }],
+      collections: [],
+    }));
+
+    await screen.findByText('Scope Seeding Witness');
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced search scopes/i }));
+
+    const canonical = new Set<string>(PALETTE_SEARCH_KEYS);
+    // Every default column must render a scope checkbox whose checked state
+    // equals canonical membership — no more, no less.
+    for (const column of DEFAULT_COLUMNS) {
+      const checkbox = screen.getByRole('checkbox', { name: column.label });
+      expect(
+        (checkbox as HTMLInputElement).checked,
+        `Default scope for "${column.label}" (${column.key}) must equal canonical membership`,
+      ).toBe(canonical.has(column.key));
+    }
+
+    // The enabled scope is exactly the canonical key set (e.g. exactly 5
+    // fields), so a re-hardcoded list with extra/missing fields cannot pass.
+    const checkedLabels = DEFAULT_COLUMNS
+      .filter(column => (screen.getByRole('checkbox', { name: column.label }) as HTMLInputElement).checked)
+      .map(column => column.key);
+    expect(new Set(checkedLabels)).toEqual(canonical);
   });
 });
