@@ -5,12 +5,30 @@ import { Fzf } from 'fzf';
 import { transliterate } from 'transliteration';
 import { ZoteroItem, AdvancedSearchSettings, Creator } from '../types';
 
-const BBT_UNSAFE_CITEKEY_CHARS = /["#%'(),={}~\s\uFFFD]/g;
+const BBT_UNSAFE_CITEKEY_CHARS = /["#%'(),={}~\s]/g;
 
 type CreatorBucket = 'author' | 'editor' | 'translator' | 'collaborator';
 
+/**
+ * Mirrors Better BibTeX's `clean` transliteration outcome: a name is folded to
+ * ASCII, and any character that has no ASCII transliteration does not appear in
+ * the derived key. BBT's source achieves this by emitting a U+FFFD replacement
+ * sentinel for unknowns and including U+FFFD in its unsafe-character class so
+ * the sentinel is later stripped (formatter.ts: `unsafechars = citekeyUnsafeChars
+ * + '\uFFFD'`; `citekey.replace(this.re.unsafechars, '')`).
+ *
+ * We produce the same documented OUTCOME (untransliterable characters omitted)
+ * but via an explicit, named omission at the transliteration step
+ * (`unknown: ''`) rather than a silent sentinel round-trip. The sentinel path
+ * was lossy in two ways this avoids: a multi-code-unit untransliterable
+ * character (e.g. U+1D54F, a surrogate pair) corrupted the surrounding ASCII
+ * prefix, and a literal U+FFFD already in the source data was stripped
+ * indistinguishably from a transliteration miss. Omitting at the transliteration
+ * step makes the drop deterministic and keeps the surrounding transliterable
+ * letters intact, so U+FFFD is no longer part of the unsafe-character class.
+ */
 function bbtTransliterate(value: string): string {
-  return fold2ascii.foldMaintaining(transliterate(value, { unknown: '\uFFFD' }));
+  return fold2ascii.foldMaintaining(transliterate(value, { unknown: '' }));
 }
 
 function stripCreatorName(value: string): string {
@@ -101,7 +119,12 @@ export function getStandardCitekey(item: ZoteroItem): string {
 
 export interface ZoteroSearchDocument {
   item: ZoteroItem;
-  title: string;
+  // Title is legitimately absent for titleless items (the real DB has them).
+  // The projection must not fabricate an empty-string title token: an absent
+  // title contributes no title term but the item stays searchable by its other
+  // fields. Keep this optional so a missing title is a representable data state,
+  // not a silent '' default.
+  title?: string;
   creators_compact: string;
   creators: string;
   publicationTitle: string;
@@ -204,7 +227,7 @@ export function isDefaultSearchField(key: string): boolean {
 export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDocument[] {
   return items.map(item => ({
     item,
-    title: item.title ?? '',
+    title: item.title,
     creators_compact: formatCreatorsCompact(item.creators),
     creators: formatCreatorsFull(item.creators),
     publicationTitle: item.publicationTitle ?? '',
@@ -247,7 +270,12 @@ function searchKey(value: string): ZoteroSearchKey {
 }
 
 function searchText(document: ZoteroSearchDocument, keys: ZoteroSearchKey[]): string {
-  return keys.map(key => document[key]).join(' ');
+  // Absent fields (e.g. a titleless item's title) contribute no term rather
+  // than a fabricated empty token.
+  return keys
+    .map(key => document[key])
+    .filter((value): value is string => value !== undefined)
+    .join(' ');
 }
 
 function rankDocuments(

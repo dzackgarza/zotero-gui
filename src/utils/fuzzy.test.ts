@@ -4,6 +4,7 @@ import {
   PALETTE_SEARCH_KEYS,
   buildZoteroSearchDocuments,
   filterZoteroItems,
+  getStandardCitekey,
   rankZoteroSearchDocumentsForPalette,
 } from './fuzzy';
 
@@ -137,6 +138,76 @@ describe('advanced search ranking', () => {
     expect(() => filterZoteroItems(items, settings)).toThrowError(
       /Unsupported Zotero search field: notARealField/,
     );
+  });
+});
+
+describe('standard citekey transliteration of untransliterable characters', () => {
+  // Better BibTeX's documented citekey algorithm transliterates names and then
+  // removes characters that have no ASCII transliteration (the BBT `clean`
+  // step: transliterate, then drop unsafe characters). The documented OUTCOME
+  // is that an untransliterable character does not appear in the derived key;
+  // the surrounding transliterable characters are preserved and still counted.
+  //
+  // The defect this pins: an untransliterable character must be omitted
+  // deterministically and explicitly at the transliteration step — not by
+  // emitting a U+FFFD replacement sentinel that is later stripped. The witness
+  // places the untransliterable U+1D54F (MATHEMATICAL DOUBLE-STRUCK CAPITAL X,
+  // which has no ASCII transliteration) BEFORE three transliterable letters.
+  //
+  // Correct (explicit drop): authorsAlpha takes the first 3 letters of the
+  //   transliterated family name "Muller" -> "Mul".
+  // Broken (sentinel leaks into output): the key would contain U+FFFD or be a
+  //   truncated "Mu", because the dropped character consumed a prefix slot.
+  // Broken (whole name treated as untranslatable): the key would be empty.
+  it('omits an untransliterable character without dropping surrounding letters', () => {
+    const withUntransliterable: ZoteroItem = item('xmuller', 'Any Title', 'XMul20', {
+      creators: [{ firstName: 'Anna', lastName: '\u{1D54F}Müller', creatorType: 'author' }],
+      date: '2020',
+    });
+
+    expect(getStandardCitekey(withUntransliterable)).toBe('Mul20');
+  });
+
+  // A literal U+FFFD already present in the source data (e.g. prior mojibake in
+  // the Zotero DB) must be handled by the same deterministic omission, not by a
+  // sentinel class that conflates "library could not transliterate" with
+  // "input literally contained a replacement character".
+  it('omits a literal replacement character present in the source name', () => {
+    const withLiteralReplacement: ZoteroItem = item('moller', 'Any Title', 'Mol20', {
+      creators: [{ firstName: 'Bo', lastName: 'Mö�ller', creatorType: 'author' }],
+      date: '2020',
+    });
+
+    expect(getStandardCitekey(withLiteralReplacement)).toBe('Mol20');
+  });
+});
+
+describe('search projection of a titleless item', () => {
+  // ZoteroItem.title is legitimately optional; the real DB has titleless items.
+  // The projection must NOT fabricate an empty-string title token: a titleless
+  // item contributes no title term but stays searchable by its other fields.
+  it('does not fabricate an empty-string title token for a titleless item', () => {
+    const documents = buildZoteroSearchDocuments([
+      item('titleless', undefined as unknown as string, 'NoTitle20', {
+        publicationTitle: 'Distinctive Journal Of Topology',
+      }),
+    ]);
+
+    // The projected title term is absent (no '' token), not a fabricated empty
+    // string that would silently mask the missing-title data state.
+    expect(documents[0].title).toBeUndefined();
+  });
+
+  it('keeps a titleless item searchable by another field and does not match an empty-title query', () => {
+    const titleless: ZoteroItem = item('titleless', undefined as unknown as string, 'NoTitle20', {
+      publicationTitle: 'Distinctive Journal Of Topology',
+    });
+
+    const byPublication = filterZoteroItems(
+      [titleless],
+      advancedSettings('Distinctive', 'all', { publicationTitle: true }),
+    ).map(result => result.id);
+    expect(byPublication).toEqual(['titleless']);
   });
 });
 
