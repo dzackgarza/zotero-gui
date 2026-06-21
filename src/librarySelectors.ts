@@ -57,12 +57,16 @@ export function duplicateItems(items: ZoteroItem[]): ZoteroItem[] {
   const active = activeLibraryItems(items);
   const titleCounts = new Map<string, number>();
 
+  // Title-based duplicate detection only applies to items that have a title.
+  // A title-less item has no title to match on, so it cannot be a duplicate.
   active.forEach(item => {
+    if (item.title === undefined) return;
     const normalizedTitle = item.title.trim().toLowerCase();
     titleCounts.set(normalizedTitle, (titleCounts.get(normalizedTitle) ?? 0) + 1);
   });
 
   return active.filter(item => {
+    if (item.title === undefined) return false;
     const count = titleCounts.get(item.title.trim().toLowerCase());
     if (count === undefined) {
       throw new Error(`Missing duplicate count for item ${item.id}`);

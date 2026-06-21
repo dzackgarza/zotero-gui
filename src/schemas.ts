@@ -34,7 +34,7 @@ export const CollectionSchema = z.strictObject({
 export const ZoteroItemSchema = z.strictObject({
   id: z.string(),
   itemType: ItemTypeSchema,
-  title: z.string(),
+  title: z.string().optional(),
   creators: z.array(CreatorSchema),
   publicationTitle: z.string().optional(),
   volume: z.string().optional(),

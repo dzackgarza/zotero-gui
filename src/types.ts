@@ -104,7 +104,7 @@ export interface ItemNote {
 export interface ZoteroItem {
   id: string;
   itemType: ItemType;
-  title: string;
+  title?: string;
   creators: Creator[];
   publicationTitle?: string;
   volume?: string;

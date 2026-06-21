@@ -22,8 +22,8 @@ const RawItemRowSchema = z.strictObject({
   itemID: z.number(),
   id: z.string(),
   itemType: z.string(),
-  dateAdded: NullableStringSchema,
-  dateModified: NullableStringSchema,
+  dateAdded: z.string(),
+  dateModified: z.string(),
   title: NullableStringSchema,
   doi: NullableStringSchema,
   url: NullableStringSchema,
@@ -69,8 +69,8 @@ const NoteRowSchema = z.strictObject({
   parentItemID: z.number(),
   itemID: z.number(),
   note: NullableStringSchema,
-  dateAdded: NullableStringSchema,
-  dateModified: NullableStringSchema,
+  dateAdded: z.string(),
+  dateModified: z.string(),
 });
 
 const AttachmentRowSchema = z.strictObject({
@@ -130,6 +130,7 @@ export type ZoteroDatabaseContractErrorKind =
   | 'missing_column'
   | 'missing_field'
   | 'unsupported_item_type'
+  | 'standalone_note'
   | 'broken_link'
   | 'invalid_rows';
 
@@ -261,9 +262,22 @@ function assertCoherentLinks(db: DatabaseSync): void {
   `, 'Zotero DB contract has broken collection item links');
 }
 
+function assertNoStandaloneNotes(db: DatabaseSync): void {
+  const row = CountRowSchema.parse(
+    db.prepare('SELECT COUNT(*) AS count FROM itemNotes WHERE parentItemID IS NULL').get(),
+  );
+  if (row.count !== 0) {
+    throw new ZoteroDatabaseContractError(
+      'standalone_note',
+      'Zotero DB contract: library contains standalone notes, which are unsupported by this app',
+    );
+  }
+}
+
 export function assertZoteroDatabaseContract(db: DatabaseSync): void {
   assertRequiredTablesAndColumns(db);
   assertRequiredFieldNames(db);
+  assertNoStandaloneNotes(db);
   assertObservedItemTypes(db);
   assertCoherentLinks(db);
   try {
@@ -428,8 +442,8 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     list.push({
       id: String(row.itemID),
       note: noteToPlainText(row.note ?? ''),
-      dateAdded: row.dateAdded ?? '',
-      dateModified: row.dateModified ?? '',
+      dateAdded: row.dateAdded,
+      dateModified: row.dateModified,
     });
     notesByItem.set(row.parentItemID, list);
   }
@@ -459,7 +473,7 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
   const items: ZoteroItem[] = rawItems.map(row => ({
     id: row.id,
     itemType: parseItemType(row.itemType),
-    title: row.title ?? 'Untitled',
+    title: row.title ?? undefined,
     creators: creatorsByItem.get(row.itemID) ?? [],
     publicationTitle: row.publicationTitle ?? undefined,
     volume: row.volume ?? undefined,
@@ -485,8 +499,8 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     notes: notesByItem.get(row.itemID) ?? [],
     attachments: attachsByItem.get(row.itemID) ?? [],
     collections: collsByItem.get(row.itemID) ?? [],
-    dateAdded: row.dateAdded ?? '',
-    dateModified: row.dateModified ?? '',
+    dateAdded: row.dateAdded,
+    dateModified: row.dateModified,
     inTrash: row.inTrash === 1,
   }));
 

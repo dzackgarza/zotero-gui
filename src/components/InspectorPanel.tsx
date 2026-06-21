@@ -83,13 +83,14 @@ export default function InspectorPanel({
 
   // Clipboard citation formatting (simplified BibTeX)
   const copyBibtex = () => {
+    const title = item.title ?? '';
     const mainCreator = item.creators[0] ? item.creators[0].lastName.toLowerCase() : 'anonymous';
-    const cleanTitle = item.title.replace(/\s+/g, '_').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    const cleanTitle = title.replace(/\s+/g, '_').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
     const year = item.date || 'unknown';
     const entryKey = item.citekey || `${mainCreator}_${cleanTitle}_${year}`;
 
     const bibtex = `@article{${entryKey},
-  title = {${item.title}},
+  title = {${title}},
   author = {${item.creators.map(c => `${c.lastName}, ${c.firstName}`).join(' and ')}},
   journal = {${item.publicationTitle || ''}},
   year = {${year}},

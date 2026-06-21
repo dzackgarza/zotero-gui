@@ -131,15 +131,15 @@ export default function CommandPalette({
   const renderItem = ({ item }: ZoteroSearchDocument) => (
     <CmdK.Item
       key={item.id}
-      value={item.title}
+      value={item.id}
       onSelect={() => handleItem(item)}
       className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors text-slate-300 data-[selected=true]:bg-blue-600 data-[selected=true]:text-white"
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <BookOpen className="h-4 w-4 text-sky-400 shrink-0" />
         <div className="flex flex-col min-w-0 text-xs">
-          <span className="font-semibold text-slate-100 truncate max-w-sm">
-            {item.title}
+          <span className={`font-semibold truncate max-w-sm ${item.title === undefined ? 'italic text-slate-500' : 'text-slate-100'}`}>
+            {item.title ?? '(no title)'}
           </span>
           <span className="text-[10px] text-slate-550 mt-0.5 truncate">
             {formatCreatorsCompact(item.creators)} | {item.date || 'No Date'} | {item.citekey}

@@ -129,6 +129,46 @@ describe('Zotero DB contract preflight', () => {
     `);
     expectContractFailure(malformedRows, 'invalid_rows');
   });
+
+  it('maps a top-level item with no title row to an absent title without inventing a placeholder', () => {
+    const db = createFixtureDb();
+    db.exec(`
+      INSERT INTO items VALUES (6, 'NOTITLE1', 1, 1, '2026-03-01 00:00:00', '2026-03-02 00:00:00');
+    `);
+    assertZoteroDatabaseContract(db);
+    const payload = queryLibrary(db);
+
+    const noTitle = payload.items.find(item => item.id === 'NOTITLE1');
+    if (noTitle === undefined) {
+      throw new Error('expected the title-less item to survive into the top-level payload');
+    }
+    expect(noTitle.title).toBeUndefined();
+    expect(LibraryPayloadSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('fails before serving when a real items date column violates its NOT NULL contract', () => {
+    const nullDate = createFixtureDb();
+    // Rebuild the items table dropping the dateAdded NOT NULL guard so a null
+    // date can be inserted, preserving every existing row so the only contract
+    // deviation under test is the null date (not an orphaned child item).
+    nullDate.exec(`
+      ALTER TABLE items RENAME TO items_old;
+      CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT NOT NULL, itemTypeID INTEGER NOT NULL, libraryID INTEGER NOT NULL, dateAdded TEXT, dateModified TEXT NOT NULL);
+      INSERT INTO items SELECT itemID, key, itemTypeID, libraryID, dateAdded, dateModified FROM items_old;
+      DROP TABLE items_old;
+      INSERT INTO items VALUES (7, 'NULLDATE', 1, 1, NULL, '2026-04-02 00:00:00');
+    `);
+    expectContractFailure(nullDate, 'invalid_rows');
+  });
+
+  it('fails before serving when the library contains a standalone note', () => {
+    const standaloneNote = createFixtureDb();
+    standaloneNote.exec(`
+      INSERT INTO items VALUES (8, 'STANDNOT', 3, 1, '2026-05-01 00:00:00', '2026-05-02 00:00:00');
+      INSERT INTO itemNotes VALUES (8, NULL, '<p>Orphaned thought</p>');
+    `);
+    expectContractFailure(standaloneNote, 'standalone_note');
+  });
 });
 
 describe('/api/library', () => {

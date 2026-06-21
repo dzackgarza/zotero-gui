@@ -175,7 +175,7 @@ const PALETTE_SEARCH_KEYS = [
 export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDocument[] {
   return items.map(item => ({
     item,
-    title: item.title,
+    title: item.title ?? '',
     creators_compact: formatCreatorsCompact(item.creators),
     creators: formatCreatorsFull(item.creators),
     publicationTitle: item.publicationTitle ?? '',
