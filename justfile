@@ -1,6 +1,12 @@
 test *args:
     npm run test -- {{args}}
 
+# Regression guard: the suite must pass even when the caller's environment
+# exports NODE_ENV=production (which otherwise loads react-dom's production
+# test-utils build and breaks React.act). See testing-library/react#1392.
+test-prod-env:
+    NODE_ENV=production npm run test
+
 lint:
     npm run lint
 
