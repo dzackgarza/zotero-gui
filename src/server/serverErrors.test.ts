@@ -25,7 +25,7 @@ function tempDir(): string {
 
 function writeResolver(dir: string): string {
   const scriptPath = path.join(dir, 'resolver.mjs');
-  writeFileSync(scriptPath, 'process.stdout.write("@book{created,title={Created Route Item}}\\n");');
+  writeFileSync(scriptPath, 'process.stdout.write("@book{created,title={Created Route Item},author={Doe, Jane}}\\n");');
   return scriptPath;
 }
 

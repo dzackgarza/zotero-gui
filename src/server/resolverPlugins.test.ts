@@ -140,15 +140,20 @@ process.stdout.write(\`@book{fixture,
       'ISBN 9780262033848',
       execution(dir),
     );
-    const item = parseBibTeXToMetadata(bibtex);
 
-    expect(item).toMatchObject({
-      itemType: 'book',
-      title: 'Resolved ISBN 9780262033848',
-      publisher: 'Independent Resolver Press',
-      isbn: '9780262033848',
-    });
-    expect(item.creators).toEqual([{ firstName: 'Emmy', lastName: 'Noether', creatorType: 'author' }]);
+    // The route ships the resolver's RAW BibTeX to Zotero (operation: 'import_bibtex');
+    // it must not re-map fields into a bespoke object. Prove the raw entry is preserved
+    // verbatim and that parseBibTeXToMetadata is a pure validation gate (no return value
+    // to fabricate item types or creators from).
+    expect(bibtex).toBe(`@book{fixture,
+  title = {Resolved ISBN 9780262033848},
+  author = {Noether, Emmy},
+  publisher = {Independent Resolver Press},
+  year = {2026},
+  isbn = {9780262033848}
+}
+`);
+    expect(parseBibTeXToMetadata(bibtex)).toBeUndefined();
   });
 
   it('rejects unmatched input before spawning the plugin process', async () => {
@@ -182,5 +187,66 @@ process.stdout.write(\`@book{fixture,
     const multiple = writeScript(dir, 'process.stdout.write("@book{a,title={A}}\\n@book{b,title={B}}\\n");');
     await expect(runResolverPlugin(plugin([process.execPath, multiple]), 'ISBN 9780262033848', execution(dir)))
       .rejects.toThrow(/exactly one/);
+  });
+});
+
+describe('parseBibTeXToMetadata validation gate', () => {
+  it('accepts a single well-formed @book with a title and at least one author', () => {
+    const bibtex = `@book{noether1921,
+  title = {Idealtheorie in Ringbereichen},
+  author = {Noether, Emmy},
+  publisher = {Mathematische Annalen},
+  year = {1921}
+}`;
+    expect(parseBibTeXToMetadata(bibtex)).toBeUndefined();
+  });
+
+  it('accepts a single well-formed @article with a title and at least one author', () => {
+    const bibtex = `@article{turing1936,
+  title = {On Computable Numbers},
+  author = {Turing, Alan M.},
+  journal = {Proc. London Math. Soc.},
+  year = {1936}
+}`;
+    expect(parseBibTeXToMetadata(bibtex)).toBeUndefined();
+  });
+
+  it('does not fabricate an item type for an unrecognized @entrytype — it defers mapping to Zotero', () => {
+    // The old hand-rolled mapper silently coerced any unknown @entrytype into
+    // itemType: 'journalArticle'. The validation gate must neither reject a
+    // well-formed unknown type (Zotero owns item-type mapping) nor return any
+    // fabricated metadata. A return value of undefined excludes the old fail-open
+    // mapper, which would have returned { itemType: 'journalArticle', ... }.
+    const bibtex = `@unrecognizedtype{x2026,
+  title = {A Source of an Unmapped Kind},
+  author = {Grothendieck, Alexander}
+}`;
+    expect(parseBibTeXToMetadata(bibtex)).toBeUndefined();
+  });
+
+  it('throws when the single entry has no title', () => {
+    const bibtex = `@book{notitle,
+  author = {Noether, Emmy},
+  year = {1921}
+}`;
+    expect(() => parseBibTeXToMetadata(bibtex)).toThrow(/title/);
+  });
+
+  it('throws when the single entry has no author', () => {
+    const bibtex = `@book{noauthor,
+  title = {A Title Without An Author},
+  year = {1921}
+}`;
+    expect(() => parseBibTeXToMetadata(bibtex)).toThrow(/author/);
+  });
+
+  it('throws on malformed BibTeX that yields no parseable entry', () => {
+    expect(() => parseBibTeXToMetadata('this is not bibtex at all')).toThrow(/Invalid BibTeX/);
+  });
+
+  it('throws when more than one entry is present', () => {
+    const bibtex = `@book{a, title = {A}, author = {Aa, A} }
+@book{b, title = {B}, author = {Bb, B} }`;
+    expect(() => parseBibTeXToMetadata(bibtex)).toThrow(/exactly one/);
   });
 });
