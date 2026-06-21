@@ -7,6 +7,8 @@ import {
 } from '../schemas';
 import type { ResolverPluginMetadata } from '../schemas';
 import { parseBibTeXToMetadata } from '../utils/bibtexParser';
+import { invariant } from '../utils/invariant';
+
 
 export type ResolverCommand = [string, ...string[]];
 
@@ -75,11 +77,6 @@ const ZoteroImportResultSchema = z.strictObject({
   titles: z.array(z.string()).length(1),
 });
 
-function invariant(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
 
 function rejectDuplicateIds(values: string[], label: string): void {
   const seen = new Set<string>();

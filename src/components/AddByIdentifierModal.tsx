@@ -7,6 +7,8 @@ import {
   type ResolverPluginMetadata,
 } from '../schemas';
 import type { AppTheme } from '../useThemePreference';
+import { invariant } from '../utils/invariant';
+
 
 interface AddByIdentifierModalProps {
   isOpen: boolean;
@@ -31,11 +33,6 @@ export default function AddByIdentifierModal({
   const selectedPlugin = plugins.find(plugin => plugin.id === selectedPluginId) ?? null;
   const selectedPluginExample = selectedPlugin?.acceptedInputs[0]?.example ?? '';
 
-  function invariant(condition: unknown, message: string): asserts condition {
-    if (!condition) {
-      throw new Error(message);
-    }
-  }
 
   useEffect(() => {
     if (!isOpen) {

@@ -10,14 +10,11 @@ import {
 } from './isbn-lib.mjs';
 
 const OPEN_LIBRARY = 'https://openlibrary.org';
+import { readRawStdin } from './utils.mjs';
 
 async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  return normalizeIsbn(input);
+  const raw = await readRawStdin();
+  return normalizeIsbn(raw);
 }
 
 const isbn = await readStdin();

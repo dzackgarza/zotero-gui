@@ -1,21 +1,12 @@
 import { Cite } from '@citation-js/core';
 import '@citation-js/plugin-bibtex';
-
-export function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+import { invariant, text } from './utils.mjs';
+export { invariant };
 
 export function normalizeIsbn(input) {
   const isbn = input.trim().replace(/^isbn:?\s*/i, '').replace(/[-\s]/g, '');
   invariant(isbn.length > 0, 'ISBN resolver input must not be empty');
   return isbn;
-}
-
-function text(value, message) {
-  invariant(typeof value === 'string' && value.trim().length > 0, message);
-  return value.replace(/\s+/g, ' ').trim();
 }
 
 // Citation.js's BibTeX output module escapes braces in string fields (title,

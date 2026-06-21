@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
 import { KeyboardShortcutsConfigSchema } from '../keyboardShortcutsSchema.js';
+
+export const CONFIG_PATH = path.resolve(process.cwd(), 'zotero-gui.config.json');
 
 export const AppConfigSchema = z.strictObject({
   server: z.strictObject({

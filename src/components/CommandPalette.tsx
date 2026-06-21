@@ -159,7 +159,7 @@ export default function CommandPalette({
         >
           <CmdK
             label="Command Palette"
-            shouldFilter={false}
+            shouldFilter={mode === 'commands'}
             className="w-full max-w-xl overflow-hidden rounded-lg border border-slate-700/60 bg-slate-900 text-slate-100 shadow-2xl shadow-black/80 pointer-events-auto outline-hidden"
           >
             <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950 px-3 py-3">

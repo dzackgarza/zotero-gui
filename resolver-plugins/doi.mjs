@@ -1,8 +1,4 @@
-export function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+import { invariant, readRawStdin } from './utils.mjs';
 
 // A DOI is `<namespace>/<suffix>` where the namespace is the registrant prefix
 // (`10.xxxx`) and the suffix is opaque registrant-assigned text that may contain
@@ -25,14 +21,9 @@ export function doiRequestUrl(doi) {
 }
 
 async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  const value = input.trim();
-  invariant(value.length > 0, 'DOI resolver input must not be empty');
-  return value
+  const raw = await readRawStdin();
+  invariant(raw.length > 0, 'DOI resolver input must not be empty');
+  return raw
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
     .trim();
 }

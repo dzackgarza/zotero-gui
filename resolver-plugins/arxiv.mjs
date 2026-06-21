@@ -1,16 +1,8 @@
-function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+import { invariant, readRawStdin } from './utils.mjs';
 
 async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  const value = input.trim()
+  const raw = await readRawStdin();
+  const value = raw
     .replace(/^arxiv:/i, '')
     .replace(/^https?:\/\/arxiv\.org\/abs\//i, '')
     .replace(/^https?:\/\/arxiv\.org\/pdf\//i, '')

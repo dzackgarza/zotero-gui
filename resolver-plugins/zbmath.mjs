@@ -1,15 +1,11 @@
 import { articleBibTeX, invariant, parseZblNumber } from './zbmath-lib.mjs';
 
-async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
+import { readRawStdin } from './utils.mjs';
 
-  const value = input.trim();
-  invariant(value.length > 0, 'ZBMath resolver input must not be empty');
-  return value;
+async function readStdin() {
+  const raw = await readRawStdin();
+  invariant(raw.length > 0, 'ZBMath resolver input must not be empty');
+  return raw;
 }
 
 const zblNumber = parseZblNumber(await readStdin());

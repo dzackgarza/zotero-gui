@@ -1,7 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { loadAppConfig, type AppConfig } from './config.js';
+import { CONFIG_PATH, loadAppConfig, type AppConfig } from './config.js';
 import {
   importBibTeXToZotero,
   loadResolverPlugins,
@@ -11,8 +10,6 @@ import {
 import { assertZoteroDatabaseContract, queryLibrary } from './zoteroRepository.js';
 
 type DiagnosticCommand = 'doctor' | 'resolvers' | 'add-item';
-
-const CONFIG_PATH = path.resolve(process.cwd(), 'zotero-gui.config.json');
 
 function diagnosticCommand(): DiagnosticCommand {
   const command = process.argv[2];

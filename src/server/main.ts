@@ -2,12 +2,10 @@ import { execFile } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import type { LibraryPayload } from '../schemas.js';
-import { loadAppConfig } from './config.js';
+import { CONFIG_PATH, loadAppConfig } from './config.js';
 import { loadResolverPlugins } from './resolverPlugins.js';
 import { createApp } from './server.js';
 import { loadLibraryFromDatabaseUri } from './zoteroDatabase.js';
-
-const CONFIG_PATH = path.resolve(process.cwd(), 'zotero-gui.config.json');
 
 type Attachment = LibraryPayload['items'][number]['attachments'][number];
 
