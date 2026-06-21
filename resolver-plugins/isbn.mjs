@@ -1,12 +1,12 @@
 import {
-  authorName,
   bookBibTeX,
-  editionAuthorKeys,
-  editionPublisher,
-  editionTitle,
-  editionYear,
+  bookRecord,
   invariant,
   normalizeIsbn,
+  recordAuthors,
+  recordPublisher,
+  recordTitle,
+  recordYear,
 } from './isbn-lib.mjs';
 
 const OPEN_LIBRARY = 'https://openlibrary.org';
@@ -20,33 +20,20 @@ async function readStdin() {
   return normalizeIsbn(input);
 }
 
-async function fetchJson(url, message) {
-  const response = await fetch(url, { headers: { Accept: 'application/json' } });
-  invariant(response.ok, `${message} (HTTP ${response.status})`);
-  return response.json();
-}
-
 const isbn = await readStdin();
-const edition = await fetchJson(
-  `${OPEN_LIBRARY}/isbn/${isbn}.json`,
-  `Open Library has no record for ISBN ${isbn}`,
-);
+const bibkey = `ISBN:${isbn}`;
+const url = `${OPEN_LIBRARY}/api/books?bibkeys=${encodeURIComponent(bibkey)}&jscmd=data&format=json`;
 
-const authors = [];
-for (const key of editionAuthorKeys(edition)) {
-  const record = await fetchJson(
-    `${OPEN_LIBRARY}${key}.json`,
-    `Open Library author lookup failed for ${key}`,
-  );
-  authors.push(authorName(record));
-}
+const response = await fetch(url, { headers: { Accept: 'application/json' } });
+invariant(response.ok, `Open Library Books API lookup failed for ${isbn} (HTTP ${response.status})`);
+const record = bookRecord(await response.json(), isbn);
 
 process.stdout.write(
   bookBibTeX({
     isbn,
-    title: editionTitle(edition),
-    authors,
-    publisher: editionPublisher(edition),
-    year: editionYear(edition),
+    title: recordTitle(record),
+    authors: recordAuthors(record),
+    publisher: recordPublisher(record),
+    year: recordYear(record),
   }),
 );

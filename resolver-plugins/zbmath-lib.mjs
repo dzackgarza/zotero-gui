@@ -1,3 +1,6 @@
+import { Cite } from '@citation-js/core';
+import '@citation-js/plugin-bibtex';
+
 export function invariant(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -35,7 +38,7 @@ function title(document) {
 function authors(document) {
   const entries = document.contributors?.authors;
   invariant(Array.isArray(entries) && entries.length > 0, 'ZBMath document must contain authors');
-  return entries.map(author => text(author.name, 'ZBMath author must contain a name')).join(' and ');
+  return entries.map(author => text(author.name, 'ZBMath author must contain a name'));
 }
 
 function doi(document) {
@@ -61,31 +64,28 @@ function serialSource(document) {
 
 export function articleBibTeX(document, zblNumber) {
   const source = serialSource(document);
-  const fields = [
-    ['title', title(document)],
-    ['author', authors(document)],
-    ['journal', text(source.title, 'ZBMath source must contain a journal title')],
-    ['year', text(document.year, 'ZBMath document must contain a year')],
-    ['zblnumber', zblNumber],
-    ['zbmath', String(document.id)],
-  ];
+  const record = {
+    'citation-key': `zbl_${zblNumber.replaceAll('.', '_')}`,
+    type: 'article-journal',
+    title: title(document),
+    author: authors(document).map(name => ({ literal: name })),
+    'container-title': text(source.title, 'ZBMath source must contain a journal title'),
+    issued: { 'date-parts': [[Number.parseInt(text(document.year, 'ZBMath document must contain a year'), 10)]] },
+  };
+
   const doiValue = doi(document);
-
   if (doiValue) {
-    fields.push(['doi', doiValue]);
+    record.DOI = doiValue;
   }
-
   if (typeof source.volume === 'string' && source.volume.trim().length > 0) {
-    fields.push(['volume', text(source.volume, 'ZBMath source volume must be text')]);
+    record.volume = text(source.volume, 'ZBMath source volume must be text');
   }
   if (typeof source.issue === 'string' && source.issue.trim().length > 0) {
-    fields.push(['number', text(source.issue, 'ZBMath source issue must be text')]);
+    record.issue = text(source.issue, 'ZBMath source issue must be text');
   }
   if (typeof document.source.pages === 'string' && document.source.pages.trim().length > 0) {
-    fields.push(['pages', text(document.source.pages, 'ZBMath source pages must be text')]);
+    record.page = text(document.source.pages, 'ZBMath source pages must be text');
   }
 
-  const key = `zbl_${zblNumber.replaceAll('.', '_')}`;
-  const body = fields.map(([name, value]) => `  ${name} = {${value}}`).join(',\n');
-  return `@article{${key},\n${body}\n}`;
+  return new Cite([record]).format('bibtex').trim();
 }
