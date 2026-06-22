@@ -1,11 +1,20 @@
+import { mkdtempSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { LibraryPayloadSchema } from '../schemas';
 import { itemsWithoutPdf } from '../librarySelectors';
 import { createApp } from './server';
-import { loadValidatedLibrary, ZoteroDatabaseContractError } from './zoteroRepository';
+import {
+  assertDatabaseContractFromUri,
+  assertZoteroDatabaseContract,
+  loadValidatedLibrary,
+  ZoteroDatabaseContractError,
+} from './zoteroRepository';
 
 let server: Server;
 let baseUrl: string;
@@ -139,6 +148,38 @@ describe('Zotero DB contract preflight', () => {
       DROP TABLE collections_old;
     `);
     expectContractFailure(malformedRows, 'invalid_rows');
+  });
+
+  it('preserves the underlying row-shape ZodError as the invalid_rows cause instead of erasing it', () => {
+    // A row-shape failure during the single library pipeline is the one genuine
+    // 'invalid_rows' case, but it must not flatten the original error into a bare
+    // message: the typed ZodError (which carries the exact failed field path) must
+    // survive as the contract error's `cause` so downstream classification can
+    // still tell a Zod row-shape violation apart from any other non-contract
+    // failure domain. The pre-fix catch discarded the cause entirely.
+    const malformedRows = createFixtureDb();
+    malformedRows.exec(`
+      DELETE FROM collectionItems;
+      DELETE FROM collections;
+      ALTER TABLE collections RENAME TO collections_old;
+      CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT, parentCollectionID INTEGER, key TEXT);
+      INSERT INTO collections VALUES (100, 1, NULL, NULL, 'ROOTKEY1');
+      DROP TABLE collections_old;
+    `);
+
+    let thrown: unknown;
+    try {
+      loadValidatedLibrary(malformedRows);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ZoteroDatabaseContractError);
+    if (!(thrown instanceof ZoteroDatabaseContractError)) {
+      throw new Error('expected a ZoteroDatabaseContractError');
+    }
+    expect(thrown.kind).toBe('invalid_rows');
+    // The original typed failure domain is preserved, not erased to a string.
+    expect(thrown.cause).toBeInstanceOf(z.ZodError);
   });
 
   it('maps a top-level item with no title row to an absent title without inventing a placeholder', () => {
@@ -286,6 +327,97 @@ describe('single load runs the library pipeline once', () => {
     expect(topLevelItemQueries).toHaveLength(1);
     // And the single execution still produces the real payload.
     expect(payload.items.map(item => item.id)).toEqual(['ATTACH99', 'TRASH123', 'BOOK1234']);
+  });
+});
+
+describe('startup contract preflight validates the DB without materializing the library', () => {
+  it('runs the structural contract check but does NOT execute the full top-level data query', () => {
+    const real = createFixtureDb();
+    const topLevelItemQueries: string[] = [];
+    const structuralProbes: string[] = [];
+    // Real DatabaseSync wrapped to OBSERVE (not replace) prepared statements.
+    // The startup preflight must validate the contract (it runs real structural
+    // probes against items/itemTypes/libraries) WITHOUT preparing the full
+    // top-level data SELECT (the one carrying `AS itemType`), whose execution is
+    // the symptom of startup running and discarding the whole library pipeline.
+    const observed = new Proxy(real, {
+      get(target, property, receiver) {
+        if (property === 'prepare') {
+          return (sql: string) => {
+            if (sql.includes('FROM items i') && sql.includes('AS itemType')) {
+              topLevelItemQueries.push(sql);
+            } else if (sql.includes('FROM items i')) {
+              structuralProbes.push(sql);
+            }
+            return target.prepare(sql);
+          };
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+
+    assertZoteroDatabaseContract(observed);
+
+    // The full materializing query never runs at startup...
+    expect(topLevelItemQueries).toHaveLength(0);
+    // ...but the structural contract is genuinely validated (real probes ran).
+    expect(structuralProbes.length).toBeGreaterThan(0);
+    real.close();
+  });
+
+  it('rejects a contract-violating DB at startup via the structural check', () => {
+    // A real on-disk DB whose schema violates the structural contract (a missing
+    // required table) must be rejected loudly at startup, with the typed
+    // structural kind — startup fails fast rather than booting against a bad DB.
+    const dir = mkdtempSync(path.join(tmpdir(), 'zotero-gui-startup-'));
+    const dbPath = path.join(dir, 'broken.sqlite');
+    const seed = new DatabaseSync(dbPath);
+    seed.exec('CREATE TABLE libraries (libraryID INTEGER PRIMARY KEY, type TEXT NOT NULL);');
+    seed.close();
+
+    let thrown: unknown;
+    try {
+      assertDatabaseContractFromUri(dbPath);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ZoteroDatabaseContractError);
+    if (!(thrown instanceof ZoteroDatabaseContractError)) {
+      throw new Error('expected a structural contract failure at startup');
+    }
+    expect(thrown.kind).toBe('missing_table');
+  });
+
+  it('accepts a contract-satisfying DB at startup without throwing', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'zotero-gui-startup-ok-'));
+    const dbPath = path.join(dir, 'ok.sqlite');
+    const seed = new DatabaseSync(dbPath);
+    seed.exec(`
+      CREATE TABLE libraries (libraryID INTEGER PRIMARY KEY, type TEXT NOT NULL);
+      CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT NOT NULL);
+      CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT NOT NULL, itemTypeID INTEGER NOT NULL, libraryID INTEGER NOT NULL, dateAdded TEXT NOT NULL, dateModified TEXT NOT NULL);
+      CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT NOT NULL);
+      CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE itemData (itemID INTEGER NOT NULL, fieldID INTEGER NOT NULL, valueID INTEGER NOT NULL);
+      CREATE TABLE deletedItems (itemID INTEGER PRIMARY KEY);
+      CREATE TABLE itemAttachments (itemID INTEGER PRIMARY KEY, parentItemID INTEGER, path TEXT, contentType TEXT);
+      CREATE TABLE itemNotes (itemID INTEGER PRIMARY KEY, parentItemID INTEGER, note TEXT);
+      CREATE TABLE itemAnnotations (itemID INTEGER PRIMARY KEY, parentItemID INTEGER);
+      CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT NOT NULL, lastName TEXT NOT NULL);
+      CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT NOT NULL);
+      CREATE TABLE itemCreators (itemID INTEGER NOT NULL, creatorID INTEGER NOT NULL, creatorTypeID INTEGER NOT NULL, orderIndex INTEGER NOT NULL);
+      CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE itemTags (itemID INTEGER NOT NULL, tagID INTEGER NOT NULL);
+      CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, libraryID INTEGER NOT NULL, collectionName TEXT NOT NULL, parentCollectionID INTEGER, key TEXT);
+      CREATE TABLE deletedCollections (collectionID INTEGER PRIMARY KEY);
+      CREATE TABLE collectionItems (itemID INTEGER NOT NULL, collectionID INTEGER NOT NULL);
+      INSERT INTO libraries VALUES (1, 'user');
+      INSERT INTO itemTypes VALUES (1, 'book');
+      INSERT INTO fields VALUES (1, 'title'), (2, 'date'), (3, 'publisher'), (4, 'url');
+    `);
+    seed.close();
+
+    expect(() => assertDatabaseContractFromUri(dbPath)).not.toThrow();
   });
 });
 

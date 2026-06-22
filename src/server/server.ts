@@ -7,6 +7,8 @@ import {
   pluginAcceptsInput,
   resolverPluginMetadata,
   resolveSourceToZotero,
+  ResolverExecutionError,
+  ZoteroImportError,
   type ResolverExecutionConfig,
   type ResolverPluginConfig,
 } from './resolverPlugins.js';
@@ -18,6 +20,7 @@ type ApiErrorKind =
   | 'resolver_not_found'
   | 'resolver_input_rejected'
   | 'zotero_unavailable'
+  | 'resolver_execution_failed'
   | 'upstream_boundary_failed'
   | 'internal_error';
 
@@ -161,7 +164,18 @@ export function createApp(deps: AppDeps) {
           deps.importEndpoint,
           deps.fetchImpl,
         ).catch((error: Error) => {
-          throw new ApiError('upstream_boundary_failed', 502, error.message);
+          // Classify by the real error TYPE, never by message text. A local
+          // resolver-execution fault (timeout, nonzero exit, empty/oversized
+          // output, invalid BibTeX) and an upstream Zotero write fault are
+          // distinct domains and must surface as distinct kinds so the API can
+          // tell a plugin bug apart from a Zotero-side failure.
+          if (error instanceof ResolverExecutionError) {
+            throw new ApiError('resolver_execution_failed', 502, error.message);
+          }
+          if (error instanceof ZoteroImportError) {
+            throw new ApiError('upstream_boundary_failed', 502, error.message);
+          }
+          throw error;
         });
         // Success is determined solely from the authoritative write-boundary
         // result. The library snapshot is eventually consistent, so re-reading

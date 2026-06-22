@@ -10,6 +10,29 @@ import { parseBibTeXToMetadata } from '../utils/bibtexParser';
 import { invariant } from '../utils/invariant';
 
 
+// A LOCAL resolver-executor failure: the resolver process was rejected, timed
+// out, exited nonzero, produced empty/oversized output, or produced BibTeX that
+// failed the import-gate validation. This is a plugin/local fault domain, kept
+// type-distinct from an upstream Zotero write-plugin failure so the API boundary
+// can classify by real type rather than collapsing both into one kind.
+export class ResolverExecutionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ResolverExecutionError';
+  }
+}
+
+// An UPSTREAM Zotero write-plugin failure: the resolver produced valid BibTeX and
+// the local pipeline succeeded, but the Zotero import endpoint itself rejected or
+// failed the write. Distinct from ResolverExecutionError so a Zotero-side fault
+// is never mistaken for a local plugin bug at the API boundary.
+export class ZoteroImportError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ZoteroImportError';
+  }
+}
+
 export type ResolverCommand = [string, ...string[]];
 
 export interface AcceptedInputDescriptor {
@@ -147,7 +170,7 @@ export async function runResolverPlugin(
       reject(error);
     };
     const timer = setTimeout(() => {
-      fail(new Error(`resolver ${plugin.id} timed out after ${execution.timeoutMs}ms`));
+      fail(new ResolverExecutionError(`resolver ${plugin.id} timed out after ${execution.timeoutMs}ms`));
     }, execution.timeoutMs);
 
     child.stdout.setEncoding('utf8');
@@ -155,31 +178,37 @@ export async function runResolverPlugin(
     child.stdout.on('data', chunk => {
       stdout += chunk;
       if (Buffer.byteLength(stdout, 'utf8') > execution.stdoutByteLimit) {
-        fail(new Error(`resolver ${plugin.id} exceeded stdout byte limit`));
+        fail(new ResolverExecutionError(`resolver ${plugin.id} exceeded stdout byte limit`));
       }
     });
     child.stderr.on('data', chunk => {
       stderr += chunk;
       if (Buffer.byteLength(stderr, 'utf8') > execution.stderrByteLimit) {
-        fail(new Error(`resolver ${plugin.id} exceeded stderr byte limit`));
+        fail(new ResolverExecutionError(`resolver ${plugin.id} exceeded stderr byte limit`));
       }
     });
-    child.on('error', fail);
+    // A spawn/process-level error (e.g. the executable cannot be launched) is
+    // also a local resolver-execution fault. Preserve the original OS error as
+    // `cause` so its real diagnostic signal is not lost.
+    child.on('error', error => fail(new ResolverExecutionError(`resolver ${plugin.id} failed to execute: ${error.message}`, { cause: error })));
     child.on('close', code => {
       if (settled) return;
       if (code !== 0) {
-        fail(new Error(`resolver ${plugin.id} exited with code ${code}: ${stderr}`));
+        fail(new ResolverExecutionError(`resolver ${plugin.id} exited with code ${code}: ${stderr}`));
         return;
       }
       const bibtex = stdout.trim();
       if (bibtex.length === 0) {
-        fail(new Error(`resolver ${plugin.id} produced empty BibTeX`));
+        fail(new ResolverExecutionError(`resolver ${plugin.id} produced empty BibTeX`));
         return;
       }
       try {
         parseBibTeXToMetadata(bibtex);
       } catch (error) {
-        fail(error instanceof Error ? error : new Error(String(error)));
+        // Invalid BibTeX produced by the resolver is a local resolver-execution
+        // fault, not an upstream Zotero failure. Keep the validation error's real
+        // message and cause; only the domain type is added.
+        fail(new ResolverExecutionError(error instanceof Error ? error.message : String(error), { cause: error }));
         return;
       }
       settled = true;
@@ -208,7 +237,7 @@ export async function importBibTeXToZotero(
     }),
   });
   if (!response.ok) {
-    throw new Error(`Zotero BibTeX import failed with HTTP ${response.status}: ${await response.text()}`);
+    throw new ZoteroImportError(`Zotero BibTeX import failed with HTTP ${response.status}: ${await response.text()}`);
   }
   return ZoteroImportResultSchema.parse(await response.json());
 }

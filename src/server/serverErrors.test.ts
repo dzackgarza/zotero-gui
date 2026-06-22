@@ -375,3 +375,114 @@ describe('/api/items/from-source error semantics', () => {
     await expectErrorKind(await openAttachment('REMOTE12'), 400, 'attachment_path_missing');
   });
 });
+
+// SPEC 6: the from-source route must keep the two failure domains distinct.
+// A LOCAL resolver-execution failure (the resolver process times out, exits
+// nonzero, produces empty/oversized/invalid BibTeX) is a plugin/local fault; a
+// failure of the upstream Zotero write plugin is a different domain. Collapsing
+// both into one kind makes a plugin bug indistinguishable from a Zotero-side
+// failure at the API. These tests prove each domain surfaces its own kind.
+describe('/api/items/from-source distinguishes resolver-execution faults from upstream write faults', () => {
+  let healthyImportServer: Server;
+  let healthyImportEndpoint: string;
+  let domainDir: string;
+
+  function successImportServer(): Server {
+    return http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', chunk => chunks.push(chunk as Buffer));
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          operation: 'import_bibtex',
+          stage: 'completed',
+          version: 'fixture',
+          details: { item_count: 1, collection_keys: [], translator_id: 'fixture-translator' },
+          item_key: 'OKKEY', item_id: 1, item_keys: ['OKKEY'], item_ids: [1], titles: ['Resolved'],
+        }));
+      });
+    });
+  }
+
+  function failingImportServer(): Server {
+    return http.createServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('zotero write plugin exploded');
+    });
+  }
+
+  async function buildApp(resolverPath: string, endpoint: string): Promise<{ server: Server; url: string }> {
+    const app = createApp({
+      loadLibrary: () => ({ items: [], collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }] }),
+      resolverPlugins: [plugin([process.execPath, resolverPath])],
+      resolverExecution: execution(domainDir),
+      importEndpoint: endpoint,
+      fetchImpl: fetch,
+      openAttachmentFile: async () => { throw new Error('not used'); },
+    });
+    return listenApp(app);
+  }
+
+  beforeAll(async () => {
+    domainDir = tempDir();
+    healthyImportServer = successImportServer();
+    healthyImportEndpoint = `${await startServer(healthyImportServer)}/write`;
+  });
+
+  afterAll(async () => {
+    await closeServer(healthyImportServer);
+  });
+
+  it('surfaces a resolver-execution fault as resolver_execution_failed even when Zotero would have accepted the write', async () => {
+    // The resolver emits invalid BibTeX, so runResolverPlugin fails LOCALLY before
+    // any write is attempted. The import server is healthy (success mode), so the
+    // only failing boundary is the local resolver: the route must NOT report this
+    // as an upstream Zotero write failure.
+    const invalidResolver = path.join(domainDir, 'invalid-resolver.mjs');
+    writeFileSync(invalidResolver, 'process.stdout.write("this is not bibtex");');
+    const { server, url } = await buildApp(invalidResolver, healthyImportEndpoint);
+    const response = await fetch(`${url}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: { kind: 'resolver_execution_failed' } });
+    await closeServer(server);
+  });
+
+  it('surfaces a resolver nonzero-exit fault as resolver_execution_failed', async () => {
+    const crashingResolver = path.join(domainDir, 'crashing-resolver.mjs');
+    writeFileSync(crashingResolver, 'process.stderr.write("boom"); process.exit(3);');
+    const { server, url } = await buildApp(crashingResolver, healthyImportEndpoint);
+    const response = await fetch(`${url}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: { kind: 'resolver_execution_failed' } });
+    await closeServer(server);
+  });
+
+  it('surfaces a genuine upstream Zotero write fault as upstream_boundary_failed, not as a resolver fault', async () => {
+    // The resolver is healthy and produces valid BibTeX; only the Zotero write
+    // plugin fails. The route must report the UPSTREAM domain, kept distinct from
+    // the local resolver-execution domain.
+    const healthyResolver = path.join(domainDir, 'healthy-resolver.mjs');
+    writeFileSync(healthyResolver, 'process.stdout.write("@book{ok,title={OK Title},author={Doe, Jane}}\\n");');
+    const brokenImport = failingImportServer();
+    const brokenEndpoint = `${await startServer(brokenImport)}/write`;
+    const { server, url } = await buildApp(healthyResolver, brokenEndpoint);
+    const response = await fetch(`${url}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: { kind: 'upstream_boundary_failed' } });
+    await closeServer(server);
+    await closeServer(brokenImport);
+  });
+});

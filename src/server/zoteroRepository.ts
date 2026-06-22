@@ -140,8 +140,9 @@ export class ZoteroDatabaseContractError extends Error {
   constructor(
     readonly kind: ZoteroDatabaseContractErrorKind,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = 'ZoteroDatabaseContractError';
   }
 }
@@ -314,11 +315,36 @@ export function assertZoteroDatabaseContract(db: DatabaseSync): void {
   assertStructuralContract(db);
 }
 
+// Startup preflight: open the configured DB and validate ONLY the structural
+// Zotero DB contract, failing loud on a contract-violating DB. It deliberately
+// does NOT run the full library query pipeline (queryLibrary): startup only needs
+// to prove the DB satisfies the contract, and the per-request /api/library path
+// materializes the actual payload. Running the full pipeline at startup would
+// execute and discard the entire library on boot, duplicating the work the first
+// request already performs.
+export function assertDatabaseContractFromUri(databaseUri: string): void {
+  const db = new DatabaseSync(databaseUri);
+  try {
+    assertZoteroDatabaseContract(db);
+  } finally {
+    db.close();
+  }
+}
+
 // One load that both validates the Zotero DB contract AND returns the payload in
 // a single execution of the full library pipeline. Structural contract
-// violations surface as their typed kinds from the preflight; row-shape
-// violations during the single queryLibrary run surface as 'invalid_rows'. The
-// pipeline (queryLibrary) executes exactly once per call.
+// violations surface as their typed kinds from the preflight. The catch below
+// classifies only by the real error type, never by message text:
+//   - a typed ZoteroDatabaseContractError (e.g. unsupported_item_type from the
+//     row mapping) is re-thrown with its real kind;
+//   - a Zod row-shape failure is the one genuine 'invalid_rows' case, wrapped
+//     with the original ZodError retained as `cause` so the failed-field
+//     diagnostics are not erased;
+//   - any other domain (a SQLite runtime fault, a third-party crash) is NOT a
+//     row-shape contract violation and propagates AS-IS, preserving its real
+//     type and cause for downstream classification rather than being flattened
+//     into 'invalid_rows'.
+// The pipeline (queryLibrary) executes exactly once per call.
 export function loadValidatedLibrary(db: DatabaseSync): LibraryPayload {
   assertStructuralContract(db);
   try {
@@ -327,7 +353,10 @@ export function loadValidatedLibrary(db: DatabaseSync): LibraryPayload {
     if (error instanceof ZoteroDatabaseContractError) {
       throw error;
     }
-    throw new ZoteroDatabaseContractError('invalid_rows', error instanceof Error ? error.message : String(error));
+    if (error instanceof z.ZodError) {
+      throw new ZoteroDatabaseContractError('invalid_rows', error.message, { cause: error });
+    }
+    throw error;
   }
 }
 

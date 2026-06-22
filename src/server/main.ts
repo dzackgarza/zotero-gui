@@ -6,6 +6,7 @@ import { CONFIG_PATH, loadAppConfig } from './config.js';
 import { loadResolverPlugins } from './resolverPlugins.js';
 import { createApp } from './server.js';
 import { loadLibraryFromDatabaseUri } from './zoteroDatabase.js';
+import { assertDatabaseContractFromUri } from './zoteroRepository.js';
 
 type Attachment = LibraryPayload['items'][number]['attachments'][number];
 
@@ -41,7 +42,10 @@ async function openAttachmentFile(storageDir: string, attachment: Attachment): P
 }
 
 const config = loadAppConfig(CONFIG_PATH);
-loadLibraryFromDatabaseUri(config.zotero.databaseUri);
+// Startup preflight: validate the Zotero DB contract structurally and fail loud
+// on a contract-violating DB, WITHOUT running and discarding the full library
+// query pipeline. The per-request /api/library path materializes the payload.
+assertDatabaseContractFromUri(config.zotero.databaseUri);
 const resolverPlugins = loadResolverPlugins(config.resolverManifestPath);
 const app = createApp({
   loadLibrary: () => loadLibraryFromDatabaseUri(config.zotero.databaseUri),
