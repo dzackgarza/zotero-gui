@@ -4,8 +4,8 @@ A local web application for viewing your Zotero libraries and resolving/importin
 
 ## Prerequisites
 
-- **Node.js**: Version 18 or higher (uses `node:sqlite`).
-- **Zotero**: A local Zotero installation with a database located at `~/Zotero/zotero.sqlite`.
+- **Node.js**: Exactly `25.8.2`; the server uses `node:sqlite`.
+- **Zotero**: A local Zotero installation with the `zotero-local-write-api` plugin installed and reachable at the configured write endpoint.
 
 ## Installation
 
@@ -20,19 +20,24 @@ npm install
 Start both the API backend and Vite frontend concurrently:
 
 ```bash
-npm run dev:full
+just dev-full
 ```
 
 Open your browser and navigate to `http://localhost:3000` to interact with the GUI.
 
 To run the components separately:
-- API server: `npm run api` (starts on port 3001)
-- Frontend: `npm run dev` (starts on port 3000)
+
+- API server: `just api` (starts on port 3001)
+- Frontend: `just dev` (starts on port 3000)
+
+After dependency changes, restart the frontend with `just dev` and hard-reload the browser tab.
+The frontend recipe runs Vite with forced dependency optimization so stale `/node_modules/.vite/deps/` URLs are regenerated instead of reusing an outdated optimizer cache.
+Use `just diagnostic-live-vite-deps` against the running frontend to verify that the current server is serving every optimized dependency recorded by Vite.
 
 ## Configuration
 
-- **Database Path**: The server reads from `file:///home/dzack/Zotero/zotero.sqlite?immutable=1` by default.
-- **Resolvers**: Plugins are configured in `resolver-plugins.json` and defined in the `resolver-plugins/` directory (e.g., arXiv, DOI, ISBN, and zbMATH).
+- `zotero-gui.config.json` is required at startup and must contain the server port, immutable Zotero DB URI, Zotero storage directory, resolver manifest path, resolver execution limits, and Zotero write endpoint.
+- Resolver plugins are configured in `resolver-plugins.json` and defined in the `resolver-plugins/` directory.
 
 ## License
 

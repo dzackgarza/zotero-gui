@@ -1,57 +1,38 @@
-import { parseStringPromise } from 'xml2js';
+import { invariant, readRawStdin } from './utils.mjs';
 
-function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  const value = input.trim()
+// The manifest accepts arXiv URLs whose path tail is matched by `[^\s]+`, so a
+// PDF link may legitimately carry a query string or fragment, e.g.
+// `https://arxiv.org/pdf/2401.01234.pdf?download=1` or `...#section`. The query
+// and fragment must be removed BEFORE the trailing `.pdf` suffix: if `.pdf` is
+// stripped first, it is no longer at the end of the string (the `?...`/`#...`
+// follows it), so the suffix survives and the extracted id keeps a `.pdf` tail,
+// producing a malformed upstream request. Strip query, then fragment, then the
+// scheme/prefixes and the `.pdf` suffix, so the id is extracted correctly for
+// every accepted URL form.
+export function arxivIdFromInput(raw) {
+  const id = raw
+    .split('?')[0]
+    .split('#')[0]
     .replace(/^arxiv:/i, '')
     .replace(/^https?:\/\/arxiv\.org\/abs\//i, '')
     .replace(/^https?:\/\/arxiv\.org\/pdf\//i, '')
-    .replace(/\.pdf$/i, '')
-    .split('?')[0]
-    .split('#')[0];
-  invariant(value.length > 0, 'arXiv resolver input must not be empty');
-  return value;
+    .replace(/\.pdf$/i, '');
+  invariant(id.length > 0, 'arXiv resolver input must not be empty');
+  return id;
 }
 
-function text(value, message) {
-  invariant(Array.isArray(value) && typeof value[0] === 'string' && value[0].trim().length > 0, message);
-  return value[0].replace(/\s+/g, ' ').trim();
+if (import.meta.main) {
+  const arxivId = arxivIdFromInput(await readRawStdin());
+  // The manifest accepts old-style IDs (e.g. `math.AG/0601001`), whose `/` is part
+  // of the identifier, not a path separator. encodeURIComponent escapes it to
+  // `%2F`. Verified against arxiv.org: `https://arxiv.org/bibtex/math.AG%2F0601001`
+  // returns HTTP 200 with the same BibTeX as the raw-slash form, so encoding the
+  // slash is correct and deterministic for both new- and old-style IDs.
+  const response = await fetch(`https://arxiv.org/bibtex/${encodeURIComponent(arxivId)}`);
+  invariant(response.ok, `arXiv BibTeX export failed with HTTP ${response.status}`);
+
+  const bibtex = (await response.text()).trim();
+  invariant(bibtex.startsWith('@'), 'arXiv BibTeX export must return a BibTeX entry');
+
+  process.stdout.write(`${bibtex}\n`);
 }
-
-const arxivId = await readStdin();
-const response = await fetch(`https://export.arxiv.org/api/query?id_list=${encodeURIComponent(arxivId)}`);
-invariant(response.ok, `arXiv lookup failed with HTTP ${response.status}`);
-
-const parsed = await parseStringPromise(await response.text());
-const entry = parsed.feed.entry?.[0];
-invariant(entry, `arXiv did not return entry ${arxivId}`);
-
-const title = text(entry.title, 'arXiv entry must contain a title');
-const published = text(entry.published, 'arXiv entry must contain a publication date');
-invariant(Array.isArray(entry.author) && entry.author.length > 0, 'arXiv entry must contain authors');
-
-const authors = entry.author.map(author => {
-  const name = text(author.name, 'arXiv author must contain a name');
-  const parts = name.split(/\s+/);
-  const lastName = parts.pop();
-  invariant(lastName, 'arXiv author must contain a last name');
-  return `${lastName}, ${parts.join(' ')}`;
-}).join(' and ');
-
-process.stdout.write(`@article{arxiv_${arxivId.replace(/[^a-zA-Z0-9]/g, '_')},
-  title = {${title}},
-  author = {${authors}},
-  journal = {arXiv preprint arXiv:${arxivId}},
-  year = {${published.substring(0, 4)}},
-  url = {https://arxiv.org/abs/${arxivId}}
-}`);

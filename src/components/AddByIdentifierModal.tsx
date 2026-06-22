@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Sparkles, Terminal, ChevronDown } from 'lucide-react';
+import {
+  CreatedItemResponseSchema,
+  ResolverPluginMetadataListSchema,
+  type ResolverPluginMetadata,
+} from '../schemas';
+import type { AppTheme } from '../useThemePreference';
+import { invariant } from '../utils/invariant';
 
-interface ResolverPluginMetadata {
-  id: string;
-  name: string;
-}
 
 interface AddByIdentifierModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddResolvedItem: () => void;
   collections: string[];
-  theme: string;
+  theme: AppTheme;
 }
 
 export default function AddByIdentifierModal({
@@ -27,12 +30,9 @@ export default function AddByIdentifierModal({
   const [plugins, setPlugins] = useState<ResolverPluginMetadata[]>([]);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedPlugin = plugins.find(plugin => plugin.id === selectedPluginId) ?? null;
+  const selectedPluginExample = selectedPlugin?.acceptedInputs[0]?.example ?? '';
 
-  function invariant(condition: unknown, message: string): asserts condition {
-    if (!condition) {
-      throw new Error(message);
-    }
-  }
 
   useEffect(() => {
     if (!isOpen) {
@@ -44,8 +44,11 @@ export default function AddByIdentifierModal({
         invariant(response.ok, `Resolver plugin list failed with HTTP ${response.status}`);
         return response.json();
       })
-      .then((metadata: ResolverPluginMetadata[]) => {
-        setPlugins(metadata);
+      .then(metadata => {
+        setPlugins(ResolverPluginMetadataListSchema.parse(metadata));
+      })
+      .catch((caught: Error) => {
+        setError(caught.message);
       });
   }, [isOpen]);
 
@@ -73,7 +76,8 @@ export default function AddByIdentifierModal({
         }
         return response.json();
       })
-      .then(() => {
+      .then(payload => {
+        CreatedItemResponseSchema.parse(payload);
         onAddResolvedItem();
         setInput('');
         setSelectedPluginId('');
@@ -102,10 +106,6 @@ export default function AddByIdentifierModal({
               <Sparkles className="h-4 w-4 text-sky-400 shrink-0" />
               <span>Add Item by Identifier</span>
             </Dialog.Title>
-            
-            <Dialog.Description className={`text-[11px] leading-relaxed ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              Select a resolver plugin and enter the source identifier. The server runs the plugin and adds validated BibTeX to Zotero.
-            </Dialog.Description>
 
             <form onSubmit={handleResolve} className="space-y-3">
               <div className="space-y-1">
@@ -134,6 +134,17 @@ export default function AddByIdentifierModal({
                 </div>
               </div>
 
+              {selectedPlugin && (
+                <div className={`rounded border p-2 space-y-1 ${isLight ? 'border-zinc-200 bg-zinc-50' : isMonokai ? 'border-[#3e3d32] bg-[#272822]' : 'border-slate-800 bg-slate-950'}`}>
+                  {selectedPlugin.acceptedInputs.map(descriptor => (
+                    <div key={descriptor.id} className="flex items-center justify-between gap-3 text-[10px]">
+                      <span className={isLight ? 'text-slate-500' : 'text-slate-400'}>{descriptor.label}</span>
+                      <code className={isLight ? 'text-slate-800' : 'text-sky-300'}>{descriptor.example}</code>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className={`text-[10px] uppercase tracking-wider font-semibold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                   Source Identifier
@@ -142,9 +153,9 @@ export default function AddByIdentifierModal({
                   type="text"
                   required
                   value={input}
-                  disabled={resolving}
+                  disabled={resolving || !selectedPlugin}
                   onChange={e => setInput(e.target.value)}
-                  placeholder="Identifier or URL accepted by the selected plugin"
+                  placeholder={selectedPluginExample}
                   className={`w-full rounded border px-3 py-2 text-xs focus:outline-hidden ${
                     isLight 
                       ? 'border-zinc-200 bg-white text-slate-850 focus:border-blue-600' 
@@ -176,7 +187,7 @@ export default function AddByIdentifierModal({
                 </Dialog.Close>
                 <button
                   type="submit"
-                  disabled={resolving || !input.trim() || !selectedPluginId}
+                  disabled={resolving || !input.trim() || !selectedPlugin}
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:hover:bg-blue-600 disabled:cursor-not-allowed"
                 >
                   {resolving ? 'Resolving...' : 'Add Item'}

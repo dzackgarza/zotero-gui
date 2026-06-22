@@ -3,6 +3,7 @@ import { Search, Sliders, Plus, Check } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AdvancedSearchSettings } from '../types';
+import { APP_THEMES, type AppTheme } from '../useThemePreference';
 
 interface TopBarProps {
   searchSettings: AdvancedSearchSettings;
@@ -10,10 +11,9 @@ interface TopBarProps {
   onOpenAdvancedSearch: () => void;
   onOpenPalette: () => void;
   activeCollectionName: string;
-  onOpenAddItem: (type: 'journalArticle' | 'book' | 'conferencePaper') => void;
   onOpenAddByIdentifier: () => void;
-  theme: string;
-  setTheme: (t: string) => void;
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
 }
 
 export default function TopBar({
@@ -21,7 +21,6 @@ export default function TopBar({
   onChangeSearchSettings,
   onOpenAdvancedSearch,
   activeCollectionName,
-  onOpenAddItem,
   onOpenAddByIdentifier,
   theme,
   setTheme
@@ -65,6 +64,7 @@ export default function TopBar({
                 <Tooltip.Trigger asChild>
                   <button
                     onClick={onOpenAdvancedSearch}
+                    aria-label="Advanced Search Scopes"
                     className={`p-1 rounded transition-colors cursor-pointer ${
                       isScopingApplied
                         ? 'text-sky-400 bg-sky-500/10 hover:bg-sky-500/20'
@@ -96,49 +96,13 @@ export default function TopBar({
         {/* Column settings and Theme toggler */}
         <div className="flex items-center gap-1.5">
           
-          {/* Add items button dropdown quick-links */}
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button
-                className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition cursor-pointer outline-hidden"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Item</span>
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                align="end"
-                className="z-40 w-40 rounded bg-slate-900 border border-slate-800 p-1 text-xs shadow-xl text-slate-200 focus:outline-hidden"
-              >
-                <DropdownMenu.Item
-                  onSelect={() => onOpenAddItem('journalArticle')}
-                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none"
-                >
-                  Journal Article
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onSelect={() => onOpenAddItem('book')}
-                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none"
-                >
-                  Book
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onSelect={() => onOpenAddItem('conferencePaper')}
-                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none"
-                >
-                  Conference Paper
-                </DropdownMenu.Item>
-                <div className="border-t border-slate-800 my-1"></div>
-                <DropdownMenu.Item
-                  onSelect={onOpenAddByIdentifier}
-                  className="w-full text-left px-2 py-1.5 hover:bg-slate-800 rounded-sm cursor-pointer outline-hidden focus:bg-slate-800 select-none text-sky-400 font-semibold"
-                >
-                  Add Item by Identifier...
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+          <button
+            onClick={onOpenAddByIdentifier}
+            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition cursor-pointer outline-hidden"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Item</span>
+          </button>
 
           {/* VSCode Themes Selector */}
           <DropdownMenu.Root>
@@ -154,7 +118,7 @@ export default function TopBar({
                 align="end"
                 className="z-40 w-32 rounded bg-slate-900 border border-slate-800 p-0.5 text-[10px] font-mono shadow-xl text-slate-300 focus:outline-hidden"
               >
-                {['code-dark', 'code-light', 'monokai'].map(t => (
+                {APP_THEMES.map(t => (
                   <DropdownMenu.Item
                     key={t}
                     onSelect={() => setTheme(t)}

@@ -4,18 +4,21 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "api": "tsx watch src/server/server.ts",
+    "dev": "vite --port=3000 --host=0.0.0.0 --force",
+    "api": "tsx watch src/server/main.ts",
     "dev:full": "concurrently --names api,vite --prefix-colors cyan,yellow \"npm run api\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "diagnostic:live-vite-deps": "node scripts/verify-vite-optimized-deps.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
+    "@citation-js/core": "^0.7.21",
+    "@citation-js/plugin-bibtex": "^0.7.21",
+    "@citation-js/plugin-csl": "^0.7.21",
     "@radix-ui/react-accordion": "^1.2.14",
     "@radix-ui/react-context-menu": "^2.3.1",
     "@radix-ui/react-dialog": "^1.1.17",
@@ -24,26 +27,28 @@
     "@radix-ui/react-tabs": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.10",
     "@tailwindcss/vite": "^4.1.14",
-    "@types/better-sqlite3": "^7.6.13",
+    "@tanstack/react-table": "^8.21.3",
     "@vitejs/plugin-react": "^5.0.4",
-    "better-sqlite3": "^12.11.1",
     "bibtex-parse-js": "^0.0.24",
+    "citeproc": "2.4.63",
     "cmdk": "^1.1.1",
     "concurrently": "^10.0.3",
-    "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "fuse.js": "^7.4.2",
+    "fold-to-ascii": "^5.0.1",
+    "fzf": "^0.5.2",
+    "html-to-text": "^10.0.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "xml2js": "^0.6.2"
+    "transliteration": "^2.6.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/express": "^4.17.21",
+    "@types/html-to-text": "^9.0.4",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.17",
@@ -55,7 +60,9 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "vite-plugin-checker": "^0.14.4",
     "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": "25.8.2"
   }
 }

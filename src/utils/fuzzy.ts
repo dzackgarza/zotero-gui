@@ -1,112 +1,348 @@
-import { ZoteroItem, AdvancedSearchSettings } from '../types';
+import * as CSL from 'citeproc';
+import fold2ascii from 'fold-to-ascii';
+import { Fzf } from 'fzf';
+import { transliterate } from 'transliteration';
+import { ZoteroItem, AdvancedSearchSettings, Creator } from '../types';
+
+const BBT_UNSAFE_CITEKEY_CHARS = /["#%'(),={}~\s]/g;
+
+type CreatorBucket = 'author' | 'editor' | 'translator' | 'collaborator';
 
 /**
- * Fuzzy match score calculation (simple Jaro-Winkler like subsequence score or token subset check)
+ * Mirrors Better BibTeX's `clean` transliteration outcome: a name is folded to
+ * ASCII, and any character that has no ASCII transliteration does not appear in
+ * the derived key. BBT's source achieves this by emitting a U+FFFD replacement
+ * sentinel for unknowns and including U+FFFD in its unsafe-character class so
+ * the sentinel is later stripped (formatter.ts: `unsafechars = citekeyUnsafeChars
+ * + '\uFFFD'`; `citekey.replace(this.re.unsafechars, '')`).
+ *
+ * We produce the same documented OUTCOME (untransliterable characters omitted)
+ * but via an explicit, named omission at the transliteration step
+ * (`unknown: ''`) rather than a silent sentinel round-trip. The sentinel path
+ * was lossy in two ways this avoids: a multi-code-unit untransliterable
+ * character (e.g. U+1D54F, a surrogate pair) corrupted the surrounding ASCII
+ * prefix, and a literal U+FFFD already in the source data was stripped
+ * indistinguishably from a transliteration miss. Omitting at the transliteration
+ * step makes the drop deterministic and keeps the surrounding transliterable
+ * letters intact, so U+FFFD is no longer part of the unsafe-character class.
  */
-export function fuzzyMatches(text: string, query: string, matchCase: boolean = false): boolean {
-  if (!query) return true;
-  if (!text) return false;
+function bbtTransliterate(value: string): string {
+  return fold2ascii.foldMaintaining(transliterate(value, { unknown: '' }));
+}
 
-  let t = matchCase ? text : text.toLowerCase();
-  let q = matchCase ? query : query.toLowerCase();
+function stripCreatorName(value: string): string {
+  return value.replace(/^"(.*)"$/, '$1');
+}
 
-  // If query is an exact substring, easily return true
-  if (t.includes(q)) return true;
+function bbtFamilyName(creator: Creator): string {
+  const name = {
+    family: stripCreatorName(creator.lastName || ''),
+    given: stripCreatorName(creator.firstName || ''),
+  };
+  CSL.parseParticles(name);
+  return bbtTransliterate(name.family);
+}
 
-  // Word token checking (all words must match partially)
-  const queryTokens = q.split(/\s+/).filter(Boolean);
-  if (queryTokens.length === 0) return true;
+function bbtCreatorBucket(creator: Creator): CreatorBucket {
+  const creatorType = creator.creatorType.toLowerCase();
 
-  return queryTokens.every(token => t.includes(token));
+  if (creatorType === 'author') return 'author';
+  if (creatorType === 'editor' || creatorType === 'serieseditor') return 'editor';
+  if (creatorType === 'translator') return 'translator';
+  return 'collaborator';
+}
+
+function bbtAuthors(item: ZoteroItem): string[] {
+  const buckets: Record<CreatorBucket, string[]> = {
+    author: [],
+    editor: [],
+    translator: [],
+    collaborator: [],
+  };
+
+  for (const creator of item.creators) {
+    const name = bbtFamilyName(creator);
+    if (!name) continue;
+    buckets[bbtCreatorBucket(creator)].push(name);
+  }
+
+  for (const bucket of ['author', 'editor', 'translator', 'collaborator'] as const) {
+    if (buckets[bucket].length > 0) return buckets[bucket];
+  }
+
+  return [];
+}
+
+function bbtAuthorsAlpha(item: ZoteroItem): string {
+  const authors = bbtAuthors(item);
+
+  switch (authors.length) {
+    case 0:
+      return '';
+    case 1:
+      return authors[0].substring(0, 3);
+    case 2:
+    case 3:
+    case 4:
+      return authors.map(author => author.substring(0, 1)).join('');
+    default:
+      return `${authors.slice(0, 3).map(author => author.substring(0, 1)).join('')}+`;
+  }
+}
+
+function bbtCleanCitekey(value: string): string {
+  return value.replace(BBT_UNSAFE_CITEKEY_CHARS, '').trim();
+}
+
+function bbtYearSubstring(item: ZoteroItem): string {
+  const year = item.date?.match(/\d{4}/)?.[0] || '';
+  return year.slice(2, 6);
 }
 
 /**
- * Performs comprehensive scoped filtering on items based on search configs
+ * Mirrors the fixed Better BibTeX formula used by this library: authorsAlpha + year.substring(3,4).
  */
 export function getStandardCitekey(item: ZoteroItem): string {
-  if (!item.creators || item.creators.length === 0) return '';
-  
-  // Filter for authors, fallback to all creators if none defined as author
-  const authors = item.creators.filter(c => c.creatorType === 'author');
-  const targetCreators = authors.length > 0 ? authors : item.creators;
-  
-  const lastNames = targetCreators
-    .map(c => (c.lastName || '').toLowerCase().replace(/[^a-z0-9]/g, ''))
-    .filter(Boolean);
-    
-  if (lastNames.length === 0) return '';
-  
-  let authorsAlpha = '';
-  if (lastNames.length === 1) {
-    // 1 author: first 3 letters of last name
-    authorsAlpha = lastNames[0].substring(0, 3);
-  } else if (lastNames.length >= 2 && lastNames.length <= 4) {
-    // 2-4 authors: first letter of each last name concatenated
-    authorsAlpha = lastNames.map(name => name[0]).join('');
-  } else {
-    // More than 4 authors: first letter of first 3 authors + '+'
-    authorsAlpha = lastNames.slice(0, 3).map(name => name[0]).join('') + '+';
-  }
+  if (item.creators.length === 0) return '';
+  return bbtCleanCitekey(`${bbtAuthorsAlpha(item)}${bbtYearSubstring(item)}`);
+}
 
-  // Extract year
-  const dateStr = item.date || '';
-  const match = dateStr.match(/\d{4}/);
-  const year = match ? match[0] : '';
-  const yearSuffix = year ? year.substring(2, 4) : ''; // Last two digits of the year (e.g. 17 or 23)
+export interface ZoteroSearchDocument {
+  item: ZoteroItem;
+  // Title is legitimately absent for titleless items (the real DB has them).
+  // The projection must not fabricate an empty-string title token: an absent
+  // title contributes no title term but the item stays searchable by its other
+  // fields. Keep this optional so a missing title is a representable data state,
+  // not a silent '' default.
+  title?: string;
+  creators_compact: string;
+  creators: string;
+  publicationTitle: string;
+  date: string;
+  citekey: string;
+  itemType: string;
+  volume: string;
+  issue: string;
+  pages: string;
+  publisher: string;
+  place: string;
+  doi: string;
+  url: string;
+  isbn: string;
+  issn: string;
+  accessDate: string;
+  language: string;
+  abstractNote: string;
+  tags: string;
+  notes: string;
+  dateAdded: string;
+  dateModified: string;
+  extra: string;
+  rights: string;
+  archive: string;
+  archiveLocation: string;
+  callNumber: string;
+}
 
-  return authorsAlpha + yearSuffix;
+type ZoteroSearchKey = Exclude<keyof ZoteroSearchDocument, 'item'>;
+
+const SEARCH_DOCUMENT_KEYS = new Set<ZoteroSearchKey>([
+  'title',
+  'creators_compact',
+  'creators',
+  'publicationTitle',
+  'date',
+  'citekey',
+  'itemType',
+  'volume',
+  'issue',
+  'pages',
+  'publisher',
+  'place',
+  'doi',
+  'url',
+  'isbn',
+  'issn',
+  'accessDate',
+  'language',
+  'abstractNote',
+  'tags',
+  'notes',
+  'dateAdded',
+  'dateModified',
+  'extra',
+  'rights',
+  'archive',
+  'archiveLocation',
+  'callNumber',
+]);
+
+/**
+ * The single source of truth for the "default searchable fields" contract.
+ *
+ * This is the canonical key subset for two distinct, explicitly-owned ranking
+ * modes that both project items through {@link buildZoteroSearchDocuments} and
+ * both validate against {@link SEARCH_DOCUMENT_KEYS}:
+ *
+ *   - The command palette (single-token fzf subsequence ranking, e.g. 'agtf'
+ *     matches "Algebraic Geometry and Theta Functions") — see
+ *     {@link rankPaletteDocuments}.
+ *   - Advanced search's *default* enabled fields (per-whitespace-token fzf
+ *     matching combined with token all/any) — App seeds
+ *     AdvancedSearchSettings.searchFields from this set via
+ *     {@link isDefaultSearchField}.
+ *
+ * Both modes run on the same fuzzy engine (fzf); they differ only in how the
+ * query is tokenized and combined (palette: the whole query as one
+ * subsequence; advanced search: each whitespace token matched independently
+ * and AND/OR-combined). Neither mode owns its own key list: both read this
+ * one. Any consumer that needs "the fields searched by default" must derive
+ * from here — re-listing the keys elsewhere reintroduces the split-truth this
+ * constant exists to eliminate.
+ */
+export const PALETTE_SEARCH_KEYS = [
+  'title',
+  'creators_compact',
+  'publicationTitle',
+  'date',
+  'citekey',
+] as const;
+
+/**
+ * Whether a projection key is in the canonical default-searchable set.
+ * App seeds the advanced-search default field toggles from this predicate so
+ * the palette key contract and the advanced-search defaults cannot diverge.
+ */
+export function isDefaultSearchField(key: string): boolean {
+  return (PALETTE_SEARCH_KEYS as readonly string[]).includes(key);
+}
+
+export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDocument[] {
+  return items.map(item => ({
+    item,
+    title: item.title,
+    // The `creators_compact` key is the canonical searchable creator field
+    // (it is the creator key in PALETTE_SEARCH_KEYS and the advanced-search
+    // column). Its searchable value is the FULL creator text (every creator's
+    // first and last name) so a user can find an item by any creator at any
+    // position — NOT formatCreatorsCompact's "Lastname et al." display form,
+    // which only names the leading author. Display/sort read
+    // formatCreatorsCompact directly (columnModel / sortableValue), so they
+    // are unaffected by this projection.
+    creators_compact: creatorsSearchText(item.creators),
+    creators: formatCreatorsFull(item.creators),
+    publicationTitle: item.publicationTitle ?? '',
+    date: item.date ?? '',
+    citekey: item.citekey ?? '',
+    itemType: item.itemType,
+    volume: item.volume ?? '',
+    issue: item.issue ?? '',
+    pages: item.pages ?? '',
+    publisher: item.publisher ?? '',
+    place: item.place ?? '',
+    doi: item.doi ?? '',
+    url: item.url ?? '',
+    isbn: item.isbn ?? '',
+    issn: item.issn ?? '',
+    accessDate: item.accessDate ?? '',
+    language: item.language ?? '',
+    abstractNote: item.abstractNote ?? '',
+    tags: item.tags.join(' '),
+    notes: item.notes.map(note => note.note).join(' '),
+    dateAdded: item.dateAdded,
+    dateModified: item.dateModified,
+    extra: item.extra ?? '',
+    rights: item.rights ?? '',
+    archive: item.archive ?? '',
+    archiveLocation: item.archiveLocation ?? '',
+    callNumber: item.callNumber ?? '',
+  }));
+}
+
+function enabledSearchKeys(settings: AdvancedSearchSettings): string[] {
+  return Object.entries(settings.searchFields)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key);
+}
+
+function searchKey(value: string): ZoteroSearchKey {
+  if (SEARCH_DOCUMENT_KEYS.has(value as ZoteroSearchKey)) return value as ZoteroSearchKey;
+  throw new Error(`Unsupported Zotero search field: ${value}`);
+}
+
+function searchText(document: ZoteroSearchDocument, keys: ZoteroSearchKey[]): string {
+  // Absent fields (e.g. a titleless item's title) contribute no term rather
+  // than a fabricated empty token.
+  return keys
+    .map(key => document[key])
+    .filter((value): value is string => value !== undefined)
+    .join(' ');
+}
+
+function rankDocuments(
+  documents: ZoteroSearchDocument[],
+  query: string,
+  keys: ZoteroSearchKey[],
+  settings: AdvancedSearchSettings,
+): ZoteroSearchDocument[] {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0) return documents;
+  if (keys.length === 0) return [];
+
+  const fzf = new Fzf(documents, {
+    selector: document => searchText(document, keys),
+    casing: settings.matchCase ? 'case-sensitive' : 'case-insensitive',
+    normalize: true,
+  });
+
+  // One fuzzy engine (fzf) for both modes. Each whitespace token is matched
+  // independently; "all" keeps items every token matches (token-AND), "any"
+  // keeps items at least one token matches (token-OR).
+  const tokens = trimmedQuery.split(/\s+/).filter(Boolean);
+  const matchesByToken = tokens.map(token => new Set(fzf.find(token).map(result => result.item.item.id)));
+  const matchesItem = settings.matchType === 'any'
+    ? (id: string): boolean => matchesByToken.some(ids => ids.has(id))
+    : (id: string): boolean => matchesByToken.every(ids => ids.has(id));
+
+  return documents.filter(document => matchesItem(document.item.id));
+}
+
+function rankPaletteDocuments(documents: ZoteroSearchDocument[], query: string): ZoteroSearchDocument[] {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0) return documents;
+
+  const keys = PALETTE_SEARCH_KEYS.map(searchKey);
+  const fzf = new Fzf(documents, {
+    selector: document => searchText(document, keys),
+    casing: 'case-insensitive',
+    normalize: true,
+  });
+
+  return fzf.find(trimmedQuery).map(result => result.item);
+}
+
+export function rankZoteroSearchDocumentsForPalette(
+  documents: ZoteroSearchDocument[],
+  query: string,
+): ZoteroSearchDocument[] {
+  return rankPaletteDocuments(documents, query);
 }
 
 export function filterZoteroItems(
   items: ZoteroItem[],
-  settings: AdvancedSearchSettings
+  settings: AdvancedSearchSettings,
 ): ZoteroItem[] {
-  const query = settings.query.trim();
-  if (!query) return items;
+  if (settings.query.trim().length === 0) return items;
 
-  return items.filter(item => {
-    const fieldsToSearch: string[] = [];
+  const keys = enabledSearchKeys(settings);
+  if (keys.length === 0) return [];
 
-    Object.entries(settings.searchFields).forEach(([key, enabled]) => {
-      if (!enabled) return;
-
-      if ((key === 'title') && item.title) {
-        fieldsToSearch.push(item.title);
-      } else if ((key === 'creators_compact' || key === 'authors') && item.creators) {
-        item.creators.forEach(c => {
-          fieldsToSearch.push(`${c.firstName} ${c.lastName}`);
-          fieldsToSearch.push(c.lastName);
-        });
-      } else if ((key === 'publicationTitle' || key === 'publication') && item.publicationTitle) {
-        fieldsToSearch.push(item.publicationTitle);
-      } else if ((key === 'abstractNote' || key === 'abstract') && item.abstractNote) {
-        fieldsToSearch.push(item.abstractNote);
-      } else if (key === 'tags' && item.tags) {
-        fieldsToSearch.push(...item.tags);
-      } else if (key === 'notes' && item.notes) {
-        item.notes.forEach(n => fieldsToSearch.push(n.note));
-      } else if ((key === 'date' || key === 'year') && item.date) {
-        fieldsToSearch.push(item.date);
-      } else {
-        const val = item[key as keyof ZoteroItem];
-        if (typeof val === 'string') {
-          fieldsToSearch.push(val);
-        } else if (typeof val === 'number') {
-          fieldsToSearch.push(String(val));
-        }
-      }
-    });
-
-    // Evaluate match logic: 'all' (AND) vs 'any' (OR)
-    if (settings.matchType === 'all') {
-      const queryTokens = settings.query.split(/\s+/).filter(Boolean);
-      return queryTokens.every(token => {
-        return fieldsToSearch.some(field => fuzzyMatches(field, token, settings.matchCase));
-      });
-    } else {
-      return fieldsToSearch.some(field => fuzzyMatches(field, query, settings.matchCase));
-    }
-  });
+  return rankDocuments(
+    buildZoteroSearchDocuments(items),
+    settings.query,
+    keys.map(searchKey),
+    settings,
+  ).map(document => document.item);
 }
 
 /**
@@ -124,4 +360,23 @@ export function formatCreatorsFull(creators: { firstName: string; lastName: stri
   return creators
     .map(c => `${c.lastName}, ${c.firstName} (${c.creatorType})`)
     .join('; ');
+}
+
+/**
+ * The searchable text for an item's creators: every creator's first and last
+ * name, at any list position. This is the projection value indexed under the
+ * `creators_compact` search key (see {@link buildZoteroSearchDocuments}).
+ *
+ * It is deliberately distinct from {@link formatCreatorsCompact}, which is the
+ * DISPLAY/SORT form ("Lastname et al.") and names only the leading author.
+ * Indexing the compact display form made non-leading co-authors and given
+ * names unsearchable; the search projection reads this fuller text instead so
+ * a user can find an item by ANY creator's name. The single source of truth
+ * for "what creator text is searchable" lives here.
+ */
+export function creatorsSearchText(creators: { firstName: string; lastName: string }[]): string {
+  return creators
+    .flatMap(creator => [creator.firstName, creator.lastName])
+    .filter(name => name.length > 0)
+    .join(' ');
 }

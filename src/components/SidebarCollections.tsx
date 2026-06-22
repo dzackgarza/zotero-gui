@@ -1,24 +1,22 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Folder, FolderOpen, ChevronDown, Trash2, Tag,
-  Layers, PackageMinus, FolderPlus,
-  FileMinus, FileText, Key, Check
+  Folder, FolderOpen, ChevronDown, Tag,
+  Layers,
+  FileMinus, FileText, Key
 } from 'lucide-react';
 import * as Accordion from '@radix-ui/react-accordion';
-import * as Select from '@radix-ui/react-select';
-import * as Tooltip from '@radix-ui/react-tooltip';
 import { Collection, ZoteroItem } from '../types';
-import { getStandardCitekey } from '../utils/fuzzy';
+import { countItemsForCollection, selectTagCloud } from '../librarySelectors';
+import type { AppTheme } from '../useThemePreference';
 
 interface SidebarCollectionsProps {
   collections: Collection[];
   selectedCollectionId: string;
   onSelectCollection: (id: string) => void;
   items: ZoteroItem[];
-  onAddCollection: (name: string, parentId?: string) => void;
   selectedTag: string | null;
   onSelectTag: (tag: string | null) => void;
-  theme: string;
+  theme: AppTheme;
 }
 
 export default function SidebarCollections({
@@ -26,15 +24,10 @@ export default function SidebarCollections({
   selectedCollectionId,
   onSelectCollection,
   items,
-  onAddCollection,
   selectedTag,
   onSelectTag,
   theme
 }: SidebarCollectionsProps) {
-  const [newColName, setNewColName] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newColParent, setNewColParent] = useState<string>('');
-
   // Styles dynamically based on the VS theme
   const getSidebarBg = () => {
     switch (theme) {
@@ -84,109 +77,8 @@ export default function SidebarCollections({
     }
   };
 
-  // Calculate item counters for each collection safely
   const getItemCount = (collectionId: string) => {
-    const activeItems = items.filter(item => !item.inTrash);
-    if (collectionId === 'all') return activeItems.length;
-
-    // Filter by collection or its subcollections
-    const childCollectionIds = collections
-      .filter(c => c.parentId === collectionId)
-      .map(c => c.id);
-
-    const targetIds = [collectionId, ...childCollectionIds];
-
-    return activeItems.filter(item =>
-      item.collections && item.collections.some(cId => targetIds.includes(cId))
-    ).length;
-  };
-
-  // Duplicate items count: simple match on overlapping titles or keys
-  const getDuplicateCount = () => {
-    const titles = new Set<string>();
-    const duplicates = new Set<string>();
-    const active = items.filter(item => !item.inTrash);
-    
-    active.forEach(item => {
-      const normalized = item.title.trim().toLowerCase();
-      if (titles.has(normalized)) {
-        duplicates.add(normalized);
-      } else {
-        titles.add(normalized);
-      }
-    });
-
-    return active.filter(item => duplicates.has(item.title.trim().toLowerCase())).length;
-  };
-
-  // Unfiled items: items with empty collections list
-  const getUnfiledCount = () => {
-    return items.filter(
-      item => !item.inTrash && (!item.collections || item.collections.length === 0)
-    ).length;
-  };
-
-  // Trash count
-  const getTrashCount = () => {
-    return items.filter(item => item.inTrash).length;
-  };
-
-  // No PDF Attachment count
-  const getNoPdfCount = () => {
-    return items.filter(item => {
-      if (item.inTrash) return false;
-      const hasPdf = item.attachments && item.attachments.some(att => 
-        (att.path && att.path.toLowerCase().endsWith('.pdf')) ||
-        (att.title && att.title.toLowerCase().includes('.pdf')) ||
-        (att.mimeType && att.mimeType === 'application/pdf')
-      );
-      return !hasPdf;
-    }).length;
-  };
-
-  // No Extraction count
-  const getNoExtractionCount = () => {
-    return items.filter(item => {
-      if (item.inTrash) return false;
-      const hasExtraction = item.attachments && item.attachments.some(att => 
-        (att.title && att.title.toLowerCase().includes('extracted.md')) ||
-        (att.path && att.path.toLowerCase().includes('extracted.md'))
-      );
-      return !hasExtraction;
-    }).length;
-  };
-
-  // Nonstandard Citation Key count
-  const getNonstandardCitekeyCount = () => {
-    return items.filter(item => {
-      if (item.inTrash) return false;
-      const standard = getStandardCitekey(item);
-      return !item.citekey || item.citekey.toLowerCase().trim() !== standard.toLowerCase().trim();
-    }).length;
-  };
-
-  // Collect active tag list to display alongside counts
-  const getActiveTagCloud = () => {
-    const tagCount: Record<string, number> = {};
-    items
-      .filter(item => !item.inTrash)
-      .forEach(item => {
-        item.tags.forEach(t => {
-          tagCount[t] = (tagCount[t] || 0) + 1;
-        });
-      });
-    return Object.entries(tagCount)
-      .sort((a, b) => b[1] - a[1]) // highest tags first
-      .slice(0, 15); // Show top 15 tags
-  };
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newColName.trim()) return;
-    onAddCollection(newColName.trim(), newColParent ? newColParent : undefined);
-    setNewColName('');
-    setNewColParent('');
-    setShowAddForm(false);
+    return countItemsForCollection(items, collections, collectionId);
   };
 
   // Recursively render collection nodes safely
@@ -194,8 +86,8 @@ export default function SidebarCollections({
     const count = getItemCount(col.id);
     const isSelected = selectedCollectionId === col.id;
 
-    // Render child sub-collections
-    const childNodes = collections.filter(c => c.parentId === col.id);
+    // Render child sub-collections. Only real collections have a parent.
+    const childNodes = collections.filter(c => c.kind === 'real' && c.parentId === col.id);
 
     return (
       <div key={col.id} className="space-y-0.5">
@@ -231,12 +123,13 @@ export default function SidebarCollections({
     );
   };
 
-  const rootCollections = collections.filter(c => !c.parentId && c.id !== 'all');
-  const tagCloud = getActiveTagCloud();
+  // Top-level real collections: real collections with no parent. The synthetic
+  // library-root view is not a real collection and is rendered separately.
+  const rootCollections = collections.filter(c => c.kind === 'real' && c.parentId === undefined);
+  const tagCloud = selectTagCloud(items, 15);
 
   return (
-    <Tooltip.Provider delayDuration={400}>
-      <div className={`h-full flex flex-col ${getSidebarBg()} select-none`}>
+    <div className={`h-full flex flex-col ${getSidebarBg()} select-none`}>
         <Accordion.Root type="multiple" defaultValue={["collections", "views", "tags"]} className="w-full flex-1 flex flex-col space-y-4 min-h-0 overflow-hidden">
           
           {/* Collections Section */}
@@ -246,113 +139,7 @@ export default function SidebarCollections({
                 <ChevronDown className="h-3.5 w-3.5 text-sky-400 shrink-0 transition-transform duration-200 data-[state=closed]:-rotate-90" />
                 <span>Collections</span>
               </Accordion.Trigger>
-              <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(!showAddForm)}
-                    className="rounded p-1 text-slate-450 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
-                  >
-                    <FolderPlus className="h-3.5 w-3.5" />
-                  </button>
-                </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    side="top"
-                    className="z-50 rounded bg-slate-950 border border-slate-805 px-2.5 py-1.5 text-[10px] text-slate-350 font-sans shadow-md animate-fade-in"
-                  >
-                    Create Collection Folder
-                    <Tooltip.Arrow className="fill-slate-800" />
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
             </div>
-
-            {/* Drawer Creation Toggle */}
-            {showAddForm && (
-              <form onSubmit={handleAddSubmit} className={`p-2.5 rounded-md border space-y-2 mt-2 shrink-0 animate-fade-in ${
-                theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-950 border-slate-800'
-              }`}>
-                <p className="text-[10px] font-mono text-slate-450 font-semibold mb-1">New Collection</p>
-                <input
-                  type="text"
-                  required
-                  value={newColName}
-                  onChange={e => setNewColName(e.target.value)}
-                  placeholder="e.g. NLP, Genetics..."
-                  className={`w-full rounded border px-2 py-1 text-xs focus:outline-hidden ${
-                    theme === 'code-light' 
-                      ? 'border-[#e4e4e7] bg-[#ffffff] text-slate-800 focus:border-blue-600' 
-                      : theme === 'monokai' 
-                      ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2] focus:border-[#a6e22e]' 
-                      : 'border-slate-850 bg-slate-900 text-slate-100 focus:border-sky-500'
-                  }`}
-                />
-                <div className="space-y-1">
-                  <label className="block text-[9px] font-mono text-slate-500">Nest Under (Optional)</label>
-                  <Select.Root
-                    value={newColParent || "none"}
-                    onValueChange={val => setNewColParent(val === "none" ? "" : val)}
-                  >
-                    <Select.Trigger className={`w-full flex items-center justify-between rounded border py-1 px-2 text-[10px] cursor-pointer outline-hidden ${
-                      theme === 'code-light' ? 'border-[#e4e4e7] bg-[#ffffff] text-slate-700' : theme === 'monokai' ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2]' : 'border-slate-850 bg-slate-900 text-slate-350'
-                    }`}>
-                      <Select.Value placeholder="No Parent (Root level)" />
-                      <Select.Icon>
-                        <ChevronDown className="h-3 w-3 text-slate-500" />
-                      </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                      <Select.Content className={`z-50 rounded shadow-xl p-1 text-[10px] min-w-[120px] focus:outline-hidden border ${
-                        theme === 'code-light' ? 'bg-[#ffffff] border-[#e4e4e7] text-slate-800' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32] text-[#f8f8f2]' : 'bg-slate-900 border-slate-800 text-slate-300'
-                      }`}>
-                        <Select.Viewport>
-                          <Select.Item value="none" className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
-                            theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
-                          }`}>
-                            <Select.ItemText>No Parent (Root level)</Select.ItemText>
-                            <Select.ItemIndicator>
-                              <Check className="h-3 w-3 text-emerald-400" />
-                            </Select.ItemIndicator>
-                          </Select.Item>
-                          {collections
-                            .filter(c => c.id !== 'all')
-                            .map(c => (
-                              <Select.Item
-                                key={c.id}
-                                value={c.id}
-                                className={`px-2 py-1.5 rounded-sm cursor-pointer outline-hidden select-none flex items-center justify-between ${
-                                  theme === 'code-light' ? 'hover:bg-slate-100 focus:bg-slate-100' : theme === 'monokai' ? 'hover:bg-[#3e3d32] focus:bg-[#3e3d32]' : 'hover:bg-slate-800 focus:bg-slate-800'
-                                }`}
-                              >
-                                <Select.ItemText>{c.name}</Select.ItemText>
-                                <Select.ItemIndicator>
-                                  <Check className="h-3 w-3 text-emerald-400" />
-                                </Select.ItemIndicator>
-                              </Select.Item>
-                            ))}
-                        </Select.Viewport>
-                      </Select.Content>
-                    </Select.Portal>
-                  </Select.Root>
-                </div>
-                <div className="flex justify-end gap-1.5 text-[10px] pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(false)}
-                    className="px-2 py-1 text-slate-400 hover:text-slate-100 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-2.5 py-1 text-white bg-blue-600 hover:bg-blue-500 rounded-sm font-semibold cursor-pointer"
-                  >
-                    Create
-                  </button>
-                </div>
-              </form>
-            )}
 
             <Accordion.Content className="flex-1 overflow-y-auto pr-1 mt-2 space-y-0.5 min-h-[80px] scrollbar-thin scrollbar-thumb-slate-800 select-none data-[state=closed]:animate-slide-up data-[state=open]:animate-slide-down">
               {/* Core 'All items' folder */}
@@ -398,24 +185,7 @@ export default function SidebarCollections({
                   <span>Duplicate Items</span>
                 </div>
                 <span className={`text-[10.5px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'duplicates')}`}>
-                  {getDuplicateCount()}
-                </span>
-              </div>
-
-              {/* Unfiled Items */}
-              <div
-                onClick={() => {
-                  onSelectCollection('unfiled');
-                  onSelectTag(null);
-                }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'unfiled')}`}
-              >
-                <div className="flex items-center gap-2">
-                  <PackageMinus className={`h-3.5 w-3.5 ${selectedCollectionId === 'unfiled' ? 'text-orange-400' : 'text-slate-500'}`} />
-                  <span>Unfiled Items</span>
-                </div>
-                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'unfiled')}`}>
-                  {getUnfiledCount()}
+                  {getItemCount('duplicates')}
                 </span>
               </div>
 
@@ -432,7 +202,7 @@ export default function SidebarCollections({
                   <span>No PDF Attachment</span>
                 </div>
                 <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'no-pdf')}`}>
-                  {getNoPdfCount()}
+                  {getItemCount('no-pdf')}
                 </span>
               </div>
 
@@ -449,7 +219,7 @@ export default function SidebarCollections({
                   <span>No Extraction</span>
                 </div>
                 <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'no-extraction')}`}>
-                  {getNoExtractionCount()}
+                  {getItemCount('no-extraction')}
                 </span>
               </div>
 
@@ -466,26 +236,10 @@ export default function SidebarCollections({
                   <span>Nonstandard Citation Key</span>
                 </div>
                 <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'nonstandard-citekey')}`}>
-                  {getNonstandardCitekeyCount()}
+                  {getItemCount('nonstandard-citekey')}
                 </span>
               </div>
 
-              {/* Trash */}
-              <div
-                onClick={() => {
-                  onSelectCollection('trash');
-                  onSelectTag(null);
-                }}
-                className={`flex items-center justify-between py-1.5 px-2 rounded-sm cursor-pointer transition select-none ${getFolderSelectedClass(selectedCollectionId === 'trash')}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Trash2 className={`h-3.5 w-3.5 ${selectedCollectionId === 'trash' ? 'text-red-500' : 'text-slate-500'}`} />
-                  <span>Trash bin</span>
-                </div>
-                <span className={`text-[10px] font-mono px-1 rounded ${getCounterClass(selectedCollectionId === 'trash')}`}>
-                  {getTrashCount()}
-                </span>
-              </div>
             </Accordion.Content>
           </Accordion.Item>
 
@@ -545,6 +299,5 @@ export default function SidebarCollections({
           </Accordion.Item>
         </Accordion.Root>
       </div>
-    </Tooltip.Provider>
   );
 }

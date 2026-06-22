@@ -1,326 +1,256 @@
 import express from 'express';
-import { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
-import type { ZoteroItem, Collection, Creator, ItemNote, Attachment } from '../types.js';
+import { z } from 'zod';
+import { CreatedItemResponseSchema, LibraryPayloadSchema, StartupStatusSchema } from '../schemas.js';
+import type { LibraryPayload } from '../schemas.js';
+import { isLibraryViewSentinel } from '../libraryViews.js';
 import {
-  addBibTeXToZotero,
-  loadResolverPlugins,
+  pluginAcceptsInput,
+  resolverPluginMetadata,
   resolveSourceToZotero,
+  ResolverExecutionError,
+  ZoteroImportError,
+  type ResolverExecutionConfig,
+  type ResolverPluginConfig,
 } from './resolverPlugins.js';
 
-const DB_URI = 'file:///home/dzack/Zotero/zotero.sqlite?immutable=1';
-const PORT = 3001;
-const RESOLVER_CONFIG_PATH = path.resolve(process.cwd(), 'resolver-plugins.json');
+type ApiErrorKind =
+  | 'invalid_request'
+  | 'attachment_not_found'
+  | 'attachment_path_missing'
+  | 'attachment_open_failed'
+  | 'resolver_not_found'
+  | 'resolver_input_rejected'
+  | 'zotero_unavailable'
+  | 'resolver_execution_failed'
+  | 'upstream_boundary_failed'
+  | 'internal_error';
 
-const db = new DatabaseSync(DB_URI);
-const resolverPlugins = loadResolverPlugins(RESOLVER_CONFIG_PATH);
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-// Zotero stores dates as "1987-00-00 1987" for year-only entries; extract clean value.
-function cleanDate(raw: string | null | undefined): string | undefined {
-  if (!raw) return undefined;
-  const zeroMatch = raw.match(/^\d{4}-00-00\s+(\d{4})$/);
-  if (zeroMatch) return zeroMatch[1];
-  const partialZero = raw.match(/^(\d{4})-00-00/);
-  if (partialZero) return partialZero[1];
-  return raw;
-}
-
-function queryLibrary(): { items: ZoteroItem[]; collections: Collection[] } {
-  // 1. Main items — EAV pivot via conditional aggregation
-  const rawItems = db.prepare(`
-    SELECT
-      i.itemID,
-      i.key                                                                          AS id,
-      it.typeName                                                                    AS itemType,
-      i.dateAdded,
-      i.dateModified,
-      MAX(CASE WHEN f.fieldName = 'title'          THEN idv.value END)              AS title,
-      MAX(CASE WHEN f.fieldName IN ('DOI','doi')   THEN idv.value END)              AS doi,
-      MAX(CASE WHEN f.fieldName = 'url'            THEN idv.value END)              AS url,
-      MAX(CASE WHEN f.fieldName = 'date'           THEN idv.value END)              AS date,
-      MAX(CASE WHEN f.fieldName = 'volume'         THEN idv.value END)              AS volume,
-      MAX(CASE WHEN f.fieldName = 'issue'          THEN idv.value END)              AS issue,
-      MAX(CASE WHEN f.fieldName = 'pages'          THEN idv.value END)              AS pages,
-      MAX(CASE WHEN f.fieldName = 'publisher'      THEN idv.value END)              AS publisher,
-      MAX(CASE WHEN f.fieldName = 'place'          THEN idv.value END)              AS place,
-      MAX(CASE WHEN f.fieldName IN (
-        'publicationTitle','bookTitle','conferenceName',
-        'websiteTitle','encyclopediaTitle','dictionaryTitle',
-        'forumTitle','blogTitle','programTitle'
-      )                                            THEN idv.value END)              AS publicationTitle,
-      MAX(CASE WHEN f.fieldName = 'abstractNote'   THEN idv.value END)              AS abstractNote,
-      MAX(CASE WHEN f.fieldName = 'language'       THEN idv.value END)              AS language,
-      MAX(CASE WHEN f.fieldName IN ('ISBN','isbn') THEN idv.value END)              AS isbn,
-      MAX(CASE WHEN f.fieldName IN ('ISSN','issn') THEN idv.value END)              AS issn,
-      MAX(CASE WHEN f.fieldName = 'extra'          THEN idv.value END)              AS extra,
-      MAX(CASE WHEN f.fieldName = 'rights'         THEN idv.value END)              AS rights,
-      MAX(CASE WHEN f.fieldName = 'archive'        THEN idv.value END)              AS archive,
-      MAX(CASE WHEN f.fieldName = 'archiveLocation' THEN idv.value END)             AS archiveLocation,
-      MAX(CASE WHEN f.fieldName = 'callNumber'     THEN idv.value END)              AS callNumber,
-      MAX(CASE WHEN f.fieldName = 'accessDate'     THEN idv.value END)              AS accessDate,
-      MAX(CASE WHEN f.fieldName = 'citationKey'    THEN idv.value END)              AS citekey,
-      CASE WHEN di.itemID IS NOT NULL THEN 1 ELSE 0 END                             AS inTrash
-    FROM items i
-    JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
-    JOIN libraries l ON i.libraryID = l.libraryID
-    LEFT JOIN itemData id2 ON i.itemID = id2.itemID
-    LEFT JOIN fields f ON id2.fieldID = f.fieldID
-    LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
-    LEFT JOIN deletedItems di ON i.itemID = di.itemID
-    WHERE i.itemID NOT IN (
-      -- Exclude child attachments (have a parent item)
-      SELECT itemID FROM itemAttachments WHERE parentItemID IS NOT NULL
-      UNION ALL
-      -- Exclude child notes (have a parent item)
-      SELECT itemID FROM itemNotes WHERE parentItemID IS NOT NULL
-      UNION ALL
-      -- Exclude child annotations (have a parent item)
-      SELECT itemID FROM itemAnnotations WHERE parentItemID IS NOT NULL
-    )
-    AND l.type != 'feed'
-    GROUP BY i.itemID
-    ORDER BY i.dateAdded DESC
-  `).all() as any[];
-
-  // 2. All creators ordered by item and position
-  const allCreators = db.prepare(`
-    SELECT ic.itemID, c.firstName, c.lastName, ct.creatorType
-    FROM itemCreators ic
-    JOIN creators c ON ic.creatorID = c.creatorID
-    JOIN creatorTypes ct ON ic.creatorTypeID = ct.creatorTypeID
-    ORDER BY ic.itemID, ic.orderIndex
-  `).all() as any[];
-
-  // 3. All tags
-  const allTags = db.prepare(`
-    SELECT it2.itemID, t.name
-    FROM itemTags it2
-    JOIN tags t ON it2.tagID = t.tagID
-    ORDER BY it2.itemID
-  `).all() as any[];
-
-  // 4. Collection memberships
-  const allCollMemberships = db.prepare(`
-    SELECT itemID, collectionID FROM collectionItems ORDER BY itemID
-  `).all() as any[];
-
-  // 5. Notes (child note items linked to parent)
-  const allNotes = db.prepare(`
-    SELECT n.parentItemID, n.itemID, n.note, i.dateAdded, i.dateModified
-    FROM itemNotes n
-    JOIN items i ON n.itemID = i.itemID
-    WHERE n.parentItemID IS NOT NULL
-    ORDER BY n.parentItemID
-  `).all() as any[];
-
-  // 6. Attachments (child attachment items linked to parent)
-  const allAttachments = db.prepare(`
-    SELECT
-      a.parentItemID,
-      i.key                                                        AS id,
-      a.path,
-      a.contentType,
-      MAX(CASE WHEN f.fieldName = 'title' THEN idv.value END)     AS title,
-      MAX(CASE WHEN f.fieldName = 'url'   THEN idv.value END)     AS url
-    FROM itemAttachments a
-    JOIN items i ON a.itemID = i.itemID
-    LEFT JOIN itemData id2 ON a.itemID = id2.itemID
-    LEFT JOIN fields f ON id2.fieldID = f.fieldID
-    LEFT JOIN itemDataValues idv ON id2.valueID = idv.valueID
-    WHERE a.parentItemID IS NOT NULL
-    GROUP BY a.itemID
-    ORDER BY a.parentItemID
-  `).all() as any[];
-
-  // 7. Collections tree
-  const rawCollections = db.prepare(`
-    SELECT c.collectionID, c.collectionName, c.parentCollectionID
-    FROM collections c
-    JOIN libraries l ON c.libraryID = l.libraryID
-    LEFT JOIN deletedCollections dc ON c.collectionID = dc.collectionID
-    WHERE dc.collectionID IS NULL AND l.type != 'feed'
-    ORDER BY c.collectionID
-  `).all() as any[];
-
-  // --- Build lookup maps indexed by itemID ---
-
-  const creatorsByItem = new Map<number, Creator[]>();
-  for (const row of allCreators) {
-    const list = creatorsByItem.get(row.itemID) ?? [];
-    list.push({ firstName: row.firstName ?? '', lastName: row.lastName ?? '', creatorType: row.creatorType });
-    creatorsByItem.set(row.itemID, list);
-  }
-
-  const tagsByItem = new Map<number, string[]>();
-  for (const row of allTags) {
-    const list = tagsByItem.get(row.itemID) ?? [];
-    list.push(row.name);
-    tagsByItem.set(row.itemID, list);
-  }
-
-  const collsByItem = new Map<number, string[]>();
-  for (const row of allCollMemberships) {
-    const list = collsByItem.get(row.itemID) ?? [];
-    list.push(String(row.collectionID));
-    collsByItem.set(row.itemID, list);
-  }
-
-  const notesByItem = new Map<number, ItemNote[]>();
-  for (const row of allNotes) {
-    const list = notesByItem.get(row.parentItemID) ?? [];
-    list.push({
-      id: String(row.itemID),
-      note: stripHtml(row.note ?? ''),
-      dateAdded: row.dateAdded ?? '',
-      dateModified: row.dateModified ?? '',
-    });
-    notesByItem.set(row.parentItemID, list);
-  }
-
-  const attachsByItem = new Map<number, Attachment[]>();
-  for (const row of allAttachments) {
-    const list = attachsByItem.get(row.parentItemID) ?? [];
-    list.push({
-      id: row.id,
-      title: row.title ?? row.path ?? 'Attachment',
-      url: row.url ?? undefined,
-      mimeType: row.contentType ?? '',
-      path: row.path ?? undefined,
-    });
-    attachsByItem.set(row.parentItemID, list);
-  }
-
-  // --- Assemble final ZoteroItem objects ---
-
-  const items: ZoteroItem[] = rawItems.map((row: any) => ({
-    id: row.id,
-    itemType: row.itemType as any,
-    title: row.title ?? 'Untitled',
-    creators: creatorsByItem.get(row.itemID) ?? [],
-    publicationTitle: row.publicationTitle ?? undefined,
-    volume: row.volume ?? undefined,
-    issue: row.issue ?? undefined,
-    pages: row.pages ?? undefined,
-    date: cleanDate(row.date),
-    publisher: row.publisher ?? undefined,
-    place: row.place ?? undefined,
-    doi: row.doi ?? undefined,
-    url: row.url ?? undefined,
-    isbn: row.isbn ?? undefined,
-    issn: row.issn ?? undefined,
-    accessDate: row.accessDate ?? undefined,
-    archive: row.archive ?? undefined,
-    archiveLocation: row.archiveLocation ?? undefined,
-    callNumber: row.callNumber ?? undefined,
-    language: row.language ?? undefined,
-    rights: row.rights ?? undefined,
-    extra: row.extra ?? undefined,
-    abstractNote: row.abstractNote ?? undefined,
-    citekey: row.citekey ?? undefined,
-    tags: tagsByItem.get(row.itemID) ?? [],
-    notes: notesByItem.get(row.itemID) ?? [],
-    attachments: attachsByItem.get(row.itemID) ?? [],
-    collections: collsByItem.get(row.itemID) ?? [],
-    dateAdded: row.dateAdded ?? '',
-    dateModified: row.dateModified ?? '',
-    inTrash: row.inTrash === 1,
-  }));
-
-  // Add sentinel "My Library" root collection then real collections
-  const collections: Collection[] = [
-    { id: 'all', name: 'My Library' },
-    ...rawCollections.map((row: any) => ({
-      id: String(row.collectionID),
-      name: row.collectionName,
-      parentId: row.parentCollectionID != null ? String(row.parentCollectionID) : undefined,
-    })),
-  ];
-
-  return { items, collections };
-}
-
-const app = express();
-app.use(express.json());
-
-function invariant(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
+class ApiError extends Error {
+  constructor(
+    readonly kind: ApiErrorKind,
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+// collection_keys must be real Zotero collection keys only. A UI-only view
+// sentinel ('all' and the derived views) reaching this boundary is an invariant
+// violation: the UI must resolve sentinels to the empty array (library root)
+// before posting. Forwarding a sentinel would write into a non-existent
+// collection, so it is rejected loudly rather than dropped.
+const FromSourceRequestSchema = z.strictObject({
+  input: z.string().trim().min(1),
+  resolverId: z.string().trim().min(1),
+  collections: z.array(z.string().min(1).refine(key => !isLibraryViewSentinel(key))),
+});
+
+const OpenAttachmentParamsSchema = z.strictObject({
+  attachmentId: z.string().trim().min(1),
+});
+
+type Attachment = LibraryPayload['items'][number]['attachments'][number];
+
+export interface AppDeps {
+  loadLibrary(): LibraryPayload;
+  resolverPlugins: ResolverPluginConfig[];
+  resolverExecution: ResolverExecutionConfig;
+  importEndpoint: string;
+  fetchImpl: typeof fetch;
+  openAttachmentFile(attachment: Attachment): Promise<void>;
 }
 
-function getRequiredString(body: Record<string, unknown>, key: string): string {
-  const value = body[key];
-  invariant(typeof value === 'string' && value.trim().length > 0, `${key} must be a non-empty string`);
-  return value;
+// Map a from-source validation failure to a reason naming the SPECIFIC violated
+// invariant. Classification is by the Zod issue's structural identity (its path
+// into the request, and whether it is the sentinel refinement), never by the
+// issue's message text. Each distinct malformed-request case therefore surfaces
+// its own accurate invalid_request reason instead of one shared catch-all.
+function fromSourceInvariantReason(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (issue === undefined) {
+    throw new Error('a ZodError must carry at least one issue');
+  }
+  const [field, index] = issue.path;
+  if (field === 'input') {
+    return 'invalid from-source request: input must be a non-empty identifier string';
+  }
+  if (field === 'resolverId') {
+    return 'invalid from-source request: resolverId must be a non-empty resolver id';
+  }
+  if (field === 'collections') {
+    // The collections refinement rejects a UI-only library view sentinel sent as
+    // a real Zotero collection key. A custom refinement issue at a collections
+    // index is exactly that sentinel violation; any other collections issue is a
+    // shape violation of the array entry itself.
+    if (issue.code === 'custom') {
+      return `invalid from-source request: collections[${String(index)}] is a UI view sentinel, not a real Zotero collection key`;
+    }
+    return `invalid from-source request: collections[${String(index)}] must be a non-empty collection key`;
+  }
+  return `invalid from-source request: unexpected field ${String(field)}`;
 }
 
-function getCollections(body: Record<string, unknown>): string[] {
-  const value = body.collections;
-  invariant(Array.isArray(value), 'collections must be an array');
-  invariant(value.every(collection => typeof collection === 'string'), 'collections must contain only strings');
-  return value;
+function parseFromSourceRequest(body: unknown) {
+  const parsed = FromSourceRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new ApiError('invalid_request', 400, fromSourceInvariantReason(parsed.error));
+  }
+  return parsed.data;
 }
 
-function getResolverPlugin(pluginId: string) {
+function getResolverPlugin(resolverPlugins: ResolverPluginConfig[], pluginId: string): ResolverPluginConfig {
   const plugin = resolverPlugins.find(candidate => candidate.id === pluginId);
-  invariant(plugin, `resolver plugin ${pluginId} is not configured`);
+  if (!plugin) {
+    throw new ApiError('resolver_not_found', 404, `Resolver plugin ${pluginId} is not configured`);
+  }
   return plugin;
 }
 
-app.get('/api/resolver-plugins', (_req, res) => {
-  res.json(resolverPlugins.map(plugin => ({
-    id: plugin.id,
-    name: plugin.name,
-  })));
-});
-
-app.get('/api/library', (_req, res) => {
-  try {
-    const data = queryLibrary();
-    res.json(data);
-  } catch (err) {
-    console.error('Failed to query database:', err);
-    res.status(500).json({ error: 'Database query failed' });
+function requireAcceptedInput(plugin: ResolverPluginConfig, input: string): void {
+  if (!pluginAcceptsInput(plugin, input)) {
+    throw new ApiError('resolver_input_rejected', 400, `Resolver ${plugin.id} does not accept the supplied input`);
   }
-});
+}
 
-app.post('/api/items/from-source', (req, res, next) => {
-  const body = req.body as unknown;
-  invariant(isRecord(body), 'request body must be an object');
+function requireAttachmentWithPath(payload: LibraryPayload, attachmentId: string): Attachment {
+  for (const item of payload.items) {
+    const attachment = item.attachments.find(candidate => candidate.id === attachmentId);
+    if (attachment) {
+      if (!attachment.path) {
+        throw new ApiError('attachment_path_missing', 400, `Attachment ${attachmentId} has no local file path`);
+      }
+      return attachment;
+    }
+  }
+  throw new ApiError('attachment_not_found', 404, `Attachment ${attachmentId} is not present in the loaded library`);
+}
 
-  const plugin = getResolverPlugin(getRequiredString(body, 'resolverId'));
-  const input = getRequiredString(body, 'input');
-  const collections = getCollections(body);
+async function requireZoteroRunning(importEndpoint: string, fetchImpl: typeof fetch): Promise<void> {
+  const versionUrl = new URL('/version', importEndpoint);
+  const response = await fetchImpl(versionUrl).catch((error: Error) => {
+    throw new ApiError('zotero_unavailable', 502, error.message);
+  });
+  if (!response.ok) {
+    throw new ApiError('zotero_unavailable', 502, `Zotero write plugin version check failed with HTTP ${response.status}`);
+  }
+}
 
-  resolveSourceToZotero(plugin, input, collections)
-    .then(result => res.json(result))
-    .catch(next);
-});
+// express.json() rejects an unparseable JSON body by throwing an error carrying
+// the structural identity { type: 'entity.parse.failed', status: 400 }. That is
+// a client fault (a malformed request body), not a server fault, so it is
+// classified by that structural identity into the API's own 400 invalid_request
+// kind rather than the catch-all 500. Classification is by structure, never by
+// the error message string.
+function isBodyParseFailure(error: Error): boolean {
+  const candidate = error as { type?: unknown; status?: unknown };
+  return candidate.type === 'entity.parse.failed' && candidate.status === 400;
+}
 
-app.post('/api/items/from-bibtex', (req, res, next) => {
-  const body = req.body as unknown;
-  invariant(isRecord(body), 'request body must be an object');
+function classifyError(error: Error): { kind: ApiErrorKind; status: number; message: string } {
+  if (error instanceof ApiError) {
+    return { kind: error.kind, status: error.status, message: error.message };
+  }
+  if (isBodyParseFailure(error)) {
+    return { kind: 'invalid_request', status: 400, message: 'Invalid request body: malformed JSON' };
+  }
+  return { kind: 'internal_error', status: 500, message: error.message };
+}
 
-  const bibtex = getRequiredString(body, 'bibtex');
-  const collections = getCollections(body);
+export function createApp(deps: AppDeps) {
+  const app = express();
+  app.use(express.json());
 
-  addBibTeXToZotero(bibtex, collections)
-    .then(result => res.json(result))
-    .catch(next);
-});
+  app.get('/api/resolver-plugins', (_req, res) => {
+    res.json(deps.resolverPlugins.map(resolverPluginMetadata));
+  });
 
-app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  res.status(500).json({ error: error.message });
-});
+  app.get('/api/library', (_req, res, next) => {
+    Promise.resolve()
+      .then(() => res.json(LibraryPayloadSchema.parse(deps.loadLibrary())))
+      .catch(next);
+  });
 
-app.listen(PORT, () => {
-  console.log(`Zotero API server → http://localhost:${PORT}`);
-});
+  app.get('/api/startup', (_req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        await requireZoteroRunning(deps.importEndpoint, deps.fetchImpl);
+        res.json(StartupStatusSchema.parse({ zotero: { running: true } }));
+      })
+      .catch(next);
+  });
+
+  app.post('/api/items/from-source', (req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        const body = parseFromSourceRequest(req.body);
+        const plugin = getResolverPlugin(deps.resolverPlugins, body.resolverId);
+        requireAcceptedInput(plugin, body.input);
+        const result = await resolveSourceToZotero(
+          plugin,
+          body.input,
+          body.collections,
+          deps.resolverExecution,
+          deps.importEndpoint,
+          deps.fetchImpl,
+        ).catch((error: Error) => {
+          // Classify by the real error TYPE, never by message text. A local
+          // resolver-execution fault (timeout, nonzero exit, empty/oversized
+          // output, invalid BibTeX) and an upstream Zotero write fault are
+          // distinct domains and must surface as distinct kinds so the API can
+          // tell a plugin bug apart from a Zotero-side failure.
+          if (error instanceof ResolverExecutionError) {
+            throw new ApiError('resolver_execution_failed', 502, error.message);
+          }
+          if (error instanceof ZoteroImportError) {
+            throw new ApiError('upstream_boundary_failed', 502, error.message);
+          }
+          throw error;
+        });
+        // Success is determined solely from the authoritative write-boundary
+        // result. The library snapshot is eventually consistent, so re-reading
+        // loadLibrary() here would race the DB flush and falsely report a
+        // successful write as not-visible. The write boundary already returns
+        // the created key, id, and title under a strict schema.
+        res.json(CreatedItemResponseSchema.parse({
+          key: result.item_key,
+          itemId: result.item_id,
+          title: result.titles[0],
+        }));
+      })
+      .catch(next);
+  });
+
+  app.post('/api/attachments/:attachmentId/open', (req, res, next) => {
+    Promise.resolve()
+      .then(async () => {
+        const { attachmentId } = OpenAttachmentParamsSchema.parse(req.params);
+        const attachment = requireAttachmentWithPath(LibraryPayloadSchema.parse(deps.loadLibrary()), attachmentId);
+        await deps.openAttachmentFile(attachment).catch((error: Error) => {
+          // Opening a local attachment is a LOCAL operation: the local file is
+          // accessed and a local launcher (xdg-open) is run. A failure here (the
+          // file is gone at open time, the launcher exited nonzero) is a local
+          // server-side fault domain, NOT the upstream Zotero write boundary
+          // (which only the from-source import path touches). It must surface as
+          // its own local kind so a local file/launcher problem is never
+          // mislabeled as a Zotero-side outage.
+          throw new ApiError('attachment_open_failed', 500, error.message);
+        });
+        res.status(204).end();
+      })
+      .catch(next);
+  });
+
+  app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const classified = classifyError(error);
+    res.status(classified.status).json({
+      error: {
+        kind: classified.kind,
+        message: classified.message,
+      },
+    });
+  });
+
+  return app;
+}

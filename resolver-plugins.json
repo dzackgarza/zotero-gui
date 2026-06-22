@@ -6,6 +6,14 @@
       "command": [
         "node",
         "resolver-plugins/doi.mjs"
+      ],
+      "acceptedInputs": [
+        {
+          "id": "doi",
+          "label": "DOI",
+          "example": "10.1007/BF01388432",
+          "pattern": "^(?:https?://(?:dx\\.)?doi\\.org/)?10\\.\\d{4,9}/\\S+$"
+        }
       ]
     },
     {
@@ -14,6 +22,14 @@
       "command": [
         "node",
         "resolver-plugins/isbn.mjs"
+      ],
+      "acceptedInputs": [
+        {
+          "id": "isbn",
+          "label": "ISBN",
+          "example": "978-0-387-90244-9",
+          "pattern": "^(?:isbn:?\\s*)?(?:97[89][-\\s]?)?[0-9][-0-9\\s]{8,}[0-9Xx]$"
+        }
       ]
     },
     {
@@ -22,6 +38,20 @@
       "command": [
         "node",
         "resolver-plugins/arxiv.mjs"
+      ],
+      "acceptedInputs": [
+        {
+          "id": "arxiv-id",
+          "label": "arXiv ID",
+          "example": "2401.01234",
+          "pattern": "^(?:arxiv:)?(?:\\d{4}\\.\\d{4,5}|[a-z-]+(?:\\.[A-Z]{2})?/\\d{7})(?:v\\d+)?$"
+        },
+        {
+          "id": "arxiv-url",
+          "label": "arXiv URL",
+          "example": "https://arxiv.org/abs/2401.01234",
+          "pattern": "^https?://arxiv\\.org/(?:abs|pdf)/[^\\s]+$"
+        }
       ]
     },
     {
@@ -30,6 +60,20 @@
       "command": [
         "node",
         "resolver-plugins/zbmath.mjs"
+      ],
+      "acceptedInputs": [
+        {
+          "id": "zbmath-an",
+          "label": "ZBMath AN",
+          "example": "an:0139.24606",
+          "pattern": "^(?:an:)?\\d{4}\\.\\d{5}$"
+        },
+        {
+          "id": "zbmath-url",
+          "label": "ZBMath URL",
+          "example": "https://zbmath.org/?q=an:0787.14001",
+          "pattern": "^https?://(?:www\\.)?zbmath\\.org/\\?q=(?:an:|an%3A)\\d{4}\\.\\d{5}$"
+        }
       ]
     }
   ]

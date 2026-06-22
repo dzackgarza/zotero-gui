@@ -1,52 +1,36 @@
-function invariant(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
+import {
+  bookBibTeX,
+  bookRecord,
+  invariant,
+  normalizeIsbn,
+  recordAuthors,
+  recordPublisher,
+  recordTitle,
+  recordYear,
+} from './isbn-lib.mjs';
+
+const OPEN_LIBRARY = 'https://openlibrary.org';
+import { readRawStdin } from './utils.mjs';
 
 async function readStdin() {
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  const isbn = input.trim().replace(/^isbn:?\s*/i, '').replace(/[- ]/g, '');
-  invariant(isbn.length > 0, 'ISBN resolver input must not be empty');
-  return isbn;
-}
-
-function formatAuthors(authors) {
-  invariant(Array.isArray(authors) && authors.length > 0, 'OpenLibrary book must contain authors');
-  return authors.map(author => {
-    invariant(typeof author.name === 'string' && author.name.trim().length > 0, 'OpenLibrary author must contain a name');
-    const parts = author.name.trim().split(/\s+/);
-    const lastName = parts.pop();
-    invariant(lastName, 'OpenLibrary author must contain a last name');
-    return `${lastName}, ${parts.join(' ')}`;
-  }).join(' and ');
+  const raw = await readRawStdin();
+  return normalizeIsbn(raw);
 }
 
 const isbn = await readStdin();
-const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-invariant(response.ok, `OpenLibrary lookup failed with HTTP ${response.status}`);
+const bibkey = `ISBN:${isbn}`;
+const url = `${OPEN_LIBRARY}/api/books?bibkeys=${encodeURIComponent(bibkey)}&jscmd=data&format=json`;
 
-const data = await response.json();
-const book = data[`ISBN:${isbn}`];
-invariant(book, `OpenLibrary did not return ISBN ${isbn}`);
-invariant(typeof book.title === 'string' && book.title.length > 0, 'OpenLibrary book must contain a title');
-invariant(Array.isArray(book.publishers) && book.publishers.length > 0, 'OpenLibrary book must contain publishers');
-invariant(typeof book.publish_date === 'string' && book.publish_date.length > 0, 'OpenLibrary book must contain a publish date');
+const response = await fetch(url, { headers: { Accept: 'application/json' } });
+invariant(response.ok, `Open Library Books API lookup failed for ${isbn} (HTTP ${response.status})`);
+const record = bookRecord(await response.json(), isbn);
 
-const authors = formatAuthors(book.authors);
-const publisher = book.publishers.map(publisherEntry => {
-  invariant(typeof publisherEntry.name === 'string' && publisherEntry.name.length > 0, 'OpenLibrary publisher must contain a name');
-  return publisherEntry.name;
-}).join(', ');
-
-process.stdout.write(`@book{isbn_${isbn},
-  title = {${book.title}},
-  author = {${authors}},
-  publisher = {${publisher}},
-  year = {${book.publish_date}},
-  isbn = {${isbn}}
-}`);
+process.stdout.write(
+  bookBibTeX({
+    isbn,
+    title: recordTitle(record),
+    authors: recordAuthors(record),
+    publisher: recordPublisher(record),
+    year: recordYear(record),
+  }),
+);

@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  FileText, Plus, Info, Share2, Copy, Trash2, LayoutGrid, Check, ChevronDown
+  FileText, Info, Copy, ExternalLink
 } from 'lucide-react';
-import * as Select from '@radix-ui/react-select';
-import * as Dialog from '@radix-ui/react-dialog';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { ZoteroItem, ItemType, ITEM_TYPE_LABELS, Creator } from '../types';
+import { formatKeyboardShortcut, KEYBOARD_SHORTCUTS } from '../keyboardShortcuts';
+import { ZoteroItem, getItemTypeLabel, Creator } from '../types';
+import { isCitable, toBibTeX } from '../utils/citation';
+import type { AppTheme } from '../useThemePreference';
 
 const serializeCreators = (creators: Creator[]): string => {
   return creators
@@ -19,44 +20,22 @@ const serializeCreators = (creators: Creator[]): string => {
     .join('; ');
 };
 
-const deserializeCreators = (str: string): Creator[] => {
-  return str
-    .split(';')
-    .map(part => {
-      const trimmed = part.trim();
-      if (!trimmed) return null;
-      const commaIndex = trimmed.indexOf(',');
-      if (commaIndex !== -1) {
-        const lastName = trimmed.substring(0, commaIndex).trim();
-        const firstName = trimmed.substring(commaIndex + 1).trim();
-        return { firstName, lastName, creatorType: 'author' };
-      }
-      return { firstName: '', lastName: trimmed, creatorType: 'author' };
-    })
-    .filter((c): c is Creator => c !== null);
-};
-
 interface InspectorPanelProps {
   item: ZoteroItem | null;
   allItems: ZoteroItem[];
-  onUpdateItem: (item: ZoteroItem) => void;
-  onDeleteItem: (id: string) => void;
-  onDuplicateItem: (id: string) => void;
   onClose: () => void;
-  theme: string;
+  onOpenAttachment: (attachmentId: string) => void;
+  theme: AppTheme;
 }
 
 export default function InspectorPanel({
   item,
   allItems,
-  onUpdateItem,
-  onDeleteItem,
-  onDuplicateItem,
   onClose,
+  onOpenAttachment,
   theme
 }: InspectorPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [pdfReaderUrl, setPdfReaderUrl] = useState<string | null>(null);
 
   // Styles dynamically based on the VS theme
   const getPanelBg = () => {
@@ -83,18 +62,6 @@ export default function InspectorPanel({
     }
   };
 
-  const getInputClass = () => {
-    switch (theme) {
-      case 'code-light':
-        return 'bg-white border border-[#e4e4e7] text-slate-800 placeholder:text-slate-400 focus:border-blue-600';
-      case 'monokai':
-        return 'bg-[#272822] border border-[#3e3d32] text-[#f8f8f2] placeholder:text-stone-500 focus:border-[#a6e22e]';
-      case 'code-dark':
-      default:
-        return 'bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-550 focus:border-blue-600';
-    }
-  };
-
   if (!item) {
     const isLight = theme === 'code-light';
     const isMonokai = theme === 'monokai';
@@ -103,7 +70,7 @@ export default function InspectorPanel({
         <FileText className={`h-10 w-10 mb-2.5 animate-pulse ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-700'}`} />
         <p className={`text-xs font-semibold ${isLight ? 'text-slate-500' : isMonokai ? 'text-[#f8f8f2]' : 'text-slate-400'}`}>No Item Selected</p>
         <p className={`text-[10px] leading-normal text-center mt-1 max-w-xs ${isLight ? 'text-slate-400' : isMonokai ? 'text-[#75715e]' : 'text-slate-550'}`}>
-          Select any bibliography row or press <kbd className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-[9px] text-slate-400 font-mono">Ctrl+P</kbd> to inspect detailed metadata.
+          Select any bibliography row or press <kbd className="bg-slate-950 px-1 py-0.5 rounded border border-slate-800 text-[9px] text-slate-400 font-mono">{formatKeyboardShortcut(KEYBOARD_SHORTCUTS.openItemPalette)}</kbd> to inspect detailed metadata.
         </p>
       </div>
     );
@@ -115,22 +82,17 @@ export default function InspectorPanel({
     other => other.id !== item.id && other.citekey?.trim().toLowerCase() === item.citekey?.trim().toLowerCase()
   );
 
-  // Clipboard citation formatting (simplified BibTeX)
+  // Whether this item has a bibliographic citation form at all. A non-citable
+  // item (e.g. a standalone attachment) has no CSL type, so toBibTeX would
+  // throw; the copy-citation affordance is therefore not offered for it. The
+  // decision comes from the citation module's single source of truth, never a
+  // hardcoded item-type check here.
+  const itemIsCitable = isCitable(item);
+
+  // BibTeX via the shared Citation.js mapping: the @entrytype reflects the
+  // item's real itemType and every field is escaped/omitted by the library.
   const copyBibtex = () => {
-    const mainCreator = item.creators[0] ? item.creators[0].lastName.toLowerCase() : 'anonymous';
-    const cleanTitle = item.title.replace(/\s+/g, '_').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
-    const year = item.date || 'unknown';
-    const entryKey = item.citekey || `${mainCreator}_${cleanTitle}_${year}`;
-
-    const bibtex = `@article{${entryKey},
-  title = {${item.title}},
-  author = {${item.creators.map(c => `${c.lastName}, ${c.firstName}`).join(' and ')}},
-  journal = {${item.publicationTitle || ''}},
-  year = {${year}},
-  doi = {${item.doi || ''}},
-  url = {${item.url || ''}}
-}`;
-
+    const bibtex = toBibTeX(item);
     navigator.clipboard.writeText(bibtex).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -148,69 +110,32 @@ export default function InspectorPanel({
             <span>Item Inspector</span>
           </span>
           <div className="flex items-center gap-1">
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={copyBibtex}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
-                >
-                  {copied ? (
-                    <span className="text-[10px] text-green-400 font-mono">Copied!</span>
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  Generate BibTeX citation
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={() => onDuplicateItem(item.id)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-yellow-400 transition cursor-pointer"
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  Duplicate record
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button
-                  onClick={() => onDeleteItem(item.id)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-505 transition cursor-pointer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  side="top"
-                  className="z-50 rounded bg-slate-955 border border-slate-805 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
-                >
-                  {item.inTrash ? "Delete permanently" : "Move to Trash"}
-                  <Tooltip.Arrow className="fill-slate-800" />
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
+            {itemIsCitable && (
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    onClick={copyBibtex}
+                    aria-label="Copy BibTeX citation"
+                    className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition cursor-pointer"
+                  >
+                    {copied ? (
+                      <span className="text-[10px] text-green-400 font-mono">Copied!</span>
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    side="top"
+                    className="z-50 rounded bg-slate-955 border border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-355 font-sans shadow-md"
+                  >
+                    Generate BibTeX citation
+                    <Tooltip.Arrow className="fill-slate-800" />
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            )}
 
             <button
               onClick={onClose}
@@ -224,7 +149,7 @@ export default function InspectorPanel({
         {/* Item summary label */}
         <div className={`p-3 shrink-0 ${theme === 'code-light' ? 'bg-[#eaeaea] border-b border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-b border-[#3e3d32]' : 'bg-slate-950/60 border-b border-slate-800'}`}>
           <div className="font-mono text-[9px] text-sky-400 mb-1 flex items-center justify-between">
-            <span>{ITEM_TYPE_LABELS[item.itemType]}</span>
+            <span>{getItemTypeLabel(item.itemType)}</span>
             {item.inTrash && (
               <span className="text-red-400 font-semibold uppercase px-1 border border-red-500 rounded-xs text-[8px] tracking-wide animate-pulse">
                 Trash Bin
@@ -248,7 +173,7 @@ export default function InspectorPanel({
             <div>
               <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Item Type</label>
               <div className={`text-xs font-medium ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                {ITEM_TYPE_LABELS[item.itemType] || item.itemType}
+                {getItemTypeLabel(item.itemType)}
               </div>
             </div>
 
@@ -393,20 +318,27 @@ export default function InspectorPanel({
             ) : (
               <div className="space-y-2.5">
                 {item.notes.map(note => (
-                  <div key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
+                  <article key={note.id} className={`rounded-md border p-2.5 space-y-2 ${
                     theme === 'code-light' ? 'bg-white border-[#e4e4e7]' : theme === 'monokai' ? 'bg-[#1e1f1c] border-[#3e3d32]' : 'bg-slate-955 border-slate-800'
                   }`}>
-                    <div>
-                      <p className={`whitespace-pre-wrap leading-relaxed text-[11px] ${
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-555 uppercase tracking-wide">
+                      <span>Attached Note</span>
+                      <span>{new Date(note.dateModified).toLocaleDateString()}</span>
+                    </div>
+                    <div className={`max-h-72 overflow-y-auto rounded border p-2 whitespace-pre-wrap leading-relaxed text-[11px] ${
+                      theme === 'code-light'
+                        ? 'border-zinc-200 bg-slate-50 text-slate-800'
+                        : theme === 'monokai'
+                          ? 'border-[#3e3d32] bg-[#272822] text-[#f8f8f2]'
+                          : 'border-slate-850 bg-slate-950 text-slate-200'
+                    }`}>
+                      <p className={
                         theme === 'code-light' ? 'text-slate-700' : theme === 'monokai' ? 'text-[#f8f8f2]' : 'text-slate-200'
-                      }`}>
+                      }>
                         {note.note}
                       </p>
-                      <div className="flex items-center justify-between border-t border-slate-900/60 mt-2 pt-1.5 text-[9px] text-slate-555">
-                        <span>Modified {new Date(note.dateModified).toLocaleDateString()}</span>
-                      </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
@@ -463,10 +395,11 @@ export default function InspectorPanel({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setPdfReaderUrl(a.title)}
-                        className="px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
+                        onClick={() => onOpenAttachment(a.id)}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-805 hover:bg-slate-700 text-sky-400 text-[9px] font-mono cursor-pointer"
                       >
-                        Read
+                        <ExternalLink className="h-3 w-3" />
+                        Open
                       </button>
                     </div>
                   </div>
@@ -475,47 +408,6 @@ export default function InspectorPanel({
             )}
           </div>
         </div>
-
-        {/* Fullscreen PDF dialogue Modal */}
-        <Dialog.Root open={!!pdfReaderUrl} onOpenChange={(open) => { if (!open) setPdfReaderUrl(null); }}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm animate-fade-in" />
-            <Dialog.Content className="fixed inset-4 z-50 flex items-center justify-center font-sans focus:outline-hidden">
-              <div className="w-full max-w-4xl h-[90vh] flex flex-col rounded-lg overflow-hidden border border-slate-800 bg-slate-955 text-slate-100 shadow-2xl">
-                {/* Header */}
-                <div className="flex items-center justify-between bg-slate-900 border-b border-slate-800 px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-red-500" />
-                    <span className="font-semibold text-xs text-slate-200 truncate max-w-lg">
-                      {pdfReaderUrl} — Mock Academic PDF Viewer
-                    </span>
-                  </div>
-                  <Dialog.Close asChild>
-                    <button
-                      className="p-1 px-2 bg-slate-805 hover:bg-slate-700 rounded text-slate-350 hover:text-slate-100 cursor-pointer outline-hidden text-[10px] font-semibold transition-colors"
-                    >
-                      ✕ Close Reader
-                    </button>
-                  </Dialog.Close>
-                </div>
-
-                {/* PDF content block */}
-                <div className="flex-grow flex flex-col items-center justify-center bg-slate-950 p-6 text-center space-y-3">
-                  <FileText className="h-12 w-12 text-slate-600" />
-                  <p className="font-semibold text-sm text-slate-200">PDF Preview Not Supported</p>
-                  <p className="text-xs text-slate-400 max-w-md">
-                    Direct PDF rendering is not supported in the browser client. Please open the file using your local Zotero application.
-                  </p>
-                  {item.attachments.find(a => a.title === pdfReaderUrl)?.path && (
-                    <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded p-3 text-[10px] text-left font-mono break-all text-slate-300">
-                      <strong className="text-slate-500">File Path:</strong> {item.attachments.find(a => a.title === pdfReaderUrl)?.path}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
       </div>
     </Tooltip.Provider>
   );

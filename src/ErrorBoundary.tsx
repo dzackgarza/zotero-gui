@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -36,7 +37,7 @@ class ErrorBoundary extends React.Component<Props, State> {
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
           <div className="bg-slate-900 border border-red-500/30 rounded-lg p-6 max-w-4xl w-full shadow-2xl">
             <h1 className="text-xl font-bold text-red-500 mb-2 flex items-center gap-2">
-              <span className="text-2xl">⚠️</span> Application Render Error
+              <AlertTriangle className="h-5 w-5" /> Application Render Error
             </h1>
             <p className="text-slate-400 text-sm mb-4">
               The application encountered an unexpected error during rendering. This is typically caused by a bad state update or a type mismatch.
