@@ -171,14 +171,21 @@ describe('doiRequestUrl (DOI resolver) percent-encodes the suffix', () => {
 describe('doiFromInput (DOI resolver) normalizes every accepted input form', () => {
   // The manifest pattern (resolver-plugins.json) accepts the DOI bare
   // (`10.x/suffix`) or as a `doi.org` / `dx.doi.org` URL, with the suffix matched
-  // by `\S+`. A real URL-form input can therefore carry a tracking query
-  // (`?utm_source=x`) or a fragment (`#sec`). Those must be stripped BEFORE the
-  // DOI is extracted and its suffix percent-encoded — otherwise the
-  // query/fragment becomes part of the encoded suffix (`foo%3Futm_source%3Dx`)
-  // and resolves the wrong identifier. Every accepted form must yield the same
-  // bare DOI `10.1234/foo`. (The `doi:` prefix is deliberately absent: the
-  // manifest pattern does NOT accept it, so the resolver does not invent
-  // acceptance of an input its contract rejects.)
+  // by `\S+`. `?` and `#` mean OPPOSITE things in the two forms, so they must be
+  // normalized differently:
+  //
+  //   - URL form: `?`/`#` are URL delimiters introducing the query/fragment. They
+  //     are NOT part of the DOI and must be removed, or the suffix percent-encodes
+  //     them into the identifier (`foo%3Futm_source%3Dx`) and resolves the wrong
+  //     DOI.
+  //   - Bare DOI: the suffix is OPAQUE registrant text and the DOI/Handle syntax
+  //     permits `?` and `#` in it. They are part of the identifier and must be
+  //     preserved; stripping them truncates a real DOI to a different record.
+  //
+  // Every URL form yields the bare DOI `10.1234/foo`; every bare form is passed
+  // through intact. (The `doi:` prefix is deliberately absent: the manifest
+  // pattern does NOT accept it, so the resolver does not invent acceptance of an
+  // input its contract rejects.)
   it.each([
     ['10.1234/foo', '10.1234/foo'],
     ['https://doi.org/10.1234/foo', '10.1234/foo'],
@@ -186,10 +193,39 @@ describe('doiFromInput (DOI resolver) normalizes every accepted input form', () 
     ['https://doi.org/10.1234/foo?utm_source=x', '10.1234/foo'],
     ['https://doi.org/10.1234/foo#sec', '10.1234/foo'],
     ['https://doi.org/10.1234/foo?utm_source=x#sec', '10.1234/foo'],
-    ['10.1234/foo?utm_source=x', '10.1234/foo'],
-    ['10.1234/foo#sec', '10.1234/foo'],
-  ])('extracts %s -> %s', (input, expected) => {
+  ])('strips the query/fragment from URL-form input %s -> %s', (input, expected) => {
     expect(doiFromInput(input)).toBe(expected);
+  });
+
+  // A bare DOI whose opaque suffix legitimately contains a `?` or `#` (permitted
+  // by the DOI/Handle syntax and accepted by the manifest's `\S+` suffix) must be
+  // preserved INTACT. The pre-regression code split on `?`/`#` for every input
+  // and truncated these to `10.1234/foo`, resolving a different record. Each input
+  // is a distinct identifier from `10.1234/foo`.
+  it.each([
+    ['10.1234/foo?bar', '10.1234/foo?bar'],
+    ['10.1234/foo#bar', '10.1234/foo#bar'],
+    ['10.1234/foo?bar#baz', '10.1234/foo?bar#baz'],
+  ])('preserves a `?`/`#` in a bare DOI suffix %s -> %s', (input, expected) => {
+    expect(doiFromInput(input)).toBe(expected);
+    // The preserved reserved characters must travel as PATH data (percent-encoded),
+    // never opening a real URL query/fragment that would drop them from the path.
+    const url = doiRequestUrl(doiFromInput(input));
+    expect(new URL(url).search).toBe('');
+    expect(new URL(url).hash).toBe('');
+  });
+
+  // The full bare DOI suffix (including its `?`/`#`) must reach the request path.
+  it('carries a `?` from a bare DOI suffix into the request path, not the query', () => {
+    const url = doiRequestUrl(doiFromInput('10.1234/foo?bar'));
+    expect(url).toBe('https://doi.org/10.1234/foo%3Fbar');
+    expect(new URL(url).pathname).toBe('/10.1234/foo%3Fbar');
+  });
+
+  it('carries a `#` from a bare DOI suffix into the request path, not the fragment', () => {
+    const url = doiRequestUrl(doiFromInput('10.1234/foo#bar'));
+    expect(url).toBe('https://doi.org/10.1234/foo%23bar');
+    expect(new URL(url).pathname).toBe('/10.1234/foo%23bar');
   });
 
   // The end-to-end consequence: a URL-form DOI carrying a tracking query must
@@ -201,6 +237,20 @@ describe('doiFromInput (DOI resolver) normalizes every accepted input form', () 
     expect(doiRequestUrl(doiFromInput('https://doi.org/10.1007/BF01388432?utm_source=x'))).toBe(expected);
     expect(doiRequestUrl(doiFromInput('https://doi.org/10.1007/BF01388432#abstract'))).toBe(expected);
     expect(doiRequestUrl(doiFromInput('http://dx.doi.org/10.1007/BF01388432'))).toBe(expected);
+  });
+
+  // The manifest pattern (`^(?:https?://...)?...`) is matched with the `i` flag in
+  // pluginAcceptsInput, so an uppercase or mixed-case scheme — `HTTPS://...`,
+  // `Https://...` — is a contract-valid URL input. A case-sensitive scheme check
+  // would route those through the BARE branch, sending the WHOLE URL upstream as a
+  // DOI. The scheme detection must be case-insensitive so every accepted URL is
+  // parsed via the URL branch and yields the same bare DOI as the lowercase form.
+  it('parses an uppercase/mixed-scheme URL via the URL branch, not the bare branch', () => {
+    const fromLower = doiFromInput('https://doi.org/10.1234/foo?utm_source=x');
+    expect(fromLower).toBe('10.1234/foo');
+    expect(doiFromInput('HTTPS://doi.org/10.1234/foo?utm_source=x')).toBe(fromLower);
+    expect(doiFromInput('Https://doi.org/10.1234/foo#sec')).toBe(fromLower);
+    expect(doiFromInput('HTTP://dx.doi.org/10.1234/foo')).toBe(fromLower);
   });
 
   it('throws on empty input rather than producing an empty DOI', () => {

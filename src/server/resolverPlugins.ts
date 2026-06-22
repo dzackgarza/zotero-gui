@@ -225,6 +225,16 @@ export async function importBibTeXToZotero(
   fetchImpl: typeof fetch,
 ): Promise<ZoteroImportResult> {
   parseBibTeXToMetadata(bibtex);
+  // The fetch to the Zotero write endpoint is the upstream boundary. It can fail
+  // in two ways that are the SAME fault domain: (a) it returns a non-ok HTTP
+  // response, or (b) it REJECTS at the transport layer (endpoint unreachable:
+  // connection refused, DNS failure, timeout). Both mean the upstream Zotero call
+  // failed, so both must surface as ZoteroImportError — otherwise a raw transport
+  // rejection escapes the instanceof classification at the API boundary and is
+  // mislabeled as a local internal_error (500) instead of upstream (502). The
+  // .catch scope is the fetch CALL ONLY, so a local fault (the parse above, the
+  // result-schema parse below) is never mislabeled as upstream; the original
+  // transport error is preserved as `cause` so its diagnostic signal is not lost.
   const response = await fetchImpl(importEndpoint, {
     method: 'POST',
     headers: {
@@ -235,6 +245,8 @@ export async function importBibTeXToZotero(
       bibtex,
       collection_keys: collections,
     }),
+  }).catch((error: Error) => {
+    throw new ZoteroImportError(`Zotero BibTeX import endpoint unreachable: ${error.message}`, { cause: error });
   });
   if (!response.ok) {
     throw new ZoteroImportError(`Zotero BibTeX import failed with HTTP ${response.status}: ${await response.text()}`);

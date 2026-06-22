@@ -485,4 +485,35 @@ describe('/api/items/from-source distinguishes resolver-execution faults from up
     await closeServer(server);
     await closeServer(brokenImport);
   });
+
+  it('surfaces a TRANSPORT failure of the Zotero write endpoint as upstream_boundary_failed, not internal_error', async () => {
+    // The resolver is healthy and produces valid BibTeX, so the local pipeline
+    // succeeds. The fault is that the upstream Zotero write endpoint is
+    // UNREACHABLE: the fetch to it rejects at the transport layer (connection
+    // refused) instead of returning a non-ok HTTP response. A transport failure
+    // reaching the upstream write boundary is the SAME fault domain as an HTTP
+    // error response from it, so it must surface as upstream_boundary_failed (502)
+    // — not collapse into the catch-all internal_error (500), which would mislabel
+    // a Zotero-side outage as a local server bug.
+    const healthyResolver = path.join(domainDir, 'healthy-resolver-transport.mjs');
+    writeFileSync(healthyResolver, 'process.stdout.write("@book{ok,title={OK Title},author={Doe, Jane}}\\n");');
+
+    // Bind a real server to obtain a live ephemeral port, then close it. A fetch
+    // to that now-closed port produces a genuine ECONNREFUSED transport rejection
+    // at the real boundary — no mock, no fault injection into the route.
+    const deadServer = http.createServer();
+    const deadBaseUrl = await startServer(deadServer);
+    await closeServer(deadServer);
+    const unreachableEndpoint = `${deadBaseUrl}/write`;
+
+    const { server, url } = await buildApp(healthyResolver, unreachableEndpoint);
+    const response = await fetch(`${url}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: { kind: 'upstream_boundary_failed' } });
+    await closeServer(server);
+  });
 });

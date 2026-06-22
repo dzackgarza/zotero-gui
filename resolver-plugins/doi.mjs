@@ -21,21 +21,40 @@ export function doiRequestUrl(doi) {
 }
 
 // The manifest accepts a DOI bare (`10.x/suffix`) or as a `doi.org`/`dx.doi.org`
-// URL, with the suffix matched by `\S+`. A URL-form input may therefore carry a
-// query string or fragment (e.g. `?utm_source=x`, `#section`). The query and
-// fragment must be removed BEFORE the scheme/host prefix is stripped and the DOI
-// is handed to doiRequestUrl: otherwise the `?...`/`#...` survives into the DOI
-// suffix and doiRequestUrl percent-encodes it as part of the identifier
-// (`foo%3Futm_source%3Dx`), resolving the wrong DOI. Strip query, then fragment,
-// then the doi.org/dx.doi.org scheme+host prefix, mirroring arxivIdFromInput.
-// (The namespace slash of the bare DOI is left untouched here; doiRequestUrl
-// owns the suffix percent-encoding that preserves it.)
+// URL, with the suffix matched by `\S+`. The two forms must be normalized
+// DIFFERENTLY, because `?` and `#` mean opposite things in each:
+//
+//   - In a URL-form input (`https://doi.org/10.x/foo?utm_source=x#sec`), `?`/`#`
+//     are URL delimiters introducing the query and fragment. They are NOT part of
+//     the DOI and must be removed, or doiRequestUrl percent-encodes them into the
+//     identifier (`foo%3Futm_source%3Dx`) and resolves the wrong DOI.
+//   - In a BARE DOI (`10.1234/foo?bar`), the suffix is OPAQUE registrant text:
+//     the DOI/Handle syntax permits `?` and `#` as legitimate suffix characters.
+//     Stripping them truncates a real identifier and resolves a different record.
+//
+// So query/fragment removal is correct ONLY for the URL form. The URL is parsed
+// with the URL constructor so `.pathname` is taken WITHOUT the query/fragment;
+// then the doi.org/dx.doi.org leading-slash + host is removed. A bare DOI is
+// passed through intact (trimmed only). The scheme check is case-insensitive
+// because pluginAcceptsInput matches the manifest pattern with the `i` flag, so
+// `HTTPS://doi.org/...` is a contract-valid URL input that must take the URL
+// branch (not be mistaken for a bare DOI). (The namespace slash of the bare DOI
+// is left untouched here; doiRequestUrl owns the suffix percent-encoding.)
+const URL_SCHEME = /^https?:\/\//i;
+
 export function doiFromInput(raw) {
-  const doi = raw
-    .split('?')[0]
-    .split('#')[0]
-    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
-    .trim();
+  const trimmed = raw.trim();
+  let doi;
+  if (URL_SCHEME.test(trimmed)) {
+    const url = new URL(trimmed);
+    // url.pathname is the decoded path WITHOUT query/fragment, with a leading
+    // slash; the host (doi.org / dx.doi.org) lives in url.host. Strip the leading
+    // slash to yield the bare DOI. A `?`/`#` in the path here came from the URL's
+    // query/fragment delimiters, so they are correctly absent from url.pathname.
+    doi = url.pathname.replace(/^\//, '');
+  } else {
+    doi = trimmed;
+  }
   invariant(doi.length > 0, 'DOI resolver input must not be empty');
   return doi;
 }
