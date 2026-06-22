@@ -42,15 +42,32 @@ export function doiRequestUrl(doi) {
 // is left untouched here; doiRequestUrl owns the suffix percent-encoding.)
 const URL_SCHEME = /^https?:\/\//i;
 
+// The manifest host (`(?:dx\.)?doi\.org`) is matched case-insensitively by
+// pluginAcceptsInput, so `doi.org` and `dx.doi.org` in any case are the only
+// contract-valid hosts. Only these hosts make `url.pathname` a DOI: for any other
+// host the pathname is just that site's path, and taking it as a DOI fabricates a
+// bogus identifier from a stranger's URL. The host is compared exactly (not by
+// substring) against `url.hostname`, which excludes the port; a substring test
+// would wrongly accept `doi.org.evil.com` or `notdoi.org`.
+const DOI_HOSTS = new Set(['doi.org', 'dx.doi.org']);
+
 export function doiFromInput(raw) {
   const trimmed = raw.trim();
   let doi;
   if (URL_SCHEME.test(trimmed)) {
     const url = new URL(trimmed);
+    // The host is what makes `url.pathname` a DOI. Validate it before trusting the
+    // path: only doi.org/dx.doi.org URLs carry a DOI in their path. `url.hostname`
+    // is the host without any port, lowercased by the URL parser, so it compares
+    // exactly against the canonical hosts regardless of input case.
+    invariant(
+      DOI_HOSTS.has(url.hostname),
+      `DOI URL host must be doi.org or dx.doi.org, got: ${url.hostname}`,
+    );
     // url.pathname is the decoded path WITHOUT query/fragment, with a leading
-    // slash; the host (doi.org / dx.doi.org) lives in url.host. Strip the leading
-    // slash to yield the bare DOI. A `?`/`#` in the path here came from the URL's
-    // query/fragment delimiters, so they are correctly absent from url.pathname.
+    // slash. Strip the leading slash to yield the bare DOI. A `?`/`#` in the path
+    // here came from the URL's query/fragment delimiters, so they are correctly
+    // absent from url.pathname.
     doi = url.pathname.replace(/^\//, '');
   } else {
     doi = trimmed;

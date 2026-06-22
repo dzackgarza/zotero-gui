@@ -253,6 +253,41 @@ describe('doiFromInput (DOI resolver) normalizes every accepted input form', () 
     expect(doiFromInput('HTTP://dx.doi.org/10.1234/foo')).toBe(fromLower);
   });
 
+  // The URL branch's documented contract (and the manifest pattern,
+  // `^(?:https?://(?:dx\.)?doi\.org/)?...`) accepts ONLY a `doi.org` /
+  // `dx.doi.org` URL. The host is what makes `url.pathname` a DOI; for any other
+  // host the pathname is just that site's path and is NOT a DOI. The host is
+  // matched case-insensitively because pluginAcceptsInput compiles the manifest
+  // pattern with the `i` flag, so `doi.org`, `DOI.ORG`, and the `dx.` subdomain
+  // in any case are all contract-valid and must yield the bare DOI from the path.
+  it.each([
+    ['https://doi.org/10.1234/foo', '10.1234/foo'],
+    ['https://DOI.ORG/10.1234/foo', '10.1234/foo'],
+    ['https://dx.doi.org/10.1234/foo', '10.1234/foo'],
+    ['https://DX.DOI.ORG/10.1234/foo', '10.1234/foo'],
+    ['HTTPS://Dx.Doi.Org/10.1234/foo?utm_source=x', '10.1234/foo'],
+  ])('accepts the doi.org/dx.doi.org host case-insensitively %s -> %s', (input, expected) => {
+    expect(doiFromInput(input)).toBe(expected);
+  });
+
+  // A `https?://` URL whose host is NOT doi.org/dx.doi.org is outside the
+  // documented contract. The pre-regression code took `url.pathname` for ANY
+  // host, so `https://example.com/10.1234/foo` silently produced the bogus DOI
+  // `10.1234/foo` extracted from an arbitrary site's path. The host must be
+  // validated: an off-contract host fails loud rather than fabricating a DOI from
+  // a stranger's URL path. A `doi.org` SUBSTRING in another host's name
+  // (`doi.org.evil.com`, `notdoi.org`) must not satisfy the check.
+  it.each([
+    'https://example.com/10.1234/foo',
+    'http://example.com/10.1234/foo',
+    'https://doi.org.evil.com/10.1234/foo',
+    'https://notdoi.org/10.1234/foo',
+    'https://sci-hub.doi.org.example/10.1234/foo',
+    'https://arxiv.org/abs/2401.01234',
+  ])('throws on a non-doi.org host rather than extracting a bogus DOI from its path: %s', input => {
+    expect(() => doiFromInput(input)).toThrow();
+  });
+
   it('throws on empty input rather than producing an empty DOI', () => {
     expect(() => doiFromInput('')).toThrow();
   });
