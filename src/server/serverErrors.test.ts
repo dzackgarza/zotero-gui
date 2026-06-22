@@ -124,6 +124,13 @@ async function expectErrorKind(response: Response, status: number, kind: string)
   expect(payload).toMatchObject({ error: { kind } });
 }
 
+async function errorMessage(response: Response, status: number, kind: string): Promise<string> {
+  expect(response.status).toBe(status);
+  const payload = await response.json() as { error: { kind: string; message: string } };
+  expect(payload.error.kind).toBe(kind);
+  return payload.error.message;
+}
+
 describe('/api/items/from-source error semantics', () => {
   beforeAll(async () => {
     const dir = tempDir();
@@ -218,6 +225,42 @@ describe('/api/items/from-source error semantics', () => {
       400,
       'resolver_input_rejected',
     );
+  });
+
+  it('reports which from-source invariant failed with a distinct, accurate reason per malformed case', async () => {
+    importMode = 'success';
+    // Three structurally-distinct malformed requests. Each must surface its OWN
+    // accurate invalid_request reason naming the violated invariant, not one
+    // shared catch-all message. The proof is twofold: every message names its
+    // own field/invariant, AND the three messages are mutually distinct (a
+    // single catch-all would make them identical).
+    const missingInput = await errorMessage(
+      await postFromSource({ resolverId: 'fixture', collections: [] }),
+      400,
+      'invalid_request',
+    );
+    const missingResolver = await errorMessage(
+      await postFromSource({ input: 'ISBN 9780262033848', collections: [] }),
+      400,
+      'invalid_request',
+    );
+    const sentinelKey = await errorMessage(
+      await postFromSource({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: ['all'] }),
+      400,
+      'invalid_request',
+    );
+
+    // Each reason names the invariant it violated.
+    expect(missingInput).toContain('input');
+    expect(missingResolver).toContain('resolverId');
+    expect(sentinelKey).toContain('collections');
+    // The collection-sentinel reason specifically identifies the sentinel/view
+    // misuse, not a generic "bad collections" message.
+    expect(sentinelKey.toLowerCase()).toContain('sentinel');
+
+    // The three reasons are mutually distinct: a single catch-all message would
+    // make any two of these equal.
+    expect(new Set([missingInput, missingResolver, sentinelKey]).size).toBe(3);
   });
 
   it('checks Zotero write plugin availability before startup succeeds', async () => {
@@ -340,6 +383,7 @@ describe('/api/items/from-source error semantics', () => {
         collections: [],
         dateAdded: '2026-06-20T00:00:00Z',
         dateModified: '2026-06-20T00:00:00Z',
+        inTrash: false,
       }],
     };
 
@@ -368,6 +412,7 @@ describe('/api/items/from-source error semantics', () => {
         collections: [],
         dateAdded: '2026-06-20T00:00:00Z',
         dateModified: '2026-06-20T00:00:00Z',
+        inTrash: false,
       }],
     };
 
@@ -514,6 +559,162 @@ describe('/api/items/from-source distinguishes resolver-execution faults from up
     });
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ error: { kind: 'upstream_boundary_failed' } });
+    await closeServer(server);
+  });
+});
+
+// The Zotero write-boundary result schema (ZoteroImportResultSchema) guarantees a
+// non-empty item_key (z.string().min(1)). That guarantee is exactly what makes the
+// diagnostic's old item_keys[0] fallback dead code: by the time the created key is
+// read, the schema parse inside importBibTeXToZotero has already rejected any
+// result without a non-empty item_key. This test proves the guarantee at the real
+// boundary: a write-boundary response carrying an empty item_key must fail loudly
+// (the schema parse throws), never silently produce a created item. With that
+// guarantee proven, reading result.item_key directly is the only correct read and
+// the fallback was unreachable.
+describe('/api/items/from-source enforces the write-boundary item_key guarantee', () => {
+  let badResultDir: string;
+
+  function emptyKeyImportServer(): Server {
+    return http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      // A structurally-valid success response EXCEPT item_key is empty, violating
+      // ZoteroImportResultSchema's item_key: z.string().min(1).
+      res.end(JSON.stringify({
+        success: true,
+        operation: 'import_bibtex',
+        stage: 'completed',
+        version: 'fixture',
+        details: { item_count: 1, collection_keys: [], translator_id: 'fixture-translator' },
+        item_key: '',
+        item_id: 1,
+        item_keys: [''],
+        item_ids: [1],
+        titles: ['Resolved'],
+      }));
+    });
+  }
+
+  beforeAll(() => {
+    badResultDir = tempDir();
+  });
+
+  it('fails loud (does not return a created item) when the write boundary omits a non-empty item_key', async () => {
+    const resolverPath = writeResolver(badResultDir);
+    const importServerEmpty = emptyKeyImportServer();
+    const endpoint = `${await startServer(importServerEmpty)}/write`;
+    const app = createApp({
+      loadLibrary: () => ({ items: [], collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }] }),
+      resolverPlugins: [plugin([process.execPath, resolverPath])],
+      resolverExecution: execution(badResultDir),
+      importEndpoint: endpoint,
+      fetchImpl: fetch,
+      openAttachmentFile: async () => { throw new Error('not used'); },
+    });
+    const { server, url } = await listenApp(app);
+
+    const response = await fetch(`${url}/api/items/from-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: 'ISBN 9780262033848', resolverId: 'fixture', collections: [] }),
+    });
+
+    // The malformed result must NOT yield a 200 created-item response: the empty
+    // item_key fails the schema parse, so the route surfaces an error rather than
+    // a fabricated success. (A schema parse failure is a server-side contract
+    // violation -> internal_error 500.)
+    expect(response.status).toBe(500);
+    const payload = await response.json() as { error: { kind: string }; key?: string };
+    expect(payload.error.kind).toBe('internal_error');
+    expect(payload.key).toBeUndefined();
+
+    await closeServer(server);
+    await closeServer(importServerEmpty);
+  });
+});
+
+// A LOCAL attachment-open failure (the file is gone at open time, or the local
+// launcher exits nonzero) is a server-side LOCAL fault domain. It is NOT the
+// upstream Zotero write boundary, which only the from-source import path touches.
+// Surfacing a local launcher failure as upstream_boundary_failed (502) would
+// mislabel a local file/launcher problem as a Zotero-side outage. These tests
+// prove the route classifies an attachment-open launch failure by its real
+// (local) fault domain, distinct from the upstream write boundary.
+describe('/api/attachments/:id/open surfaces a local launch failure as a local fault, not upstream', () => {
+  let faultDir: string;
+
+  // A real local launcher that always exits nonzero: this is the genuine
+  // production failure shape (xdg-open could not open the file), driven through
+  // the real execFile boundary — no mock, no fault injection into the route.
+  function failingLauncherPath(): string {
+    const scriptPath = path.join(faultDir, 'failing-launcher.mjs');
+    writeFileSync(scriptPath, 'process.stderr.write("launcher could not open file"); process.exit(1);');
+    return scriptPath;
+  }
+
+  async function buildApp(launcherPath: string): Promise<{ server: Server; url: string }> {
+    const app = createApp({
+      loadLibrary: () => ({
+        collections: [{ kind: 'library-root', id: 'all', name: 'My Library' }],
+        items: [{
+          id: 'ITEM_FAULT',
+          itemType: 'book',
+          title: 'Attachment Fault Item',
+          creators: [],
+          tags: [],
+          notes: [],
+          attachments: [{
+            id: 'ATTACHFA',
+            title: 'Local PDF',
+            mimeType: 'application/pdf',
+            path: '/tmp/zotero-gui-missing.pdf',
+          }],
+          collections: [],
+          dateAdded: '2026-06-20T00:00:00Z',
+          dateModified: '2026-06-20T00:00:00Z',
+          inTrash: false,
+        }],
+      }),
+      resolverPlugins: [],
+      resolverExecution: execution(faultDir),
+      importEndpoint: 'http://127.0.0.1:1/write',
+      fetchImpl: fetch,
+      // The attachment HAS a local path, so it passes pre-launch validation. The
+      // launch itself fails because the real local launcher exits nonzero — a
+      // genuine local-fault-domain failure.
+      openAttachmentFile: attachment => new Promise<void>((resolve, reject) => {
+        if (!attachment.path) {
+          reject(new Error(`Attachment ${attachment.id} has no local file path`));
+          return;
+        }
+        execFile(process.execPath, [launcherPath, attachment.path], (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    });
+    return listenApp(app);
+  }
+
+  beforeAll(() => {
+    faultDir = tempDir();
+  });
+
+  it('classifies a local launcher failure as attachment_open_failed (local), never upstream_boundary_failed', async () => {
+    const { server, url } = await buildApp(failingLauncherPath());
+    const response = await fetch(`${url}/api/attachments/ATTACHFA/open`, { method: 'POST' });
+    const payload = await response.json() as { error: { kind: string; message: string } };
+
+    // The fault is local (the launcher exited nonzero), so it must NOT be
+    // labeled with the upstream Zotero write boundary kind.
+    expect(payload.error.kind).not.toBe('upstream_boundary_failed');
+    // It surfaces under the local attachment-open fault kind with a local-fault
+    // status (a server-side local operation failed, not a bad upstream gateway).
+    expect(payload.error.kind).toBe('attachment_open_failed');
+    expect(response.status).toBe(500);
     await closeServer(server);
   });
 });

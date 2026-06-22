@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { LibraryPayloadSchema } from '../schemas';
+import { LibraryPayloadSchema, ZoteroItemSchema } from '../schemas';
 import { itemsWithoutPdf } from '../librarySelectors';
 import { createApp } from './server';
 import {
@@ -99,6 +99,42 @@ describe('Zotero DB contract preflight', () => {
     const db = createFixtureDb();
     const payload = loadValidatedLibrary(db);
     expect(payload.items.map(item => item.id)).toEqual(['ATTACH99', 'TRASH123', 'BOOK1234']);
+  });
+
+  it('emits a concrete inTrash boolean for every mapped item, and the schema rejects an item missing it', () => {
+    // The repository mapping sets inTrash (true/false) on EVERY item via the
+    // deletedItems anti-join, so the response boundary must require it: a mapping
+    // regression that drops inTrash would make `!item.inTrash` evaluate true,
+    // silently surfacing a trashed item as active. Prove (a) the real mapping
+    // always emits a boolean inTrash, and (b) the schema fails loudly — not
+    // defaults — when a row arrives without inTrash.
+    const db = createFixtureDb();
+    const payload = loadValidatedLibrary(db);
+    for (const item of payload.items) {
+      expect(typeof item.inTrash).toBe('boolean');
+    }
+    const trashed = payload.items.find(item => item.id === 'TRASH123');
+    if (trashed === undefined) {
+      throw new Error('expected the trashed fixture item to survive into the payload');
+    }
+    expect(trashed.inTrash).toBe(true);
+
+    // Removing inTrash from an otherwise-valid mapped item must fail the parse,
+    // not silently coerce it to a default. (No JSON round-trip: undefined fields
+    // would vanish; delete the key from the object directly to model a mapping
+    // regression that omitted it.)
+    const active = payload.items.find(item => item.id === 'BOOK1234');
+    if (active === undefined) {
+      throw new Error('expected the active fixture item to survive into the payload');
+    }
+    expect(active.inTrash).toBe(false);
+    const withoutInTrash: Record<string, unknown> = { ...active };
+    delete withoutInTrash.inTrash;
+    const result = ZoteroItemSchema.safeParse(withoutInTrash);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some(issue => issue.path.join('.') === 'inTrash')).toBe(true);
+    }
   });
 
   it('fails before serving when required tables, columns, or field contracts are missing', () => {
@@ -194,6 +230,73 @@ describe('Zotero DB contract preflight', () => {
       throw new Error('expected the title-less item to survive into the top-level payload');
     }
     expect(noTitle.title).toBeUndefined();
+    expect(LibraryPayloadSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('accepts a real attachment with a NULL contentType, mapping mimeType to absent without fabricating one', () => {
+    // Zotero declares itemAttachments.contentType nullable (CREATE TABLE
+    // itemAttachments ... contentType TEXT, with no NOT NULL constraint). A real
+    // linked-URL attachment can therefore have a NULL contentType. The library
+    // load must not turn that single attachment into a whole-/api/library failure,
+    // and must NOT fabricate a default contentType: a NULL contentType maps to an
+    // absent mimeType.
+    const db = createFixtureDb();
+    db.exec(`
+      INSERT INTO items VALUES (10, 'PARENT10', 1, 1, '2026-07-01 00:00:00', '2026-07-02 00:00:00');
+      INSERT INTO itemDataValues VALUES (20, 'Parent Of Typeless Attachment'), (21, 'Typeless Link');
+      INSERT INTO itemData VALUES (10, 1, 20);
+      -- A child attachment whose contentType column is NULL (a linked URL with no
+      -- MIME type), but which still has a title row.
+      INSERT INTO items VALUES (11, 'NOCTYPE1', 4, 1, '2026-07-03 00:00:00', '2026-07-04 00:00:00');
+      INSERT INTO itemAttachments VALUES (11, 10, NULL, NULL);
+      INSERT INTO itemData VALUES (11, 1, 21);
+    `);
+
+    const payload = loadValidatedLibrary(db);
+    const parent = payload.items.find(item => item.id === 'PARENT10');
+    if (parent === undefined) {
+      throw new Error('expected the parent item of the typeless attachment to survive into the payload');
+    }
+    expect(parent.attachments).toHaveLength(1);
+    const attachment = parent.attachments[0];
+    if (attachment === undefined) {
+      throw new Error('expected the typeless attachment to be carried through');
+    }
+    expect(attachment.title).toBe('Typeless Link');
+    // No fabricated mimeType: a NULL contentType becomes an absent mimeType.
+    expect(attachment.mimeType).toBeUndefined();
+    // The whole library still validates and loads.
+    expect(LibraryPayloadSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('accepts a real attachment with no title row, mapping title to absent without fabricating one', () => {
+    // The attachment title is a derived MAX(CASE ... title ...) aggregate that is
+    // NULL when the attachment has no title itemData row — a reachable real state
+    // (parallel to the already-nullable top-level item title). It must not crash
+    // the load nor fabricate a placeholder title.
+    const db = createFixtureDb();
+    db.exec(`
+      INSERT INTO items VALUES (12, 'PARENT12', 1, 1, '2026-07-05 00:00:00', '2026-07-06 00:00:00');
+      INSERT INTO itemDataValues VALUES (22, 'Parent Of Titleless Attachment');
+      INSERT INTO itemData VALUES (12, 1, 22);
+      -- A child attachment WITH a contentType but with NO title itemData row.
+      INSERT INTO items VALUES (13, 'NOTITLE_A', 4, 1, '2026-07-07 00:00:00', '2026-07-08 00:00:00');
+      INSERT INTO itemAttachments VALUES (13, 12, 'storage:scan.pdf', 'application/pdf');
+    `);
+
+    const payload = loadValidatedLibrary(db);
+    const parent = payload.items.find(item => item.id === 'PARENT12');
+    if (parent === undefined) {
+      throw new Error('expected the parent item of the titleless attachment to survive into the payload');
+    }
+    expect(parent.attachments).toHaveLength(1);
+    const attachment = parent.attachments[0];
+    if (attachment === undefined) {
+      throw new Error('expected the titleless attachment to be carried through');
+    }
+    expect(attachment.mimeType).toBe('application/pdf');
+    // No fabricated title: a missing title row becomes an absent title.
+    expect(attachment.title).toBeUndefined();
     expect(LibraryPayloadSchema.parse(payload)).toEqual(payload);
   });
 

@@ -58,17 +58,6 @@ async function runResolverDiagnostics(config: AppConfig): Promise<void> {
   }
 }
 
-function createdKey(result: Awaited<ReturnType<typeof importBibTeXToZotero>>): string {
-  if (typeof result.item_key === 'string' && result.item_key.length > 0) {
-    return result.item_key;
-  }
-  const firstKey = result.item_keys[0];
-  if (typeof firstKey === 'string' && firstKey.length > 0) {
-    return firstKey;
-  }
-  throw new Error('Zotero write plugin did not return a created item key');
-}
-
 function reloadItem(config: AppConfig, key: string) {
   const db = new DatabaseSync(config.zotero.databaseUri);
   try {
@@ -89,7 +78,11 @@ async function runAddItemDiagnostic(config: AppConfig): Promise<void> {
 }`;
 
   const result = await importBibTeXToZotero(bibtex, [], config.zotero.importEndpoint, fetch);
-  const key = createdKey(result);
+  // ZoteroImportResultSchema guarantees a non-empty item_key (z.string().min(1)),
+  // validated inside importBibTeXToZotero before this point, so the created key is
+  // read directly from that guaranteed field. No item_keys[0] fallback: it was
+  // unreachable dead defense behind the schema guarantee.
+  const key = result.item_key;
   await delay(1500);
   const item = reloadItem(config, key);
   if (item === undefined) {

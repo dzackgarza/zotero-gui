@@ -88,9 +88,12 @@ export interface Creator {
 
 export interface Attachment {
   id: string;
-  title: string;
+  // title and mimeType are genuinely absent for some real Zotero attachments
+  // (no title itemData row; nullable Zotero contentType column), so they are
+  // optional here and carried through as absent rather than fabricated.
+  title?: string;
   url?: string;
-  mimeType: string;
+  mimeType?: string;
   path?: string;
 }
 

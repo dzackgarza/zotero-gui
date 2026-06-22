@@ -17,6 +17,7 @@ type ApiErrorKind =
   | 'invalid_request'
   | 'attachment_not_found'
   | 'attachment_path_missing'
+  | 'attachment_open_failed'
   | 'resolver_not_found'
   | 'resolver_input_rejected'
   | 'zotero_unavailable'
@@ -61,10 +62,40 @@ export interface AppDeps {
   openAttachmentFile(attachment: Attachment): Promise<void>;
 }
 
+// Map a from-source validation failure to a reason naming the SPECIFIC violated
+// invariant. Classification is by the Zod issue's structural identity (its path
+// into the request, and whether it is the sentinel refinement), never by the
+// issue's message text. Each distinct malformed-request case therefore surfaces
+// its own accurate invalid_request reason instead of one shared catch-all.
+function fromSourceInvariantReason(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (issue === undefined) {
+    throw new Error('a ZodError must carry at least one issue');
+  }
+  const [field, index] = issue.path;
+  if (field === 'input') {
+    return 'invalid from-source request: input must be a non-empty identifier string';
+  }
+  if (field === 'resolverId') {
+    return 'invalid from-source request: resolverId must be a non-empty resolver id';
+  }
+  if (field === 'collections') {
+    // The collections refinement rejects a UI-only library view sentinel sent as
+    // a real Zotero collection key. A custom refinement issue at a collections
+    // index is exactly that sentinel violation; any other collections issue is a
+    // shape violation of the array entry itself.
+    if (issue.code === 'custom') {
+      return `invalid from-source request: collections[${String(index)}] is a UI view sentinel, not a real Zotero collection key`;
+    }
+    return `invalid from-source request: collections[${String(index)}] must be a non-empty collection key`;
+  }
+  return `invalid from-source request: unexpected field ${String(field)}`;
+}
+
 function parseFromSourceRequest(body: unknown) {
   const parsed = FromSourceRequestSchema.safeParse(body);
   if (!parsed.success) {
-    throw new ApiError('invalid_request', 400, 'Invalid from-source request payload');
+    throw new ApiError('invalid_request', 400, fromSourceInvariantReason(parsed.error));
   }
   return parsed.data;
 }
@@ -197,7 +228,14 @@ export function createApp(deps: AppDeps) {
         const { attachmentId } = OpenAttachmentParamsSchema.parse(req.params);
         const attachment = requireAttachmentWithPath(LibraryPayloadSchema.parse(deps.loadLibrary()), attachmentId);
         await deps.openAttachmentFile(attachment).catch((error: Error) => {
-          throw new ApiError('upstream_boundary_failed', 502, error.message);
+          // Opening a local attachment is a LOCAL operation: the local file is
+          // accessed and a local launcher (xdg-open) is run. A failure here (the
+          // file is gone at open time, the launcher exited nonzero) is a local
+          // server-side fault domain, NOT the upstream Zotero write boundary
+          // (which only the from-source import path touches). It must surface as
+          // its own local kind so a local file/launcher problem is never
+          // mislabeled as a Zotero-side outage.
+          throw new ApiError('attachment_open_failed', 500, error.message);
         });
         res.status(204).end();
       })

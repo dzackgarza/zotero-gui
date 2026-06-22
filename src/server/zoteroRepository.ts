@@ -77,8 +77,13 @@ const AttachmentRowSchema = z.strictObject({
   parentItemID: z.number(),
   id: z.string(),
   path: NullableStringSchema,
-  contentType: z.string(),
-  title: z.string(),
+  // Zotero declares itemAttachments.contentType nullable (contentType TEXT, no
+  // NOT NULL), so a real linked-URL attachment can have a NULL contentType. The
+  // title is a derived MAX(CASE ... title ...) aggregate that is NULL when the
+  // attachment has no title itemData row. Both are modeled as genuinely nullable
+  // here so one such real attachment does not fail the whole library load.
+  contentType: NullableStringSchema,
+  title: NullableStringSchema,
   url: NullableStringSchema,
 });
 
@@ -86,8 +91,8 @@ const StandaloneAttachmentRowSchema = z.strictObject({
   itemID: z.number(),
   id: z.string(),
   path: NullableStringSchema,
-  contentType: z.string(),
-  title: z.string(),
+  contentType: NullableStringSchema,
+  title: NullableStringSchema,
   url: NullableStringSchema,
 });
 
@@ -526,9 +531,11 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
     const list = attachsByItem.get(row.parentItemID) ?? [];
     list.push({
       id: row.id,
-      title: row.title,
+      // A NULL title (no title row) / NULL contentType (nullable Zotero column)
+      // carries through as an absent value, never a fabricated placeholder.
+      title: row.title ?? undefined,
       url: row.url ?? undefined,
-      mimeType: row.contentType,
+      mimeType: row.contentType ?? undefined,
       path: row.path ?? undefined,
     });
     attachsByItem.set(row.parentItemID, list);
@@ -536,9 +543,9 @@ export function queryLibrary(db: DatabaseSync): LibraryPayload {
   for (const row of standaloneAttachments) {
     attachsByItem.set(row.itemID, [{
       id: row.id,
-      title: row.title,
+      title: row.title ?? undefined,
       url: row.url ?? undefined,
-      mimeType: row.contentType,
+      mimeType: row.contentType ?? undefined,
       path: row.path ?? undefined,
     }]);
   }

@@ -18,9 +18,14 @@ export const ItemNoteSchema = z.strictObject({
 
 export const AttachmentSchema = z.strictObject({
   id: z.string(),
-  title: z.string(),
+  // title and mimeType are genuinely absent for some real Zotero attachments: an
+  // attachment can have no title itemData row, and Zotero declares
+  // itemAttachments.contentType nullable (a linked URL may carry no MIME type).
+  // They are optional so one such real attachment does not fail the library load;
+  // an absent value is carried through verbatim, never fabricated.
+  title: z.string().optional(),
   url: z.string().optional(),
-  mimeType: z.string(),
+  mimeType: z.string().optional(),
   path: z.string().optional(),
 });
 
@@ -82,7 +87,12 @@ export const ZoteroItemSchema = z.strictObject({
   collections: z.array(z.string()),
   dateAdded: z.string(),
   dateModified: z.string(),
-  inTrash: z.boolean().optional(),
+  // Required, not optional: the repository mapping sets inTrash (true/false) on
+  // EVERY item via the deletedItems anti-join. Making it optional would let a
+  // mapping regression drop it silently, after which `!item.inTrash` evaluates
+  // true and a trashed item is surfaced as active. A missing value must fail the
+  // parse loudly rather than default to "not trashed".
+  inTrash: z.boolean(),
 });
 
 export const LibraryPayloadSchema = z.strictObject({

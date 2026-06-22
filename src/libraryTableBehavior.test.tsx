@@ -40,6 +40,7 @@ function bookItem(id: string, title: string, overrides: Partial<ZoteroItem> = {}
     collections: [],
     dateAdded: '2026-01-01T00:00:00Z',
     dateModified: '2026-01-01T00:00:00Z',
+    inTrash: false,
     ...overrides,
   };
 }

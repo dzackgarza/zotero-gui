@@ -170,6 +170,7 @@ function libraryWithCollection(): Response {
       collections: ['42'],
       dateAdded: '2026-06-18T00:00:00Z',
       dateModified: '2026-06-18T00:00:00Z',
+      inTrash: false,
     }],
     // Sidebar selection id (numeric collectionID) is deliberately distinct from
     // the real Zotero collection key, so the import-composition assertion proves
@@ -467,6 +468,7 @@ describe('App APA-citation copy command respects item citability', () => {
           collections: [],
           dateAdded: '2026-06-18T00:00:00Z',
           dateModified: '2026-06-18T00:00:00Z',
+          inTrash: false,
         },
         {
           id: 'ATTACHMENT_ITEM',
@@ -479,6 +481,7 @@ describe('App APA-citation copy command respects item citability', () => {
           collections: [],
           dateAdded: '2026-06-18T00:00:00Z',
           dateModified: '2026-06-18T00:00:00Z',
+          inTrash: false,
         },
       ],
       collections: [],
