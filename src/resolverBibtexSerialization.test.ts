@@ -6,7 +6,7 @@ import { bookBibTeX } from '../resolver-plugins/isbn-lib.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
 import { articleBibTeX, parseZblNumber } from '../resolver-plugins/zbmath-lib.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
-import { doiRequestUrl } from '../resolver-plugins/doi.mjs';
+import { doiRequestUrl, doiFromInput } from '../resolver-plugins/doi.mjs';
 // @ts-expect-error: resolver libs are plain .mjs without type declarations.
 import { arxivIdFromInput } from '../resolver-plugins/arxiv.mjs';
 import { parseBibTeXToMetadata } from './utils/bibtexParser';
@@ -168,6 +168,46 @@ describe('doiRequestUrl (DOI resolver) percent-encodes the suffix', () => {
   });
 });
 
+describe('doiFromInput (DOI resolver) normalizes every accepted input form', () => {
+  // The manifest pattern (resolver-plugins.json) accepts the DOI bare
+  // (`10.x/suffix`) or as a `doi.org` / `dx.doi.org` URL, with the suffix matched
+  // by `\S+`. A real URL-form input can therefore carry a tracking query
+  // (`?utm_source=x`) or a fragment (`#sec`). Those must be stripped BEFORE the
+  // DOI is extracted and its suffix percent-encoded — otherwise the
+  // query/fragment becomes part of the encoded suffix (`foo%3Futm_source%3Dx`)
+  // and resolves the wrong identifier. Every accepted form must yield the same
+  // bare DOI `10.1234/foo`. (The `doi:` prefix is deliberately absent: the
+  // manifest pattern does NOT accept it, so the resolver does not invent
+  // acceptance of an input its contract rejects.)
+  it.each([
+    ['10.1234/foo', '10.1234/foo'],
+    ['https://doi.org/10.1234/foo', '10.1234/foo'],
+    ['http://dx.doi.org/10.1234/foo', '10.1234/foo'],
+    ['https://doi.org/10.1234/foo?utm_source=x', '10.1234/foo'],
+    ['https://doi.org/10.1234/foo#sec', '10.1234/foo'],
+    ['https://doi.org/10.1234/foo?utm_source=x#sec', '10.1234/foo'],
+    ['10.1234/foo?utm_source=x', '10.1234/foo'],
+    ['10.1234/foo#sec', '10.1234/foo'],
+  ])('extracts %s -> %s', (input, expected) => {
+    expect(doiFromInput(input)).toBe(expected);
+  });
+
+  // The end-to-end consequence: a URL-form DOI carrying a tracking query must
+  // produce the SAME request URL as the bare DOI, with the namespace slash
+  // preserved and the query never leaking into the URL query component.
+  it('builds the bare-DOI request URL for a URL-form input carrying a query/fragment', () => {
+    const expected = doiRequestUrl('10.1007/BF01388432');
+    expect(expected).toBe('https://doi.org/10.1007/BF01388432');
+    expect(doiRequestUrl(doiFromInput('https://doi.org/10.1007/BF01388432?utm_source=x'))).toBe(expected);
+    expect(doiRequestUrl(doiFromInput('https://doi.org/10.1007/BF01388432#abstract'))).toBe(expected);
+    expect(doiRequestUrl(doiFromInput('http://dx.doi.org/10.1007/BF01388432'))).toBe(expected);
+  });
+
+  it('throws on empty input rather than producing an empty DOI', () => {
+    expect(() => doiFromInput('')).toThrow();
+  });
+});
+
 describe('parseZblNumber (zbMath resolver) strips the AN prefix the server accepts', () => {
   // pluginAcceptsInput tests the manifest pattern with the `i` flag, so the
   // server accepts the zbMATH AN prefix case-insensitively: `AN:`, `An:`, `aN:`,
@@ -189,6 +229,21 @@ describe('parseZblNumber (zbMath resolver) strips the AN prefix the server accep
     expect(fromLower).toBe('0787.14001');
     expect(parseZblNumber('https://zbmath.org/?q=AN:0787.14001')).toBe(fromLower);
     expect(parseZblNumber('https://zbmath.org/?q=An:0787.14001')).toBe(fromLower);
+  });
+
+  // The manifest pattern (`^https?://...`) is matched with the `i` flag in
+  // pluginAcceptsInput, so an uppercase or mixed-case scheme — `HTTPS://...`,
+  // `Https://...` — is a contract-valid URL input. A case-sensitive scheme check
+  // routes those through the BARE branch, which sends the WHOLE URL upstream as a
+  // zbMATH number and never resolves. The scheme detection must be
+  // case-insensitive so every accepted URL is parsed via the URL branch and
+  // yields the same number as the lowercase form.
+  it('parses an uppercase/mixed-scheme URL via the URL branch, not the bare branch', () => {
+    const fromLower = parseZblNumber('https://zbmath.org/?q=an:0787.14001');
+    expect(fromLower).toBe('0787.14001');
+    expect(parseZblNumber('HTTPS://zbmath.org/?q=an:0787.14001')).toBe(fromLower);
+    expect(parseZblNumber('Https://zbmath.org/?q=an:0787.14001')).toBe(fromLower);
+    expect(parseZblNumber('HTTP://zbmath.org/?q=an:0787.14001')).toBe(fromLower);
   });
 
   it('leaves an already-bare number unchanged', () => {

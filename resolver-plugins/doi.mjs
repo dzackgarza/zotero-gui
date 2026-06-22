@@ -20,16 +20,28 @@ export function doiRequestUrl(doi) {
   return `https://doi.org/${namespace}/${encodeURIComponent(suffix)}`;
 }
 
-async function readStdin() {
-  const raw = await readRawStdin();
-  invariant(raw.length > 0, 'DOI resolver input must not be empty');
-  return raw
+// The manifest accepts a DOI bare (`10.x/suffix`) or as a `doi.org`/`dx.doi.org`
+// URL, with the suffix matched by `\S+`. A URL-form input may therefore carry a
+// query string or fragment (e.g. `?utm_source=x`, `#section`). The query and
+// fragment must be removed BEFORE the scheme/host prefix is stripped and the DOI
+// is handed to doiRequestUrl: otherwise the `?...`/`#...` survives into the DOI
+// suffix and doiRequestUrl percent-encodes it as part of the identifier
+// (`foo%3Futm_source%3Dx`), resolving the wrong DOI. Strip query, then fragment,
+// then the doi.org/dx.doi.org scheme+host prefix, mirroring arxivIdFromInput.
+// (The namespace slash of the bare DOI is left untouched here; doiRequestUrl
+// owns the suffix percent-encoding that preserves it.)
+export function doiFromInput(raw) {
+  const doi = raw
+    .split('?')[0]
+    .split('#')[0]
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
     .trim();
+  invariant(doi.length > 0, 'DOI resolver input must not be empty');
+  return doi;
 }
 
 if (import.meta.main) {
-  const doi = await readStdin();
+  const doi = doiFromInput(await readRawStdin());
   const response = await fetch(doiRequestUrl(doi), {
     headers: { Accept: 'application/x-bibtex' },
   });

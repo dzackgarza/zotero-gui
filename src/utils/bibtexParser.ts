@@ -10,7 +10,16 @@ import bibtexParse from 'bibtex-parse-js';
  * before delegating to Zotero, and throws loudly on any violation:
  *   - exactly one parseable entry,
  *   - a non-empty title,
- *   - at least one author.
+ *   - at least one NAME-BEARING creator (author OR editor).
+ *
+ * The name-bearing-creator rule is the SAME contract the citation layer enforces
+ * (citation.ts: itemToCsl / isCitable / hasNameBearingCreator, which treat an
+ * item with at least one author OR editor as citable). An edited volume (editor
+ * present, no author) is bibliographically valid and citable, so it must also be
+ * importable. Requiring an author here would reject a record the app can cite,
+ * leaving the two owned contracts in disagreement. The gate is NOT weakened to
+ * accept truly nameless records: a record with neither author nor editor still
+ * fails loudly.
  *
  * There is no fail-open default item type: an unrecognized @entrytype is not
  * coerced into anything here. Mapping it is Zotero's responsibility.
@@ -39,7 +48,9 @@ export function parseBibTeXToMetadata(bibtexStr: string): void {
     throw new Error('BibTeX entry must contain a title.');
   }
 
-  if (!presentValue(tags.author || tags.AUTHOR)) {
-    throw new Error('BibTeX entry must contain at least one author.');
+  const hasAuthor = presentValue(tags.author || tags.AUTHOR).length > 0;
+  const hasEditor = presentValue(tags.editor || tags.EDITOR).length > 0;
+  if (!hasAuthor && !hasEditor) {
+    throw new Error('BibTeX entry must contain at least one name-bearing creator (author or editor).');
   }
 }

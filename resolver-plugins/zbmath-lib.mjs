@@ -11,8 +11,15 @@ export { invariant };
 // unstripped `AN:` to zbMATH (e.g. `an:AN:...`) and never resolve.
 const AN_PREFIX = /^an:/i;
 
+// The manifest URL pattern (`^https?://...`) is matched case-insensitively in
+// pluginAcceptsInput, so `HTTPS://...`/`Https://...` are contract-valid URL
+// inputs. The scheme check must be case-insensitive too, otherwise an
+// uppercase-scheme URL falls through to the bare branch and the whole URL is
+// sent upstream as a zbMATH number, which never resolves.
+const URL_SCHEME = /^https?:\/\//i;
+
 export function parseZblNumber(input) {
-  if (input.startsWith('http://') || input.startsWith('https://')) {
+  if (URL_SCHEME.test(input)) {
     const url = new URL(input);
     const query = url.searchParams.get('q');
     invariant(query, 'ZBMath URL must contain a q parameter');
