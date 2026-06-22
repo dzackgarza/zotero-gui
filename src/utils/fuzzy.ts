@@ -184,18 +184,21 @@ const SEARCH_DOCUMENT_KEYS = new Set<ZoteroSearchKey>([
  * modes that both project items through {@link buildZoteroSearchDocuments} and
  * both validate against {@link SEARCH_DOCUMENT_KEYS}:
  *
- *   - The command palette (Fzf subsequence ranking, e.g. 'agtf' matches
- *     "Algebraic Geometry and Theta Functions") — see {@link rankPaletteDocuments}.
- *   - Advanced search's *default* enabled fields (Fuse threshold + token
- *     all/any ranking) — App seeds AdvancedSearchSettings.searchFields from
- *     this set via {@link isDefaultSearchField}.
+ *   - The command palette (single-token fzf subsequence ranking, e.g. 'agtf'
+ *     matches "Algebraic Geometry and Theta Functions") — see
+ *     {@link rankPaletteDocuments}.
+ *   - Advanced search's *default* enabled fields (per-whitespace-token fzf
+ *     matching combined with token all/any) — App seeds
+ *     AdvancedSearchSettings.searchFields from this set via
+ *     {@link isDefaultSearchField}.
  *
- * The two modes use different engines because their UX is intentionally
- * different (subsequence palette vs. configurable-threshold advanced search),
- * but neither owns its own key list: both read this one. Any consumer that
- * needs "the fields searched by default" must derive from here — re-listing
- * the keys elsewhere reintroduces the split-truth this constant exists to
- * eliminate.
+ * Both modes run on the same fuzzy engine (fzf); they differ only in how the
+ * query is tokenized and combined (palette: the whole query as one
+ * subsequence; advanced search: each whitespace token matched independently
+ * and AND/OR-combined). Neither mode owns its own key list: both read this
+ * one. Any consumer that needs "the fields searched by default" must derive
+ * from here — re-listing the keys elsewhere reintroduces the split-truth this
+ * constant exists to eliminate.
  */
 export const PALETTE_SEARCH_KEYS = [
   'title',
@@ -218,7 +221,15 @@ export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDoc
   return items.map(item => ({
     item,
     title: item.title,
-    creators_compact: formatCreatorsCompact(item.creators),
+    // The `creators_compact` key is the canonical searchable creator field
+    // (it is the creator key in PALETTE_SEARCH_KEYS and the advanced-search
+    // column). Its searchable value is the FULL creator text (every creator's
+    // first and last name) so a user can find an item by any creator at any
+    // position — NOT formatCreatorsCompact's "Lastname et al." display form,
+    // which only names the leading author. Display/sort read
+    // formatCreatorsCompact directly (columnModel / sortableValue), so they
+    // are unaffected by this projection.
+    creators_compact: creatorsSearchText(item.creators),
     creators: formatCreatorsFull(item.creators),
     publicationTitle: item.publicationTitle ?? '',
     date: item.date ?? '',
@@ -349,4 +360,23 @@ export function formatCreatorsFull(creators: { firstName: string; lastName: stri
   return creators
     .map(c => `${c.lastName}, ${c.firstName} (${c.creatorType})`)
     .join('; ');
+}
+
+/**
+ * The searchable text for an item's creators: every creator's first and last
+ * name, at any list position. This is the projection value indexed under the
+ * `creators_compact` search key (see {@link buildZoteroSearchDocuments}).
+ *
+ * It is deliberately distinct from {@link formatCreatorsCompact}, which is the
+ * DISPLAY/SORT form ("Lastname et al.") and names only the leading author.
+ * Indexing the compact display form made non-leading co-authors and given
+ * names unsearchable; the search projection reads this fuller text instead so
+ * a user can find an item by ANY creator's name. The single source of truth
+ * for "what creator text is searchable" lives here.
+ */
+export function creatorsSearchText(creators: { firstName: string; lastName: string }[]): string {
+  return creators
+    .flatMap(creator => [creator.firstName, creator.lastName])
+    .filter(name => name.length > 0)
+    .join(' ');
 }

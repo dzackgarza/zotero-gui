@@ -4,6 +4,7 @@ import {
   PALETTE_SEARCH_KEYS,
   buildZoteroSearchDocuments,
   filterZoteroItems,
+  formatCreatorsCompact,
   getStandardCitekey,
   rankZoteroSearchDocumentsForPalette,
 } from './fuzzy';
@@ -177,6 +178,58 @@ describe('standard citekey transliteration of untransliterable characters', () =
     });
 
     expect(getStandardCitekey(withLiteralReplacement)).toBe('Mol20');
+  });
+});
+
+describe('searching by any creator name', () => {
+  // User story: a user types a co-author's surname (one who is 3rd or later in
+  // the author list) and the item shows up. The compact display form only ever
+  // names the first author ("Lastname et al."), so indexing the compact form
+  // makes every non-leading author unsearchable. The searchable creator
+  // projection must cover every creator's name, at any position.
+  const MULTI_AUTHOR = item('attention', 'Attention Is All You Need', 'Vas17', {
+    creators: [
+      { firstName: 'Ashish', lastName: 'Vaswani', creatorType: 'author' },
+      { firstName: 'Noam', lastName: 'Shazeer', creatorType: 'author' },
+      { firstName: 'Niki', lastName: 'Parmar', creatorType: 'author' },
+      { firstName: 'Jakob', lastName: 'Uszkoreit', creatorType: 'author' },
+    ],
+    date: '2017',
+  });
+
+  it('finds an item by the surname of its third author', () => {
+    const matched = filterZoteroItems(
+      [MULTI_AUTHOR],
+      advancedSettings('Parmar', 'all', { creators_compact: true }),
+    ).map(result => result.id);
+
+    expect(matched).toEqual(['attention']);
+  });
+
+  it('finds an item by a creator first name', () => {
+    const matched = filterZoteroItems(
+      [MULTI_AUTHOR],
+      advancedSettings('Noam', 'all', { creators_compact: true }),
+    ).map(result => result.id);
+
+    expect(matched).toEqual(['attention']);
+  });
+
+  it('finds an item by a non-leading author via the default palette scope', () => {
+    // The palette uses the canonical default key set (PALETTE_SEARCH_KEYS,
+    // which carries the creator key). A 4th author's surname must be reachable
+    // there too, not only through an explicitly-enabled advanced-search field.
+    const documents = buildZoteroSearchDocuments([MULTI_AUTHOR]);
+
+    expect(rankZoteroSearchDocumentsForPalette(documents, 'Uszkoreit')[0]?.item.id)
+      .toBe('attention');
+  });
+
+  it('keeps the compact display/sort form as the leading author with "et al."', () => {
+    // Display/sort is owned by formatCreatorsCompact, which must be unchanged:
+    // expanding the *searchable* creator text must not leak the full author
+    // list into the compact column the table and sort key render.
+    expect(formatCreatorsCompact(MULTI_AUTHOR.creators)).toBe('Vaswani et al.');
   });
 });
 
