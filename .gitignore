@@ -2,7 +2,11 @@ node_modules/
 build/
 dist/
 coverage/
+lcov.info
+playwright-report/
+test-results/
 .DS_Store
 *.log
 .env*
 !.env.example
+!.envrc

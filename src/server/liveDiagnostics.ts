@@ -13,9 +13,9 @@ type DiagnosticCommand = 'doctor' | 'resolvers' | 'add-item';
 
 function diagnosticCommand(): DiagnosticCommand {
   const command = process.argv[2];
-  if (command === 'doctor' || command === 'resolvers' || command === 'add-item') {
-    return command;
-  }
+  if (command === 'doctor') return command;
+  if (command === 'resolvers') return command;
+  if (command === 'add-item') return command;
   throw new Error('Usage: tsx src/server/liveDiagnostics.ts doctor|resolvers|add-item');
 }
 

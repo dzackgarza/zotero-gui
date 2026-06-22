@@ -21,6 +21,9 @@ export const AppConfigSchema = z.strictObject({
     stdoutByteLimit: z.number().int().positive(),
     stderrByteLimit: z.number().int().positive(),
   }),
+  diagnostics: z.strictObject({
+    viteDevServer: z.string().url(),
+  }),
   keyboardShortcuts: KeyboardShortcutsConfigSchema,
 });
 

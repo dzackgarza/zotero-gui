@@ -17,10 +17,6 @@ const MODIFIER_LABELS: Record<KeyboardModifier, string> = {
   meta: 'Meta',
 };
 
-function hasModifier(shortcut: KeyboardShortcut, modifier: KeyboardModifier): boolean {
-  return shortcut.modifiers.includes(modifier);
-}
-
 function eventModifierState(event: KeyboardEventLike, modifier: KeyboardModifier): boolean {
   switch (modifier) {
     case 'ctrl':
@@ -37,13 +33,13 @@ function eventModifierState(event: KeyboardEventLike, modifier: KeyboardModifier
 export function keyboardEventMatchesShortcut(event: KeyboardEventLike, shortcut: KeyboardShortcut): boolean {
   return (
     event.key.toLowerCase() === shortcut.key.toLowerCase()
-    && KEYBOARD_MODIFIERS.every(modifier => eventModifierState(event, modifier) === hasModifier(shortcut, modifier))
+    && KEYBOARD_MODIFIERS.every(modifier => eventModifierState(event, modifier) === shortcut.modifiers.includes(modifier))
   );
 }
 
 export function formatKeyboardShortcut(shortcut: KeyboardShortcut): string {
   const modifiers = KEYBOARD_MODIFIERS
-    .filter(modifier => hasModifier(shortcut, modifier))
+    .filter(modifier => shortcut.modifiers.includes(modifier))
     .map(modifier => MODIFIER_LABELS[modifier]);
   return [...modifiers, shortcut.key.toUpperCase()].join('+');
 }

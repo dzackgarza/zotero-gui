@@ -22,6 +22,7 @@ const item: ZoteroItem = {
   collections: [],
   dateAdded: '2026-06-18T00:00:00Z',
   dateModified: '2026-06-18T00:00:00Z',
+  inTrash: false,
 };
 
 class TestResizeObserver {

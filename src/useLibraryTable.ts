@@ -112,7 +112,10 @@ export function moveColumn(table: Table<ZoteroItem>, columnId: string, direction
       throw new Error(`Column move references a column outside the current layout: ${columnId}`);
     }
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= order.length) {
+    if (targetIndex < 0) {
+      throw new Error(`Column move index outside layout: ${index}`);
+    }
+    if (targetIndex >= order.length) {
       throw new Error(`Column move index outside layout: ${index}`);
     }
     const moved = order[index];
@@ -137,7 +140,10 @@ export function reorderColumn(
     const order = previous.length > 0 ? [...previous] : table.getAllLeafColumns().map(column => column.id);
     const draggedIndex = order.indexOf(draggedId);
     const targetIndex = order.indexOf(targetId);
-    if (draggedIndex === -1 || targetIndex === -1) {
+    if (draggedIndex === -1) {
+      throw new Error('Column drag state references a column outside the current layout.');
+    }
+    if (targetIndex === -1) {
       throw new Error('Column drag state references a column outside the current layout.');
     }
     order.splice(draggedIndex, 1);

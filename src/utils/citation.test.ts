@@ -16,6 +16,7 @@ function makeItem(overrides: Partial<ZoteroItem> & { itemType: ItemType }): Zote
     collections: [],
     dateAdded: '2020-01-01',
     dateModified: '2020-01-01',
+    inTrash: false,
     ...overrides,
   };
 }
@@ -25,13 +26,15 @@ function makeItem(overrides: Partial<ZoteroItem> & { itemType: ItemType }): Zote
 function reparse(bibtex: string): Record<string, unknown> {
   const data = new Cite(bibtex).data;
   expect(data).toHaveLength(1);
-  return data[0] as Record<string, unknown>;
+  return data[0];
 }
 
 function entryType(bibtex: string): string {
-  const match = /^@(\w+)\{/.exec(bibtex.trim());
-  if (!match) throw new Error(`Not a BibTeX entry: ${bibtex}`);
-  return match[1];
+  const trimmed = bibtex.trim();
+  const braceIndex = trimmed.indexOf('{');
+  if (!trimmed.startsWith('@')) throw new Error(`Not a BibTeX entry: ${bibtex}`);
+  if (braceIndex < 2) throw new Error(`Not a BibTeX entry: ${bibtex}`);
+  return trimmed.slice(1, braceIndex);
 }
 
 describe('toBibTeX emits an entry type reflecting the real itemType', () => {
@@ -284,9 +287,9 @@ describe('isCitable distinguishes works that have a bibliographic form', () => {
       })),
       // Citable type, editor-only (name-bearing): renders.
       { item: makeItem({ itemType: 'book', title: 'Companion', creators: [editor] }), citable: true, why: 'editor-only book' },
-      // Citable type, no creators at all: throws → not citable.
+      // Citable type, no creators at all: throws, so it is not citable.
       { item: makeItem({ itemType: 'book', title: 'Anon Treatise', creators: [] }), citable: false, why: 'book with no creators' },
-      // Citable type, only a non-name-bearing creator: throws → not citable.
+      // Citable type, only a non-name-bearing creator: throws, so it is not citable.
       { item: makeItem({ itemType: 'journalArticle', title: 'Survey', creators: [translator] }), citable: false, why: 'translator-only article' },
     ];
 

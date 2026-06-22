@@ -36,8 +36,8 @@ function stripCreatorName(value: string): string {
 
 function bbtFamilyName(creator: Creator): string {
   const name = {
-    family: stripCreatorName(creator.lastName || ''),
-    given: stripCreatorName(creator.firstName || ''),
+    family: stripCreatorName(creator.lastName),
+    given: stripCreatorName(creator.firstName),
   };
   CSL.parseParticles(name);
   return bbtTransliterate(name.family);
@@ -47,7 +47,8 @@ function bbtCreatorBucket(creator: Creator): CreatorBucket {
   const creatorType = creator.creatorType.toLowerCase();
 
   if (creatorType === 'author') return 'author';
-  if (creatorType === 'editor' || creatorType === 'serieseditor') return 'editor';
+  if (creatorType === 'editor') return 'editor';
+  if (creatorType === 'serieseditor') return 'editor';
   if (creatorType === 'translator') return 'translator';
   return 'collaborator';
 }
@@ -95,8 +96,10 @@ function bbtCleanCitekey(value: string): string {
 }
 
 function bbtYearSubstring(item: ZoteroItem): string {
-  const year = item.date?.match(/\d{4}/)?.[0] || '';
-  return year.slice(2, 6);
+  if (item.date === undefined) return '';
+  const match = item.date.match(/\d{4}/);
+  if (match === null) return '';
+  return match[0].slice(2, 6);
 }
 
 /**
@@ -189,8 +192,7 @@ const SEARCH_DOCUMENT_KEYS = new Set<ZoteroSearchKey>([
  *     {@link rankPaletteDocuments}.
  *   - Advanced search's *default* enabled fields (per-whitespace-token fzf
  *     matching combined with token all/any) — App seeds
- *     AdvancedSearchSettings.searchFields from this set via
- *     {@link isDefaultSearchField}.
+   *     AdvancedSearchSettings.searchFields from {@link DEFAULT_SEARCH_FIELDS}.
  *
  * Both modes run on the same fuzzy engine (fzf); they differ only in how the
  * query is tokenized and combined (palette: the whole query as one
@@ -213,8 +215,11 @@ export const PALETTE_SEARCH_KEYS = [
  * App seeds the advanced-search default field toggles from this predicate so
  * the palette key contract and the advanced-search defaults cannot diverge.
  */
-export function isDefaultSearchField(key: string): boolean {
-  return (PALETTE_SEARCH_KEYS as readonly string[]).includes(key);
+export const DEFAULT_SEARCH_FIELDS: ReadonlySet<string> = new Set(PALETTE_SEARCH_KEYS);
+
+function optionalSearchFieldText(value: string | undefined): string {
+  if (value === undefined) return '';
+  return value;
 }
 
 export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDocument[] {
@@ -231,31 +236,31 @@ export function buildZoteroSearchDocuments(items: ZoteroItem[]): ZoteroSearchDoc
     // are unaffected by this projection.
     creators_compact: creatorsSearchText(item.creators),
     creators: formatCreatorsFull(item.creators),
-    publicationTitle: item.publicationTitle ?? '',
-    date: item.date ?? '',
-    citekey: item.citekey ?? '',
+    publicationTitle: optionalSearchFieldText(item.publicationTitle),
+    date: optionalSearchFieldText(item.date),
+    citekey: optionalSearchFieldText(item.citekey),
     itemType: item.itemType,
-    volume: item.volume ?? '',
-    issue: item.issue ?? '',
-    pages: item.pages ?? '',
-    publisher: item.publisher ?? '',
-    place: item.place ?? '',
-    doi: item.doi ?? '',
-    url: item.url ?? '',
-    isbn: item.isbn ?? '',
-    issn: item.issn ?? '',
-    accessDate: item.accessDate ?? '',
-    language: item.language ?? '',
-    abstractNote: item.abstractNote ?? '',
+    volume: optionalSearchFieldText(item.volume),
+    issue: optionalSearchFieldText(item.issue),
+    pages: optionalSearchFieldText(item.pages),
+    publisher: optionalSearchFieldText(item.publisher),
+    place: optionalSearchFieldText(item.place),
+    doi: optionalSearchFieldText(item.doi),
+    url: optionalSearchFieldText(item.url),
+    isbn: optionalSearchFieldText(item.isbn),
+    issn: optionalSearchFieldText(item.issn),
+    accessDate: optionalSearchFieldText(item.accessDate),
+    language: optionalSearchFieldText(item.language),
+    abstractNote: optionalSearchFieldText(item.abstractNote),
     tags: item.tags.join(' '),
     notes: item.notes.map(note => note.note).join(' '),
     dateAdded: item.dateAdded,
     dateModified: item.dateModified,
-    extra: item.extra ?? '',
-    rights: item.rights ?? '',
-    archive: item.archive ?? '',
-    archiveLocation: item.archiveLocation ?? '',
-    callNumber: item.callNumber ?? '',
+    extra: optionalSearchFieldText(item.extra),
+    rights: optionalSearchFieldText(item.rights),
+    archive: optionalSearchFieldText(item.archive),
+    archiveLocation: optionalSearchFieldText(item.archiveLocation),
+    callNumber: optionalSearchFieldText(item.callNumber),
   }));
 }
 
@@ -307,7 +312,10 @@ function rankDocuments(
   return documents.filter(document => matchesItem(document.item.id));
 }
 
-function rankPaletteDocuments(documents: ZoteroSearchDocument[], query: string): ZoteroSearchDocument[] {
+export function rankZoteroSearchDocumentsForPalette(
+  documents: ZoteroSearchDocument[],
+  query: string,
+): ZoteroSearchDocument[] {
   const trimmedQuery = query.trim();
   if (trimmedQuery.length === 0) return documents;
 
@@ -319,13 +327,6 @@ function rankPaletteDocuments(documents: ZoteroSearchDocument[], query: string):
   });
 
   return fzf.find(trimmedQuery).map(result => result.item);
-}
-
-export function rankZoteroSearchDocumentsForPalette(
-  documents: ZoteroSearchDocument[],
-  query: string,
-): ZoteroSearchDocument[] {
-  return rankPaletteDocuments(documents, query);
 }
 
 export function filterZoteroItems(
@@ -349,14 +350,14 @@ export function filterZoteroItems(
  * Render authors list cleanly: e.g. "Vaswani, A. et al." or "Vaswani, Shazeer, Parmar"
  */
 export function formatCreatorsCompact(creators: { firstName: string; lastName: string }[]): string {
-  if (!creators || creators.length === 0) return '—';
+  if (creators.length === 0) return '—';
   if (creators.length === 1) return creators[0].lastName;
   if (creators.length === 2) return `${creators[0].lastName} & ${creators[1].lastName}`;
   return `${creators[0].lastName} et al.`;
 }
 
 export function formatCreatorsFull(creators: { firstName: string; lastName: string; creatorType: string }[]): string {
-  if (!creators || creators.length === 0) return 'No Authors';
+  if (creators.length === 0) return 'No Authors';
   return creators
     .map(c => `${c.lastName}, ${c.firstName} (${c.creatorType})`)
     .join('; ');

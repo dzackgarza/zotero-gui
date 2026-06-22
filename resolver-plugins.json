@@ -3,10 +3,7 @@
     {
       "id": "doi",
       "name": "DOI Resolver",
-      "command": [
-        "node",
-        "resolver-plugins/doi.mjs"
-      ],
+      "command": ["node", "resolver-plugins/doi.mjs"],
       "acceptedInputs": [
         {
           "id": "doi",
@@ -19,10 +16,7 @@
     {
       "id": "isbn",
       "name": "ISBN Resolver",
-      "command": [
-        "node",
-        "resolver-plugins/isbn.mjs"
-      ],
+      "command": ["node", "resolver-plugins/isbn.mjs", "https://openlibrary.org"],
       "acceptedInputs": [
         {
           "id": "isbn",
@@ -35,10 +29,7 @@
     {
       "id": "arxiv",
       "name": "arXiv Resolver",
-      "command": [
-        "node",
-        "resolver-plugins/arxiv.mjs"
-      ],
+      "command": ["node", "resolver-plugins/arxiv.mjs"],
       "acceptedInputs": [
         {
           "id": "arxiv-id",
@@ -57,10 +48,7 @@
     {
       "id": "zbmath",
       "name": "ZBMath Resolver",
-      "command": [
-        "node",
-        "resolver-plugins/zbmath.mjs"
-      ],
+      "command": ["node", "resolver-plugins/zbmath.mjs"],
       "acceptedInputs": [
         {
           "id": "zbmath-an",

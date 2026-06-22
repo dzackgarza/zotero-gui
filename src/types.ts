@@ -135,7 +135,7 @@ export interface ZoteroItem {
   collections: string[]; // List of collection IDs it belongs to
   dateAdded: string;
   dateModified: string;
-  inTrash?: boolean;
+  inTrash: boolean;
 }
 
 // A collection is one of two genuinely different kinds, distinguished by `kind`:

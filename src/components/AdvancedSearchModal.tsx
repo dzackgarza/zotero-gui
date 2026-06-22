@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Filter, X, Sliders, CheckSquare, Square, Info } from 'lucide-react';
+import { X, Sliders, Info } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AdvancedSearchSettings, ZoteroItem, ColumnDefinition } from '../types';
 import { filterZoteroItems } from '../utils/fuzzy';
@@ -22,18 +22,6 @@ export default function AdvancedSearchModal({
   allItems,
   columns
 }: AdvancedSearchModalProps) {
-
-  // Toggle dynamic fields
-  const handleToggleField = (field: keyof AdvancedSearchSettings['searchFields']) => {
-    onChangeSettings({
-      ...settings,
-      searchFields: {
-        ...settings.searchFields,
-        [field]: !settings.searchFields[field]
-      }
-    });
-  };
-
   const setPreset = (preset: 'all' | 'author_title' | 'citation_indices') => {
     const updated = { ...settings.searchFields };
     if (preset === 'all') {

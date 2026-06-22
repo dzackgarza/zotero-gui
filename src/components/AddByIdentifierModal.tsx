@@ -18,6 +18,14 @@ interface AddByIdentifierModalProps {
   theme: AppTheme;
 }
 
+function firstAcceptedInputExample(plugin: ResolverPluginMetadata): string {
+  invariant(
+    plugin.acceptedInputs.length > 0,
+    `Resolver plugin ${plugin.id} has no accepted input descriptors`,
+  );
+  return plugin.acceptedInputs[0].example;
+}
+
 export default function AddByIdentifierModal({
   isOpen,
   onClose,
@@ -30,8 +38,12 @@ export default function AddByIdentifierModal({
   const [plugins, setPlugins] = useState<ResolverPluginMetadata[]>([]);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const selectedPlugin = plugins.find(plugin => plugin.id === selectedPluginId) ?? null;
-  const selectedPluginExample = selectedPlugin?.acceptedInputs[0]?.example ?? '';
+  const selectedPlugin = plugins.find(plugin => plugin.id === selectedPluginId);
+  const resolverSelectionMissing = selectedPlugin === undefined;
+  const sourceIdentifierMissing = input.trim().length === 0;
+  const selectedPluginExample = resolverSelectionMissing ? '' : firstAcceptedInputExample(selectedPlugin);
+  const inputDisabled = resolving ? true : resolverSelectionMissing;
+  const submitDisabled = resolving ? true : sourceIdentifierMissing ? true : resolverSelectionMissing;
 
 
   useEffect(() => {
@@ -153,7 +165,7 @@ export default function AddByIdentifierModal({
                   type="text"
                   required
                   value={input}
-                  disabled={resolving || !selectedPlugin}
+                  disabled={inputDisabled}
                   onChange={e => setInput(e.target.value)}
                   placeholder={selectedPluginExample}
                   className={`w-full rounded border px-3 py-2 text-xs focus:outline-hidden ${
@@ -187,7 +199,7 @@ export default function AddByIdentifierModal({
                 </Dialog.Close>
                 <button
                   type="submit"
-                  disabled={resolving || !input.trim() || !selectedPlugin}
+                  disabled={submitDisabled}
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:hover:bg-blue-600 disabled:cursor-not-allowed"
                 >
                   {resolving ? 'Resolving...' : 'Add Item'}

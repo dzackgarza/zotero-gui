@@ -86,7 +86,8 @@ function cslNamesByRole(creators: Creator[]): { author: CslName[]; editor: CslNa
     const name: CslName = { family: creator.lastName, given: creator.firstName };
     const role = creator.creatorType.toLowerCase();
     if (role === 'author') author.push(name);
-    else if (role === 'editor' || role === 'serieseditor') editor.push(name);
+    else if (role === 'editor') editor.push(name);
+    else if (role === 'serieseditor') editor.push(name);
   }
   return { author, editor };
 }
@@ -111,16 +112,18 @@ function hasCitableType(item: ZoteroItem): boolean {
 // itemToCsl's second throw condition.
 function hasNameBearingCreator(item: ZoteroItem): boolean {
   const { author, editor } = cslNamesByRole(item.creators);
-  return author.length > 0 || editor.length > 0;
+  if (author.length > 0) return true;
+  return editor.length > 0;
 }
 
 // Parse a four-digit year out of the free-form Zotero `date`. If none is
 // present the field is OMITTED — the renderer (APA) supplies its own standard
 // no-date marker; this code never fabricates 'unknown' or 'N.D.'.
 function issuedDateParts(date: string | undefined): { 'date-parts': number[][] } | undefined {
-  if (!date) return undefined;
+  if (date === undefined) return undefined;
+  if (date.length === 0) return undefined;
   const match = /\d{4}/.exec(date);
-  if (!match) return undefined;
+  if (match === null) return undefined;
   return { 'date-parts': [[Number.parseInt(match[0], 10)]] };
 }
 
@@ -145,6 +148,55 @@ function assignIfPresent(record: CslRecord, key: CslStringField, value: string |
   }
 }
 
+const CSL_STRING_FIELDS: readonly [CslStringField, (item: ZoteroItem) => string | undefined][] = [
+  ['title', item => item.title],
+  ['publisher', item => item.publisher],
+  ['container-title', item => item.publicationTitle],
+  ['DOI', item => item.doi],
+  ['ISBN', item => item.isbn],
+  ['URL', item => item.url],
+  ['volume', item => item.volume],
+  ['issue', item => item.issue],
+  ['page', item => item.pages],
+  ['publisher-place', item => item.place],
+];
+
+function requireCslType(item: ZoteroItem): string {
+  const cslType = ITEM_TYPE_TO_CSL[item.itemType];
+  if (cslType === null) {
+    throw new Error(`Item type "${item.itemType}" has no bibliographic citation form.`);
+  }
+  return cslType;
+}
+
+function requireCslNames(item: ZoteroItem): { author: CslName[]; editor: CslName[] } {
+  const names = cslNamesByRole(item.creators);
+  if (names.author.length > 0) {
+    return names;
+  }
+  if (names.editor.length > 0) {
+    return names;
+  }
+
+  const label = item.title === undefined ? item.id : item.title;
+  throw new Error(
+    item.creators.length === 0
+      ? `Item "${label}" has no creators; a citation requires at least one name-bearing creator (author or editor).`
+      : `Item "${label}" has creators but none are name-bearing; a citation requires at least one author or editor.`,
+  );
+}
+
+function assignCslNames(record: CslRecord, names: { author: CslName[]; editor: CslName[] }): void {
+  if (names.author.length > 0) record.author = names.author;
+  if (names.editor.length > 0) record.editor = names.editor;
+}
+
+function assignCslStrings(record: CslRecord, item: ZoteroItem): void {
+  for (const [key, readValue] of CSL_STRING_FIELDS) {
+    assignIfPresent(record, key, readValue(item));
+  }
+}
+
 // Whether a citation can actually be produced for this item. This is the exact
 // inverse of every condition under which itemToCsl throws: it consults the SAME
 // hasCitableType and hasNameBearingCreator predicates itemToCsl uses to decide
@@ -161,59 +213,20 @@ export function isCitable(item: ZoteroItem): boolean {
 // Map a ZoteroItem to a single CSL-JSON record. This is the ONE place the
 // domain item is translated; both toBibTeX and toFormattedCitation consume it.
 export function itemToCsl(item: ZoteroItem): CslRecord {
-  // Throw condition 1 (type). hasCitableType reads ITEM_TYPE_TO_CSL; isCitable
-  // consults the same predicate, so the two cannot disagree on this branch.
-  if (!hasCitableType(item)) {
-    throw new Error(`Item type "${item.itemType}" has no bibliographic citation form.`);
-  }
-  // hasCitableType is true, so the map value is a non-null CSL type string.
-  const cslType = ITEM_TYPE_TO_CSL[item.itemType] as string;
-
-  const record: CslRecord = { type: cslType };
+  const record: CslRecord = { type: requireCslType(item) };
 
   // Use the item's real citekey when present; otherwise let Citation.js
   // generate the entry key. No bespoke citekey algorithm here.
-  if (item.citekey && item.citekey.trim().length > 0) {
+  if (item.citekey !== undefined && item.citekey.trim().length > 0) {
     record.id = item.citekey.trim();
   }
 
-  // Throw condition 2 (name-bearing creator). A citation with no name-bearing
-  // creator is bibliographically degenerate: it renders with no author/editor
-  // at all. The owner's rule — already enforced at the import gate
-  // (parseBibTeXToMetadata requires at least one author) — is that an authorless
-  // citation is an error. Enforce the same rule here, via the same
-  // hasNameBearingCreator predicate isCitable consults, so both toBibTeX and
-  // toFormattedCitation fail loudly rather than emitting a nameless entry. An
-  // edited volume (editor present, no author) IS valid; only the truly nameless
-  // case throws. No placeholder author is fabricated. The message distinguishes
-  // the two ways this can happen — no creators at all, vs. creators present but
-  // none name-bearing — so the error is accurate for an item that visibly HAS
-  // creators (e.g. a translator-only volume).
-  if (!hasNameBearingCreator(item)) {
-    const label = item.title ?? item.id;
-    throw new Error(
-      item.creators.length === 0
-        ? `Item "${label}" has no creators; a citation requires at least one name-bearing creator (author or editor).`
-        : `Item "${label}" has creators but none are name-bearing; a citation requires at least one author or editor.`,
-    );
-  }
-  const { author, editor } = cslNamesByRole(item.creators);
-  if (author.length > 0) record.author = author;
-  if (editor.length > 0) record.editor = editor;
+  assignCslNames(record, requireCslNames(item));
 
   const issued = issuedDateParts(item.date);
   if (issued) record.issued = issued;
 
-  assignIfPresent(record, 'title', item.title);
-  assignIfPresent(record, 'publisher', item.publisher);
-  assignIfPresent(record, 'container-title', item.publicationTitle);
-  assignIfPresent(record, 'DOI', item.doi);
-  assignIfPresent(record, 'ISBN', item.isbn);
-  assignIfPresent(record, 'URL', item.url);
-  assignIfPresent(record, 'volume', item.volume);
-  assignIfPresent(record, 'issue', item.issue);
-  assignIfPresent(record, 'page', item.pages);
-  assignIfPresent(record, 'publisher-place', item.place);
+  assignCslStrings(record, item);
 
   return record;
 }

@@ -21,6 +21,24 @@ interface CommandPaletteProps {
   commands: Command[];
 }
 
+function paletteQueryForOpen(initialInput: string | undefined, opensCommandMode: boolean): string {
+  if (opensCommandMode) return '';
+  if (initialInput === undefined) return '';
+  return initialInput;
+}
+
+function titleDisplayText(title: string | undefined): string {
+  if (title === undefined) return '(no title)';
+  if (title.trim().length === 0) return '(no title)';
+  return title;
+}
+
+function dateDisplayText(date: string | undefined): string {
+  if (date === undefined) return 'No Date';
+  if (date.trim().length === 0) return 'No Date';
+  return date;
+}
+
 export default function CommandPalette({
   isOpen,
   onClose,
@@ -37,7 +55,7 @@ export default function CommandPalette({
   useLayoutEffect(() => {
     if (isOpen) {
       setMode(opensCommandMode ? 'commands' : 'items');
-      setQuery(opensCommandMode ? '' : (initialInput ?? ''));
+      setQuery(paletteQueryForOpen(initialInput, opensCommandMode));
       inputRef.current?.focus();
     }
   }, [isOpen, opensCommandMode, initialInput]);
@@ -139,10 +157,10 @@ export default function CommandPalette({
         <BookOpen className="h-4 w-4 text-sky-400 shrink-0" />
         <div className="flex flex-col min-w-0 text-xs">
           <span className={`font-semibold truncate max-w-sm ${item.title === undefined ? 'italic text-slate-500' : 'text-slate-100'}`}>
-            {item.title ?? '(no title)'}
+            {titleDisplayText(item.title)}
           </span>
           <span className="text-[10px] text-slate-550 mt-0.5 truncate">
-            {formatCreatorsCompact(item.creators)} | {item.date || 'No Date'} | {item.citekey}
+            {formatCreatorsCompact(item.creators)} | {dateDisplayText(item.date)} | {item.citekey}
           </span>
         </div>
       </div>

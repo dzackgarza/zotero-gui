@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Terminal } from 'lucide-react';
-import { AdvancedSearchSettings } from './types';
+import type { AdvancedSearchSettings, ZoteroItem } from './types';
 import { ApiErrorResponseSchema } from './schemas';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems } from './librarySelectors';
 import { reconcileSelectedLibraryView, selectActiveViewName, selectModalImportCollections } from './libraryViews';
 import { isCitable, toFormattedCitation } from './utils/citation';
-import { isDefaultSearchField } from './utils/fuzzy';
+import { DEFAULT_SEARCH_FIELDS } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
 import { resetColumnLayout, useLibraryTable } from './useLibraryTable';
@@ -48,7 +48,7 @@ export default function App() {
   const [searchSettings, setSearchSettings] = useState<AdvancedSearchSettings>(() => {
     const fields: Record<string, boolean> = {};
     DEFAULT_COLUMNS.forEach(col => {
-      fields[col.key] = isDefaultSearchField(col.key);
+      fields[col.key] = DEFAULT_SEARCH_FIELDS.has(col.key);
     });
     return {
       query: '',
@@ -135,8 +135,16 @@ export default function App() {
 
   // Generate an APA citation via the shared Citation.js mapping (citeproc).
   const copyCitationFormatted = () => {
-    const selectedItem = items.find(it => it.id === selectedItemId);
-    if (!selectedItem) {
+    let selectedItem: ZoteroItem | null = null;
+    if (selectedItemId !== null) {
+      for (const item of items) {
+        if (item.id === selectedItemId) {
+          selectedItem = item;
+          break;
+        }
+      }
+    }
+    if (selectedItem === null) {
       showToast('Please select a bibliography item first.');
       return;
     }
@@ -260,7 +268,15 @@ export default function App() {
     resetColumns: () => resetColumnLayout(libraryTable),
   });
 
-  const activeSelectedItem = items.find(it => it.id === selectedItemId) || null;
+  let activeSelectedItem: ZoteroItem | null = null;
+  if (selectedItemId !== null) {
+    for (const item of items) {
+      if (item.id === selectedItemId) {
+        activeSelectedItem = item;
+        break;
+      }
+    }
+  }
 
   return (
     <div className={`h-screen flex flex-col overflow-hidden text-xs ${THEME_CLASSES[theme].app}`}>

@@ -10,10 +10,14 @@ const testStorage: Storage = {
     storageValues.clear();
   },
   getItem(key: string) {
-    return storageValues.get(key) ?? null;
+    const storedValue = storageValues.get(key);
+    if (storedValue === undefined) return null;
+    return storedValue;
   },
   key(index: number) {
-    return Array.from(storageValues.keys())[index] ?? null;
+    const storedKey = Array.from(storageValues.keys())[index];
+    if (storedKey === undefined) return null;
+    return storedKey;
   },
   removeItem(key: string) {
     storageValues.delete(key);

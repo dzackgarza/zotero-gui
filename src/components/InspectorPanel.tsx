@@ -8,14 +8,34 @@ import { ZoteroItem, getItemTypeLabel, Creator } from '../types';
 import { isCitable, toBibTeX } from '../utils/citation';
 import type { AppTheme } from '../useThemePreference';
 
+function hasDisplayText(value: string): boolean {
+  return value.trim().length > 0;
+}
+
+function optionalDisplayText(value: string | undefined, missingText: string): string {
+  if (value === undefined) return missingText;
+  if (!hasDisplayText(value)) return missingText;
+  return value;
+}
+
+function creatorDisplayName(creator: Creator): string {
+  const hasLastName = hasDisplayText(creator.lastName);
+  const hasFirstName = hasDisplayText(creator.firstName);
+  if (hasLastName && hasFirstName) return `${creator.lastName}, ${creator.firstName}`;
+  if (hasLastName) return creator.lastName;
+  if (hasFirstName) return creator.firstName;
+  return '';
+}
+
+function identifierDisplayText(item: ZoteroItem): string {
+  const isbn = optionalDisplayText(item.isbn, '');
+  if (hasDisplayText(isbn)) return isbn;
+  return optionalDisplayText(item.issn, '—');
+}
+
 const serializeCreators = (creators: Creator[]): string => {
   return creators
-    .map(c => {
-      if (c.lastName && c.firstName) {
-        return `${c.lastName}, ${c.firstName}`;
-      }
-      return c.lastName || c.firstName || '';
-    })
+    .map(creatorDisplayName)
     .filter(Boolean)
     .join('; ');
 };
@@ -157,7 +177,7 @@ export default function InspectorPanel({
             )}
           </div>
           <h3 className={`font-semibold text-xs line-clamp-2 leading-snug ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
-            {item.title || 'Untitled'}
+            {optionalDisplayText(item.title, 'Untitled')}
           </h3>
         </div>
 
@@ -181,7 +201,7 @@ export default function InspectorPanel({
             <div>
               <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Title</label>
               <div className={`text-xs font-semibold leading-relaxed break-words ${theme === 'code-light' ? 'text-slate-900' : 'text-slate-100'}`}>
-                {item.title || 'Untitled'}
+                {optionalDisplayText(item.title, 'Untitled')}
               </div>
             </div>
 
@@ -196,7 +216,7 @@ export default function InspectorPanel({
                 )}
               </div>
               <div className={`font-mono text-xs ${citekeyConflict ? 'text-amber-400' : (theme === 'code-light' ? 'text-slate-800' : 'text-sky-400')}`}>
-                {item.citekey || '—'}
+                {optionalDisplayText(item.citekey, '—')}
               </div>
             </div>
 
@@ -204,7 +224,7 @@ export default function InspectorPanel({
             <div>
               <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Creators / Authors</label>
               <div className={`text-xs break-words ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                {creatorsText || '—'}
+                {optionalDisplayText(creatorsText, '—')}
               </div>
             </div>
 
@@ -213,7 +233,7 @@ export default function InspectorPanel({
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publication Journal / Book</label>
                 <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {item.publicationTitle || '—'}
+                  {optionalDisplayText(item.publicationTitle, '—')}
                 </div>
               </div>
 
@@ -221,13 +241,13 @@ export default function InspectorPanel({
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Date / Year</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.date || '—'}
+                    {optionalDisplayText(item.date, '—')}
                   </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Pages</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.pages || '—'}
+                    {optionalDisplayText(item.pages, '—')}
                   </div>
                 </div>
               </div>
@@ -236,13 +256,13 @@ export default function InspectorPanel({
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Volume</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.volume || '—'}
+                    {optionalDisplayText(item.volume, '—')}
                   </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Issue</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.issue || '—'}
+                    {optionalDisplayText(item.issue, '—')}
                   </div>
                 </div>
               </div>
@@ -250,7 +270,7 @@ export default function InspectorPanel({
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">DOI</label>
                 <div className={`font-mono text-[11px] break-all ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {item.doi || '—'}
+                  {optionalDisplayText(item.doi, '—')}
                 </div>
               </div>
 
@@ -267,13 +287,13 @@ export default function InspectorPanel({
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Publisher</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.publisher || '—'}
+                    {optionalDisplayText(item.publisher, '—')}
                   </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Place</label>
                   <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                    {item.place || '—'}
+                    {optionalDisplayText(item.place, '—')}
                   </div>
                 </div>
               </div>
@@ -281,21 +301,21 @@ export default function InspectorPanel({
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">ISBN / ISSN</label>
                 <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {item.isbn || item.issn || '—'}
+                  {identifierDisplayText(item)}
                 </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Language</label>
                 <div className={`text-xs ${theme === 'code-light' ? 'text-slate-800' : 'text-slate-200'}`}>
-                  {item.language || '—'}
+                  {optionalDisplayText(item.language, '—')}
                 </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-mono text-slate-550 mb-0.5">Abstract / Description Notes</label>
                 <div className={`text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto ${theme === 'code-light' ? 'text-slate-700' : 'text-slate-300'}`}>
-                  {item.abstractNote || '—'}
+                  {optionalDisplayText(item.abstractNote, '—')}
                 </div>
               </div>
 

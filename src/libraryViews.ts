@@ -39,13 +39,6 @@ export function isLibraryViewSentinel(id: string): id is LibraryViewSentinel {
   return SENTINEL_SET.has(id);
 }
 
-// The active-view display name for a sentinel id, resolved from the single
-// sentinel source of truth above. The id must already be a known sentinel; the
-// caller is responsible for that classification.
-function libraryViewSentinelName(sentinel: LibraryViewSentinel): string {
-  return LIBRARY_VIEW_SENTINEL_NAMES[sentinel];
-}
-
 // The display name of the active view: a sentinel's name from the single source
 // above, or a present real collection's own name. An id that is neither a known
 // sentinel nor a present collection is an invariant violation (the same id set
@@ -56,7 +49,7 @@ export function selectActiveViewName(
   selectedCollectionId: string,
 ): string {
   if (isLibraryViewSentinel(selectedCollectionId)) {
-    return libraryViewSentinelName(selectedCollectionId);
+    return LIBRARY_VIEW_SENTINEL_NAMES[selectedCollectionId];
   }
   const found = collections.find(collection => collection.id === selectedCollectionId);
   if (found === undefined) {
@@ -65,22 +58,6 @@ export function selectActiveViewName(
     );
   }
   return found.name;
-}
-
-// The REAL Zotero collection matching a selected sidebar id, or undefined when
-// the id is a view sentinel or no real collection has that id. The sidebar
-// selection id is the internal numeric collectionID (as a string); the matched
-// real collection carries the real Zotero collection key in its `key` field,
-// which the discriminated Collection type guarantees is present.
-function selectedRealCollection(
-  collections: readonly Collection[],
-  selectedCollectionId: string,
-): RealCollection | undefined {
-  if (isLibraryViewSentinel(selectedCollectionId)) return undefined;
-  return collections.find(
-    (collection): collection is RealCollection =>
-      collection.kind === 'real' && collection.id === selectedCollectionId,
-  );
 }
 
 // The value passed to the Add-by-identifier modal as `collections`, which the
@@ -102,21 +79,13 @@ export function selectModalImportCollections(
   collections: readonly Collection[],
   selectedCollectionId: string,
 ): string[] {
-  const collection = selectedRealCollection(collections, selectedCollectionId);
+  if (isLibraryViewSentinel(selectedCollectionId)) return [];
+  const collection = collections.find(
+    (candidate): candidate is RealCollection =>
+      candidate.kind === 'real' && candidate.id === selectedCollectionId,
+  );
   if (collection === undefined) return [];
   return [collection.key];
-}
-
-// True when the selected id is a valid selection against the given collections:
-// either a view sentinel (always renderable) or a real present collection key.
-// A stale selection (a collection key that the live library no longer contains)
-// is not valid and must be reconciled before it drives view derivation.
-export function isSelectableLibraryView(
-  collections: { id: string }[],
-  selectedCollectionId: string,
-): boolean {
-  return isLibraryViewSentinel(selectedCollectionId)
-    || collections.some(collection => collection.id === selectedCollectionId);
 }
 
 // Reconciles a selected collection id against the live collections. A valid
@@ -128,7 +97,7 @@ export function reconcileSelectedLibraryView(
   collections: { id: string }[],
   selectedCollectionId: string,
 ): string {
-  return isSelectableLibraryView(collections, selectedCollectionId)
-    ? selectedCollectionId
-    : DEFAULT_LIBRARY_VIEW;
+  if (isLibraryViewSentinel(selectedCollectionId)) return selectedCollectionId;
+  if (collections.some(collection => collection.id === selectedCollectionId)) return selectedCollectionId;
+  return DEFAULT_LIBRARY_VIEW;
 }

@@ -53,6 +53,35 @@ export type StoredColumnLayout = z.infer<typeof StoredColumnLayoutSchema>;
 
 const DEFAULT_COLUMN_IDS: SortKey[] = DEFAULT_COLUMNS.map(column => column.key);
 
+function assertExactColumnOrder(storedOrder: string[], contractIds: ReadonlySet<string>): void {
+  const storedOrderIds = new Set(storedOrder);
+
+  if (storedOrder.length !== contractIds.size) {
+    throw new Error('Stored column layout order does not match the current column contract.');
+  }
+  if (storedOrderIds.size !== contractIds.size) {
+    throw new Error('Stored column layout order does not match the current column contract.');
+  }
+  for (const id of contractIds) {
+    if (!storedOrderIds.has(id)) {
+      throw new Error(`Stored column layout is missing column: ${id}`);
+    }
+  }
+  for (const id of storedOrderIds) {
+    if (!contractIds.has(id)) {
+      throw new Error(`Stored column layout contains unknown column: ${id}`);
+    }
+  }
+}
+
+function assertKnownColumnKeys(keys: Iterable<string>, contractIds: ReadonlySet<string>, label: string): void {
+  for (const id of keys) {
+    if (!contractIds.has(id)) {
+      throw new Error(`Stored column ${label} references unknown column: ${id}`);
+    }
+  }
+}
+
 export function defaultColumnLayout(): ColumnLayoutState {
   const columnVisibility: VisibilityState = {};
   const columnSizing: ColumnSizingState = {};
@@ -83,31 +112,9 @@ export function readColumnLayout(): ColumnLayoutState {
   const stored = StoredColumnLayoutSchema.parse(parsed);
 
   const contractIds = new Set<string>(DEFAULT_COLUMN_IDS);
-  const storedOrderIds = new Set(stored.columnOrder);
-
-  if (stored.columnOrder.length !== contractIds.size || storedOrderIds.size !== contractIds.size) {
-    throw new Error('Stored column layout order does not match the current column contract.');
-  }
-  for (const id of contractIds) {
-    if (!storedOrderIds.has(id)) {
-      throw new Error(`Stored column layout is missing column: ${id}`);
-    }
-  }
-  for (const id of storedOrderIds) {
-    if (!contractIds.has(id)) {
-      throw new Error(`Stored column layout contains unknown column: ${id}`);
-    }
-  }
-  for (const id of Object.keys(stored.columnVisibility)) {
-    if (!contractIds.has(id)) {
-      throw new Error(`Stored column visibility references unknown column: ${id}`);
-    }
-  }
-  for (const id of Object.keys(stored.columnSizing)) {
-    if (!contractIds.has(id)) {
-      throw new Error(`Stored column sizing references unknown column: ${id}`);
-    }
-  }
+  assertExactColumnOrder(stored.columnOrder, contractIds);
+  assertKnownColumnKeys(Object.keys(stored.columnVisibility), contractIds, 'visibility');
+  assertKnownColumnKeys(Object.keys(stored.columnSizing), contractIds, 'sizing');
 
   // The locked column can never be persisted as hidden.
   const columnVisibility: VisibilityState = { ...stored.columnVisibility, [LOCKED_COLUMN_ID]: true };
@@ -197,8 +204,9 @@ export interface ZoteroColumnMeta {
 
 // Type the columnDef.meta slot so the human label is read without casts.
 declare module '@tanstack/react-table' {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData extends RowData, TValue> extends ZoteroColumnMeta {}
+  interface ColumnMeta<TData extends RowData, TValue> extends ZoteroColumnMeta {
+    readonly zoteroColumnMetaTypes?: readonly [TData, TValue];
+  }
 }
 
 function buildColumnDef(column: ColumnDefinition): ColumnDef<ZoteroItem> {

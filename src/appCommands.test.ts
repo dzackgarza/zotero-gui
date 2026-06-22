@@ -1,26 +1,41 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createAppCommands } from './appCommands';
 import type { AppTheme } from './useThemePreference';
 
+interface Recorder<Args extends unknown[]> {
+  calls: Args[];
+  fn: (...args: Args) => void;
+}
+
+function recorder<Args extends unknown[]>(): Recorder<Args> {
+  const calls: Args[] = [];
+  return {
+    calls,
+    fn: (...args: Args) => {
+      calls.push(args);
+    },
+  };
+}
+
 // The injected dependencies ARE the effects each command performs. Driving the
-// factory with independently-observable spies and then invoking a command's
+// factory with independently-observable recorders and then invoking a command's
 // action exercises the real wiring boundary: the call (and its argument) is the
 // user-facing behavior, not a proxy for it.
 function buildHarness() {
-  const reloadFromDb = vi.fn();
-  const setTheme = vi.fn<(theme: AppTheme) => void>();
-  const exportDatabaseJson = vi.fn();
-  const copyCitationFormatted = vi.fn();
-  const showAllColumns = vi.fn();
-  const resetColumns = vi.fn();
+  const reloadFromDb = recorder<[]>();
+  const setTheme = recorder<[AppTheme]>();
+  const exportDatabaseJson = recorder<[]>();
+  const copyCitationFormatted = recorder<[]>();
+  const showAllColumns = recorder<[]>();
+  const resetColumns = recorder<[]>();
 
   const deps = {
-    reloadFromDb,
-    setTheme,
-    exportDatabaseJson,
-    copyCitationFormatted,
-    showAllColumns,
-    resetColumns,
+    reloadFromDb: reloadFromDb.fn,
+    setTheme: setTheme.fn,
+    exportDatabaseJson: exportDatabaseJson.fn,
+    copyCitationFormatted: copyCitationFormatted.fn,
+    showAllColumns: showAllColumns.fn,
+    resetColumns: resetColumns.fn,
   };
 
   const commands = createAppCommands(deps);
@@ -63,11 +78,10 @@ describe('app command wiring', () => {
       harness.invoke(id);
 
       // Correct effect: the theme setter ran with this command's theme...
-      expect(harness.setTheme).toHaveBeenCalledTimes(1);
-      expect(harness.setTheme).toHaveBeenCalledWith(theme);
+      expect(harness.setTheme.calls).toEqual([[theme]]);
       // ...and no unrelated app effect was triggered.
       for (const sideEffect of harness.sideEffectDeps) {
-        expect(sideEffect).not.toHaveBeenCalled();
+        expect(sideEffect.calls).toEqual([]);
       }
     },
   );
@@ -79,7 +93,7 @@ describe('app command wiring', () => {
       harness.invoke(id);
     }
 
-    const appliedThemes = harness.setTheme.mock.calls.map(([theme]) => theme);
+    const appliedThemes = harness.setTheme.calls.map(([theme]) => theme);
     // Proves no two theme commands collapse onto the same theme (a duplicate
     // would mean one command was cross-wired to another's argument).
     expect(new Set(appliedThemes)).toEqual(
@@ -106,15 +120,21 @@ describe('app command wiring', () => {
       harness.invoke(id);
 
       // The command's own dependency ran exactly once...
-      expect(harness.deps[dep]).toHaveBeenCalledTimes(1);
+      const firedDependency = harness.sideEffectDeps.find(
+        sideEffect => sideEffect.fn === harness.deps[dep],
+      );
+      if (firedDependency === undefined) {
+        throw new Error(`No side-effect recorder found for dependency ${dep}`);
+      }
+      expect(firedDependency.calls).toEqual([[]]);
       // ...the theme setter (a different effect channel) stayed silent...
-      expect(harness.setTheme).not.toHaveBeenCalled();
+      expect(harness.setTheme.calls).toEqual([]);
       // ...and every other side-effect dependency stayed silent, ruling out
       // cross-wiring and proving the action is not a dead no-op.
       const firedSideEffects = harness.sideEffectDeps.filter(
-        spy => spy.mock.calls.length > 0,
+        sideEffect => sideEffect.calls.length > 0,
       );
-      expect(firedSideEffects).toEqual([harness.deps[dep]]);
+      expect(firedSideEffects).toEqual([firedDependency]);
     },
   );
 

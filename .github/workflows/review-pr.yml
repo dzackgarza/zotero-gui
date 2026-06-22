@@ -1,9 +1,28 @@
-# Repo-owned configuration: edit triggers and `with:` values directly.
-# All review behavior lives upstream in the referenced workflow.
 name: PR Review
-on:
-  pull_request:
+'on':
+  pull_request: {}
 jobs:
+  deterministic-diff:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+    with:
+      gate: deterministic-diff
+      profile: bun-playwright
+  delegation-conformance:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+    with:
+      gate: delegation-conformance
+      profile: bun-playwright
+  app-boot:
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+    with:
+      gate: app-boot
+      profile: bun-playwright
   general:
     uses: dzackgarza/ai-review-ci/.github/workflows/_review.yml@main
     permissions:
@@ -14,7 +33,6 @@ jobs:
     with:
       report_type: general
       scope: diff
-      fail_below: ${{ vars.GENERAL_FAIL_BELOW }}
   slop:
     uses: dzackgarza/ai-review-ci/.github/workflows/_review.yml@main
     permissions:
@@ -25,4 +43,14 @@ jobs:
     with:
       report_type: slop
       scope: diff
-      fail_below: ${{ vars.SLOP_FAIL_BELOW }}
+  thread-resolution:
+    needs:
+      - general
+      - slop
+    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      gate: thread-resolution
+      profile: bun-playwright

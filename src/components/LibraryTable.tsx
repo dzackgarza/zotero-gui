@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import {
   type Cell,
+  type Column,
   type Header,
   type Table,
 } from '@tanstack/react-table';
@@ -41,6 +42,34 @@ function headerSizeStyle(size: number): React.CSSProperties {
   return { width: `${size}px`, minWidth: `${size}px`, maxWidth: `${size}px` };
 }
 
+function tableTitleText(title: string | undefined): string {
+  if (title === undefined) return 'Untitled Record';
+  if (title.trim().length === 0) return 'Untitled Record';
+  return title;
+}
+
+function tableCellText(value: unknown): string {
+  if (value === null) return '';
+  if (value === undefined) return '';
+  return String(value);
+}
+
+function visibleCellText(value: string): string {
+  if (value.trim().length === 0) return '—';
+  return value;
+}
+
+function itemHasChildren(item: ZoteroItem): boolean {
+  if (item.attachments.length > 0) return true;
+  return item.notes.length > 0;
+}
+
+function columnLabel(column: Column<ZoteroItem, unknown>): string {
+  const label = column.columnDef.meta?.label;
+  if (label === undefined) return column.id;
+  return label;
+}
+
 export default function LibraryTable({
   table,
   theme,
@@ -61,7 +90,7 @@ export default function LibraryTable({
   const menuColumns = orderedLeafColumns(table);
 
   const renderTitleCell = (item: ZoteroItem, isSelected: boolean) => {
-    const hasChildren = item.attachments.length > 0 || item.notes.length > 0;
+    const hasChildren = itemHasChildren(item);
     const isExpanded = expandedItems.has(item.id);
     return (
       <div className="flex items-center gap-2 min-w-0">
@@ -79,7 +108,7 @@ export default function LibraryTable({
           {item.itemType !== 'book' && item.itemType !== 'journalArticle' && item.itemType !== 'conferencePaper' && <NotebookText className="h-3.5 w-3.5" />}
         </span>
         <span className={`truncate font-medium ${theme === 'code-dark' ? (isSelected ? 'text-white' : 'text-[#cccccc]') : 'text-slate-100'}`} title={item.title}>
-          {item.title || 'Untitled Record'}
+          {tableTitleText(item.title)}
         </span>
       </div>
     );
@@ -88,7 +117,7 @@ export default function LibraryTable({
   const renderBodyCell = (cell: Cell<ZoteroItem, unknown>, isSelected: boolean) => {
     const columnId = cell.column.id;
     const item = cell.row.original;
-    const cellVal = String(cell.getValue() ?? '');
+    const cellVal = tableCellText(cell.getValue());
 
     if (columnId === 'title') {
       return renderTitleCell(item, isSelected);
@@ -116,7 +145,7 @@ export default function LibraryTable({
     }
     return (
       <span className={columnId === 'citekey' ? `font-mono text-[10.5px] p-0.5 px-1 border rounded-sm ${theme === 'code-dark' ? 'bg-[#1e1e1e] border-[#2b2b2b] text-sky-400' : 'bg-slate-950/60 border-slate-900 text-slate-400'}` : ''}>
-        {cellVal || '—'}
+        {visibleCellText(cellVal)}
       </span>
     );
   };
@@ -161,7 +190,7 @@ export default function LibraryTable({
                         style={headerSizeStyle(header.getSize())}
                       >
                         <div className="flex items-center gap-1.5 justify-between pr-2">
-                          <span className="truncate">{header.column.columnDef.meta?.label ?? header.column.id}</span>
+                          <span className="truncate">{columnLabel(header.column)}</span>
                           {sortDirection && (
                             <span>{sortDirection === 'desc' ? <ChevronDown className="h-3.5 w-3.5 text-blue-400 shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 text-blue-400 shrink-0" />}</span>
                           )}
@@ -306,7 +335,7 @@ export default function LibraryTable({
             <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
               {menuColumns.map((column, index) => {
                 const canHide = column.getCanHide();
-                const label = column.columnDef.meta?.label ?? column.id;
+                const label = columnLabel(column);
                 return (
                   <div
                     key={column.id}

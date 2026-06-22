@@ -1,0 +1,17 @@
+{
+  "plugins": [
+    {
+      "id": "crossref-doi",
+      "name": "Crossref DOI",
+      "command": ["node", "tests/e2e/fixtures/resolver.mjs"],
+      "acceptedInputs": [
+        {
+          "id": "doi",
+          "label": "DOI",
+          "example": "10.1090/noti1234",
+          "pattern": "^10\\."
+        }
+      ]
+    }
+  ]
+}

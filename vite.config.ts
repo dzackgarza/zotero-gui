@@ -4,8 +4,15 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {CONFIG_PATH, loadAppConfig} from './src/server/config.js';
 
-export default defineConfig(() => {
-  const apiPort = loadAppConfig(CONFIG_PATH).server.port;
+function configPathForViteMode(mode: string): string {
+  if (mode === 'e2e') {
+    return path.resolve(__dirname, 'zotero-gui.e2e.config.json');
+  }
+  return CONFIG_PATH;
+}
+
+export default defineConfig(({mode}) => {
+  const apiPort = loadAppConfig(configPathForViteMode(mode)).server.port;
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -15,7 +22,7 @@ export default defineConfig(() => {
     },
     server: {
       proxy: {
-        '/api': `http://localhost:${apiPort}`,
+        '/api': `http://127.0.0.1:${apiPort}`,
       },
     },
   };

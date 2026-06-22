@@ -1,4 +1,44 @@
-import bibtexParse from 'bibtex-parse-js';
+import bibtexParse, { type BibTeXEntry } from 'bibtex-parse-js';
+
+const INVALID_SINGLE_ENTRY = 'Invalid BibTeX input or empty entry list.';
+
+function requireSingleEntry(bibtexStr: string): BibTeXEntry {
+  const parsed = bibtexParse.toJSON(bibtexStr);
+  if (!Array.isArray(parsed)) {
+    throw new Error(INVALID_SINGLE_ENTRY);
+  }
+  if (parsed.length === 0) {
+    throw new Error(INVALID_SINGLE_ENTRY);
+  }
+  if (parsed.length !== 1) {
+    throw new Error('BibTeX input must contain exactly one entry.');
+  }
+  const entry = parsed[0];
+  if (entry === undefined) {
+    throw new Error(INVALID_SINGLE_ENTRY);
+  }
+  return entry;
+}
+
+function presentValue(val: string | undefined): string {
+  if (val === undefined) return '';
+  if (val.length === 0) return '';
+  let s = val.trim();
+  while (s.startsWith('{') && s.endsWith('}')) {
+    s = s.substring(1, s.length - 1).trim();
+  }
+  return s.trim();
+}
+
+function bibtexTag(tags: Record<string, string>, lowerName: string, upperName: string): string | undefined {
+  const lowerValue = tags[lowerName];
+  if (lowerValue !== undefined) return lowerValue;
+  return tags[upperName];
+}
+
+function hasBibtexTagValue(tags: Record<string, string>, lowerName: string, upperName: string): boolean {
+  return presentValue(bibtexTag(tags, lowerName, upperName)).length > 0;
+}
 
 /**
  * Strict validation gate for resolver/import BibTeX before it is handed to Zotero.
@@ -25,32 +65,12 @@ import bibtexParse from 'bibtex-parse-js';
  * coerced into anything here. Mapping it is Zotero's responsibility.
  */
 export function parseBibTeXToMetadata(bibtexStr: string): void {
-  const parsed = bibtexParse.toJSON(bibtexStr);
-  if (!parsed || parsed.length === 0) {
-    throw new Error('Invalid BibTeX input or empty entry list.');
-  }
-  if (parsed.length !== 1) {
-    throw new Error('BibTeX input must contain exactly one entry.');
-  }
-
-  const tags = parsed[0].entryTags || {};
-
-  const presentValue = (val: string | undefined): string => {
-    if (!val) return '';
-    let s = val.trim();
-    while (s.startsWith('{') && s.endsWith('}')) {
-      s = s.substring(1, s.length - 1).trim();
-    }
-    return s.trim();
-  };
-
-  if (!presentValue(tags.title || tags.TITLE)) {
+  const tags = requireSingleEntry(bibtexStr).entryTags;
+  if (!hasBibtexTagValue(tags, 'title', 'TITLE')) {
     throw new Error('BibTeX entry must contain a title.');
   }
 
-  const hasAuthor = presentValue(tags.author || tags.AUTHOR).length > 0;
-  const hasEditor = presentValue(tags.editor || tags.EDITOR).length > 0;
-  if (!hasAuthor && !hasEditor) {
+  if (!hasBibtexTagValue(tags, 'author', 'AUTHOR') && !hasBibtexTagValue(tags, 'editor', 'EDITOR')) {
     throw new Error('BibTeX entry must contain at least one name-bearing creator (author or editor).');
   }
 }

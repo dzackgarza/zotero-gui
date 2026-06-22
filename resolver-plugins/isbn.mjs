@@ -9,7 +9,6 @@ import {
   recordYear,
 } from './isbn-lib.mjs';
 
-const OPEN_LIBRARY = 'https://openlibrary.org';
 import { readRawStdin } from './utils.mjs';
 
 async function readStdin() {
@@ -19,7 +18,12 @@ async function readStdin() {
 
 const isbn = await readStdin();
 const bibkey = `ISBN:${isbn}`;
-const url = `${OPEN_LIBRARY}/api/books?bibkeys=${encodeURIComponent(bibkey)}&jscmd=data&format=json`;
+const openLibraryBaseUrl = process.argv[2];
+invariant(openLibraryBaseUrl, 'ISBN resolver requires the Open Library base URL as argv[2]');
+const url = new URL('/api/books', openLibraryBaseUrl);
+url.searchParams.set('bibkeys', bibkey);
+url.searchParams.set('jscmd', 'data');
+url.searchParams.set('format', 'json');
 
 const response = await fetch(url, { headers: { Accept: 'application/json' } });
 invariant(response.ok, `Open Library Books API lookup failed for ${isbn} (HTTP ${response.status})`);

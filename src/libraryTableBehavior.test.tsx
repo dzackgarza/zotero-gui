@@ -1,32 +1,31 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
-import ErrorBoundary from './ErrorBoundary';
+import type { MouseEvent } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
 import { readColumnLayout } from './columnModel';
-import type { ZoteroItem } from './types';
+import LibraryTable from './components/LibraryTable';
+import type { AdvancedSearchSettings, ZoteroItem } from './types';
+import { useLibraryTable } from './useLibraryTable';
 
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
+const searchSettings: AdvancedSearchSettings = {
+  query: '',
+  matchCase: false,
+  matchType: 'all',
+  searchFields: {
+    title: true,
+    creators_compact: true,
+    publicationTitle: true,
+    date: true,
+    citekey: true,
+  },
+};
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
+function selectItemNoop(_id: string): void {}
 
-function startupResponse(): Response {
-  return jsonResponse({ zotero: { running: true } });
-}
+function openAttachmentNoop(_attachmentId: string): void {}
+
+function resetFiltersNoop(_settings: AdvancedSearchSettings): void {}
+
+function toggleExpandNoop(_id: string, _event: MouseEvent): void {}
 
 function bookItem(id: string, title: string, overrides: Partial<ZoteroItem> = {}): ZoteroItem {
   return {
@@ -45,32 +44,52 @@ function bookItem(id: string, title: string, overrides: Partial<ZoteroItem> = {}
   };
 }
 
-// Render App (with the real composed table) feeding it a startup probe followed
-// by one /api/library payload. Only the network is stubbed.
-function renderApp(items: ZoteroItem[]): void {
-  const fetchMock = vi.fn();
-  fetchMock.mockResolvedValueOnce(startupResponse());
-  fetchMock.mockResolvedValueOnce(jsonResponse({ items, collections: [] }));
-  vi.stubGlobal('fetch', fetchMock);
+function LibraryTableHarness({ items }: { items: ZoteroItem[] }) {
+  const table = useLibraryTable(items);
+  return (
+    <LibraryTable
+      table={table}
+      theme="code-dark"
+      tableClass=""
+      selectedItemId={null}
+      expandedItems={new Set()}
+      searchSettings={searchSettings}
+      onSelectItem={selectItemNoop}
+      onOpenAttachment={openAttachmentNoop}
+      onResetFilters={resetFiltersNoop}
+      onToggleExpand={toggleExpandNoop}
+    />
+  );
+}
+
+function renderTable(items: ZoteroItem[]): void {
   render(
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>,
+    <LibraryTableHarness items={items} />,
   );
 }
 
 function visibleRowTitles(): string[] {
   return Array.from(document.querySelectorAll('tbody tr td:first-child span[title]'))
-    .map(node => node.getAttribute('title') ?? '');
+    .map(node => {
+      const title = node.getAttribute('title');
+      if (title === null) return '';
+      return title;
+    });
 }
 
 function visibleHeaderLabels(): string[] {
-  return Array.from(document.querySelectorAll('thead th')).map(th => (th.textContent ?? '').trim());
+  return Array.from(document.querySelectorAll('thead th')).map(th => {
+    if (th.textContent === null) return '';
+    return th.textContent.trim();
+  });
 }
 
 function headerCell(label: string): HTMLElement {
   const header = Array.from(document.querySelectorAll('thead th')).find(
-    th => (th.textContent ?? '').trim() === label,
+    th => {
+      if (th.textContent === null) return false;
+      return th.textContent.trim() === label;
+    },
   );
   if (header === undefined) {
     throw new Error(`Header not found: ${label}`);
@@ -80,14 +99,12 @@ function headerCell(label: string): HTMLElement {
 
 describe('library table sorting (composed table)', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
     localStorage.clear();
     cleanup();
   });
 
   it('cycles a column header asc -> desc -> none and orders rows by sortableValue', async () => {
-    renderApp([
+    renderTable([
       bookItem('mid', 'Mango'),
       bookItem('first', 'Apple'),
       bookItem('last', 'Zucchini'),
@@ -111,7 +128,7 @@ describe('library table sorting (composed table)', () => {
   });
 
   it('sorts case-insensitively on a non-title column matching the canonical projection', async () => {
-    renderApp([
+    renderTable([
       bookItem('a', 'Item A', { publicationTitle: 'beta journal' }),
       bookItem('b', 'Item B', { publicationTitle: 'Alpha Journal' }),
       bookItem('c', 'Item C', { publicationTitle: 'Gamma Journal' }),
@@ -127,14 +144,12 @@ describe('library table sorting (composed table)', () => {
 
 describe('library table title lock', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
     localStorage.clear();
     cleanup();
   });
 
   it('keeps the title column visible and offers no control to hide it', async () => {
-    renderApp([bookItem('only', 'Locked Title Item')]);
+    renderTable([bookItem('only', 'Locked Title Item')]);
     await screen.findByText('Locked Title Item');
 
     // Open the column context menu over the header row.
@@ -154,14 +169,12 @@ describe('library table title lock', () => {
 
 describe('library table reorder via context menu', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
     localStorage.clear();
     cleanup();
   });
 
   it('moves a column right via the down control, changing the visible header order', async () => {
-    renderApp([bookItem('only', 'Reorder Witness')]);
+    renderTable([bookItem('only', 'Reorder Witness')]);
     await screen.findByText('Reorder Witness');
 
     expect(visibleHeaderLabels()).toEqual(['Title', 'Creators', 'Type', 'Publication', 'Date', 'Citekey']);
@@ -179,14 +192,12 @@ describe('library table reorder via context menu', () => {
 
 describe('library table persistence round-trip', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
     localStorage.clear();
     cleanup();
   });
 
   it('restores visibility, order, and width from localStorage across a remount', async () => {
-    renderApp([bookItem('only', 'Persistent Item')]);
+    renderTable([bookItem('only', 'Persistent Item')]);
     await screen.findByText('Persistent Item');
 
     fireEvent.contextMenu(headerCell('Title'));
@@ -221,7 +232,7 @@ describe('library table persistence round-trip', () => {
 
     // Remount from the same localStorage (new fetch sequence, same storage).
     cleanup();
-    renderApp([bookItem('only', 'Persistent Item')]);
+    renderTable([bookItem('only', 'Persistent Item')]);
     await screen.findByText('Persistent Item');
 
     // Visibility restored: DOI still shown. Order restored: Type before Creators.

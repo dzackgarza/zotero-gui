@@ -1,6 +1,5 @@
 import { mkdtempSync } from 'node:fs';
 import type { Server } from 'node:http';
-import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -217,7 +216,9 @@ describe('Zotero DB contract preflight', () => {
     // The original typed failure domain is preserved, not erased to a string.
     expect(thrown.cause).toBeInstanceOf(z.ZodError);
   });
+});
 
+describe('Zotero DB nullable row mapping', () => {
   it('maps a top-level item with no title row to an absent title without inventing a placeholder', () => {
     const db = createFixtureDb();
     db.exec(`
@@ -549,7 +550,7 @@ describe('/api/library', () => {
     if (!(address && typeof address === 'object')) {
       throw new Error('/api/library test server must bind to a TCP port');
     }
-    baseUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
+    baseUrl = `http://127.0.0.1:${(address).port}`;
   });
 
   afterAll(async () => {

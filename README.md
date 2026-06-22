@@ -5,6 +5,7 @@ A local web application for viewing your Zotero libraries and resolving/importin
 ## Prerequisites
 
 - **Node.js**: Exactly `25.8.2`; the server uses `node:sqlite`.
+- **Bun**: Used for dependency installation and local quality gates.
 - **Zotero**: A local Zotero installation with the `zotero-local-write-api` plugin installed and reachable at the configured write endpoint.
 
 ## Installation
@@ -12,7 +13,7 @@ A local web application for viewing your Zotero libraries and resolving/importin
 Install the dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 ## Usage

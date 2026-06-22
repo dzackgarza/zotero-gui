@@ -26,7 +26,11 @@ function reparseSingle(bibtex: string): { title: string; author: Array<{ literal
 }
 
 function authorNames(author: Array<{ literal?: string; family?: string }>): string[] {
-  return author.map(entry => entry.literal ?? entry.family ?? '');
+  return author.map(entry => {
+    if (entry.literal !== undefined) return entry.literal;
+    if (entry.family !== undefined) return entry.family;
+    return '';
+  });
 }
 
 describe('bookBibTeX (ISBN resolver) serializes via Citation.js', () => {
@@ -107,7 +111,7 @@ describe('articleBibTeX (zbMath resolver) serializes via Citation.js', () => {
     expect(authorNames(entry.author)).toEqual(['Jean-Pierre Serre', 'John Tate']);
 
     // Optional fields the spec requires the article to preserve.
-    const data = new Cite(bibtex).data[0] as Record<string, unknown>;
+    const data = new Cite(bibtex).data[0];
     expect(data['container-title']).toBe('Annals of Mathematics & Physics');
     expect(data.volume).toBe('88');
     expect(data.issue).toBe('2');

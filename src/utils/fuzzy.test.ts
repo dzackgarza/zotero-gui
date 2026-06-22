@@ -11,17 +11,16 @@ import {
 
 function item(
   id: string,
-  title: string,
+  title: string | undefined,
   citekey: string,
   overrides: Partial<ZoteroItem> = {},
 ): ZoteroItem {
   const defaultCreators: Creator[] = [
     { firstName: 'Arthur', lastName: 'Coble', creatorType: 'author' },
   ];
-  return {
+  const base: ZoteroItem = {
     id,
     itemType: 'book',
-    title,
     citekey,
     creators: defaultCreators,
     tags: [],
@@ -30,6 +29,12 @@ function item(
     collections: [],
     dateAdded: '2026-06-18T00:00:00Z',
     dateModified: '2026-06-18T00:00:00Z',
+    inTrash: false,
+  };
+
+  return {
+    ...base,
+    ...(title === undefined ? {} : { title }),
     ...overrides,
   };
 }
@@ -239,7 +244,7 @@ describe('search projection of a titleless item', () => {
   // item contributes no title term but stays searchable by its other fields.
   it('does not fabricate an empty-string title token for a titleless item', () => {
     const documents = buildZoteroSearchDocuments([
-      item('titleless', undefined as unknown as string, 'NoTitle20', {
+      item('titleless', undefined, 'NoTitle20', {
         publicationTitle: 'Distinctive Journal Of Topology',
       }),
     ]);
@@ -250,7 +255,7 @@ describe('search projection of a titleless item', () => {
   });
 
   it('keeps a titleless item searchable by another field and does not match an empty-title query', () => {
-    const titleless: ZoteroItem = item('titleless', undefined as unknown as string, 'NoTitle20', {
+    const titleless: ZoteroItem = item('titleless', undefined, 'NoTitle20', {
       publicationTitle: 'Distinctive Journal Of Topology',
     });
 

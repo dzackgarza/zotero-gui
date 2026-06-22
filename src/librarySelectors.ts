@@ -1,4 +1,4 @@
-import type { AdvancedSearchSettings, Collection, ZoteroItem } from './types';
+import type { AdvancedSearchSettings, Attachment, Collection, ZoteroItem } from './types';
 import { filterZoteroItems, formatCreatorsCompact, getStandardCitekey } from './utils/fuzzy';
 
 export type SortKey = keyof ZoteroItem | 'creators_compact';
@@ -64,7 +64,12 @@ export function duplicateItems(items: ZoteroItem[]): ZoteroItem[] {
   active.forEach(item => {
     if (item.title === undefined) return;
     const normalizedTitle = item.title.trim().toLowerCase();
-    titleCounts.set(normalizedTitle, (titleCounts.get(normalizedTitle) ?? 0) + 1);
+    const currentCount = titleCounts.get(normalizedTitle);
+    if (currentCount === undefined) {
+      titleCounts.set(normalizedTitle, 1);
+      return;
+    }
+    titleCounts.set(normalizedTitle, currentCount + 1);
   });
 
   return active.filter(item => {
@@ -77,23 +82,27 @@ export function duplicateItems(items: ZoteroItem[]): ZoteroItem[] {
   });
 }
 
+function attachmentHasPdf(attachment: Attachment): boolean {
+  if (attachment.path !== undefined && attachment.path.toLowerCase().endsWith('.pdf')) return true;
+  if (attachment.title !== undefined && attachment.title.toLowerCase().includes('.pdf')) return true;
+  return attachment.mimeType === 'application/pdf';
+}
+
 export function itemsWithoutPdf(items: ZoteroItem[]): ZoteroItem[] {
   return activeLibraryItems(items).filter(item => {
-    const hasPdf = item.attachments.some(attachment =>
-      attachment.path?.toLowerCase().endsWith('.pdf')
-      || attachment.title?.toLowerCase().includes('.pdf')
-      || attachment.mimeType === 'application/pdf'
-    );
+    const hasPdf = item.attachments.some(attachmentHasPdf);
     return !hasPdf;
   });
 }
 
+function attachmentHasExtraction(attachment: Attachment): boolean {
+  if (attachment.title !== undefined && attachment.title.toLowerCase().includes('extracted.md')) return true;
+  return attachment.path !== undefined && attachment.path.toLowerCase().includes('extracted.md');
+}
+
 export function itemsWithoutExtraction(items: ZoteroItem[]): ZoteroItem[] {
   return activeLibraryItems(items).filter(item => {
-    const hasExtraction = item.attachments.some(attachment =>
-      attachment.title?.toLowerCase().includes('extracted.md')
-      || attachment.path?.toLowerCase().includes('extracted.md')
-    );
+    const hasExtraction = item.attachments.some(attachmentHasExtraction);
     return !hasExtraction;
   });
 }
@@ -103,10 +112,15 @@ export function nonstandardCitekeyItems(items: ZoteroItem[]): ZoteroItem[] {
     const standard = getStandardCitekey(item).toLowerCase().trim();
     const citekey = item.citekey?.toLowerCase().trim();
 
-    if (!standard || !citekey) return true;
+    if (standard.length === 0) return true;
+    if (citekey === undefined) return true;
+    if (citekey.length === 0) return true;
 
     const suffix = citekey.slice(standard.length);
-    const matchesStandard = citekey === standard || (citekey.startsWith(standard) && /^[a-z]$/.test(suffix));
+    let matchesStandard = citekey === standard;
+    if (!matchesStandard && citekey.startsWith(standard)) {
+      matchesStandard = /^[a-z]$/.test(suffix);
+    }
 
     return !matchesStandard;
   });
@@ -151,7 +165,12 @@ export function selectTagCloud(items: ZoteroItem[], limit: number): [string, num
 
   activeLibraryItems(items).forEach(item => {
     item.tags.forEach(tag => {
-      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      const currentCount = tagCounts.get(tag);
+      if (currentCount === undefined) {
+        tagCounts.set(tag, 1);
+        return;
+      }
+      tagCounts.set(tag, currentCount + 1);
     });
   });
 
@@ -181,7 +200,9 @@ export function sortableValue(item: ZoteroItem, sortKey: SortKey): string {
     return value ? '1' : '0';
   }
 
-  return value ? String(value).toLowerCase() : '';
+  if (value === undefined) return '';
+  if (value === null) return '';
+  return String(value).toLowerCase();
 }
 
 // Filtering pipeline only. Row ordering is owned by the table's sorting state
@@ -194,8 +215,9 @@ export function selectVisibleLibraryItems({
   searchSettings,
 }: VisibleLibraryItemsInput): ZoteroItem[] {
   const selectedItems = selectItemsForCollection(items, collections, selectedCollectionId);
-  const tagFilteredItems = selectedTag
-    ? selectedItems.filter(item => item.tags.includes(selectedTag))
-    : selectedItems;
+  let tagFilteredItems = selectedItems;
+  if (selectedTag !== null) {
+    tagFilteredItems = selectedItems.filter(item => item.tags.includes(selectedTag));
+  }
   return filterZoteroItems(tagFilteredItems, searchSettings);
 }
