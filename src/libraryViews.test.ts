@@ -4,6 +4,7 @@ import {
   LIBRARY_VIEW_SENTINELS,
   isLibraryViewSentinel,
   reconcileSelectedLibraryView,
+  selectActiveViewName,
   selectModalImportCollections,
 } from './libraryViews';
 import type { Collection } from './types';
@@ -78,6 +79,38 @@ describe('selectModalImportCollections', () => {
       key: 'NTKEY100',
     });
     expect(selectModalImportCollections([realWithKey], '100')).toEqual(['NTKEY100']);
+  });
+});
+
+describe('selectActiveViewName', () => {
+  // The active-view title shown to the user (the TopBar's active-collection
+  // name). Each known sentinel must resolve to its own distinct name from the
+  // single sentinel source of truth, and a real present collection must resolve
+  // to its own name.
+  it('resolves each known sentinel to its own distinct active-view name', () => {
+    // Named per-sentinel rather than looping a parallel literal map: a parallel
+    // literal would just be a second copy of the source we are asserting comes
+    // from one place. These are the user-visible titles the TopBar shows.
+    expect(selectActiveViewName(collections, 'all')).toBe('My Library');
+    expect(selectActiveViewName(collections, 'duplicates')).toBe('Duplicate Entries');
+    expect(selectActiveViewName(collections, 'no-pdf')).toBe('No PDF Attachment');
+    expect(selectActiveViewName(collections, 'no-extraction')).toBe('No Extraction');
+    expect(selectActiveViewName(collections, 'nonstandard-citekey')).toBe('Nonstandard Citation Key');
+  });
+
+  it('resolves a present real collection to that collection’s own name', () => {
+    expect(selectActiveViewName(collections, '100')).toBe('Number theory');
+    expect(selectActiveViewName(collections, '101')).toBe('Geometry');
+  });
+
+  it('does not silently label an unknown id as "My Library" — it fails loud', () => {
+    // The pre-fix getCollectionName returned 'My Library' for ANY id that was
+    // neither a hardcoded sentinel nor a present collection, masking a missing
+    // case. An id that is neither a known sentinel nor a present collection is
+    // an invariant violation (the same id set selectItemsForCollection rejects),
+    // so it must throw rather than resolve to the My Library label.
+    expect(() => selectActiveViewName(collections, '999')).toThrow();
+    expect(() => selectActiveViewName(collections, 'not-a-view')).toThrow();
   });
 });
 

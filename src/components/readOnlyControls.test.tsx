@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
@@ -52,6 +53,48 @@ function LibraryTableHarness({
       onToggleExpand={vi.fn()}
     />
   );
+}
+
+// Harness that renders the real LibraryTable with the DOI column made visible
+// through the table's own visibility API (the same state path the context-menu
+// toggle drives), so the rendered DOI cell and its click handler are the real
+// production cell, not a stand-in. A user who has enabled the DOI column and
+// clicks a DOI is exactly this path.
+function DoiCellHarness({ items }: { items: ZoteroItem[] }) {
+  const table = useLibraryTable(items);
+  useEffect(() => {
+    table.setColumnVisibility(previous => ({ ...previous, doi: true }));
+  }, [table]);
+  return (
+    <LibraryTable
+      table={table}
+      theme="code-dark"
+      tableClass=""
+      selectedItemId={null}
+      expandedItems={new Set()}
+      searchSettings={searchSettings}
+      onSelectItem={vi.fn()}
+      onOpenAttachment={vi.fn()}
+      onResetFilters={vi.fn()}
+      onToggleExpand={vi.fn()}
+    />
+  );
+}
+
+function itemWithDoi(id: string, doi: string): ZoteroItem {
+  return {
+    id,
+    itemType: 'journalArticle',
+    title: `Paper ${id}`,
+    creators: [],
+    doi,
+    tags: [],
+    notes: [],
+    attachments: [],
+    collections: [],
+    dateAdded: '2026-06-18T00:00:00Z',
+    dateModified: '2026-06-18T00:00:00Z',
+  };
 }
 
 const searchSettings: AdvancedSearchSettings = {
@@ -521,5 +564,51 @@ describe('App APA-citation copy command respects item citability', () => {
     expect(captured).toEqual([]);
     expect(screen.getAllByText('Standalone Attachment File').length).toBeGreaterThan(0);
     expect(screen.queryByText('Application Render Error')).not.toBeInTheDocument();
+  });
+});
+
+describe('library table DOI cell opens a correctly-encoded doi.org URL', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  // The user-visible outcome: clicking a DOI opens the DOI's resolver page. The
+  // URL the browser is navigated to is what the user actually lands on, so the
+  // assertion is on the argument the cell passes to window.open. A DOI suffix may
+  // legitimately contain a URI-reserved character; raw interpolation
+  // (`https://doi.org/${doi}`) lets that character start the URL query/fragment,
+  // so the browser opens the wrong identifier. The cell must percent-encode the
+  // suffix (sharing the resolver's single encoding rule) while preserving the
+  // structural namespace slash.
+
+  it('opens a plain DOI unchanged so a normal identifier still resolves', () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url?: string | URL) => { opened.push(String(url)); return null; });
+
+    render(<DoiCellHarness items={[itemWithDoi('PLAIN', '10.1090/noti1234')]} />);
+
+    fireEvent.click(screen.getByText('10.1090/noti1234'));
+
+    expect(opened).toEqual(['https://doi.org/10.1090/noti1234']);
+  });
+
+  it('percent-encodes a reserved character in the suffix so the right DOI is opened', () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url?: string | URL) => { opened.push(String(url)); return null; });
+
+    render(<DoiCellHarness items={[itemWithDoi('RESERVED', '10.1234/foo?bar')]} />);
+
+    fireEvent.click(screen.getByText('10.1234/foo?bar'));
+
+    // The reserved `?` must travel as path data, not start a query string. Raw
+    // interpolation (the pre-fix cell) would open `https://doi.org/10.1234/foo?bar`,
+    // whose URL parser drops `bar` into the query and loses it from the path —
+    // resolving the wrong identifier.
+    expect(opened).toHaveLength(1);
+    const opened0 = new URL(opened[0]);
+    expect(opened0.pathname).toBe('/10.1234/foo%3Fbar');
+    expect(opened0.search).toBe('');
   });
 });

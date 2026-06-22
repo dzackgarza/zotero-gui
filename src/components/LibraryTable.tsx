@@ -22,6 +22,7 @@ import {
 import { moveColumn, orderedLeafColumns, reorderColumn, resetColumnLayout } from '../useLibraryTable';
 import type { AdvancedSearchSettings, ZoteroItem } from '../types';
 import type { AppTheme } from '../useThemePreference';
+import { doiUrl } from '../utils/doi';
 
 interface LibraryTableProps {
   table: Table<ZoteroItem>;
@@ -101,7 +102,7 @@ export default function LibraryTable({
     }
     if (columnId === 'doi' && cellVal) {
       return (
-        <span className="font-mono text-[10.5px] text-sky-450 hover:underline cursor-pointer" onClick={event => { event.stopPropagation(); window.open(`https://doi.org/${cellVal}`, '_blank'); }}>
+        <span className="font-mono text-[10.5px] text-sky-450 hover:underline cursor-pointer" onClick={event => { event.stopPropagation(); window.open(doiUrl(cellVal), '_blank'); }}>
           {cellVal}
         </span>
       );

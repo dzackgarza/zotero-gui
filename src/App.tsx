@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Terminal } from 'lucide-react';
 import { AdvancedSearchSettings } from './types';
+import { ApiErrorResponseSchema } from './schemas';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { selectVisibleLibraryItems } from './librarySelectors';
-import { reconcileSelectedLibraryView, selectModalImportCollections } from './libraryViews';
+import { reconcileSelectedLibraryView, selectActiveViewName, selectModalImportCollections } from './libraryViews';
 import { isCitable, toFormattedCitation } from './utils/citation';
 import { isDefaultSearchField } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
@@ -137,9 +138,15 @@ export default function App() {
 
   const openAttachment = (attachmentId: string) => {
     fetch(`/api/attachments/${encodeURIComponent(attachmentId)}/open`, { method: 'POST' })
-      .then(response => {
+      .then(async response => {
         if (!response.ok) {
-          throw new Error(`Attachment open failed with HTTP ${response.status}`);
+          // The route returns a structured { error: { kind, message } } body on
+          // failure (the same ApiError shape the library-load path consumes).
+          // Surface the server's real message so the user sees why the open
+          // failed (e.g. the attachment has no local file path), not a bare
+          // status code that hides the cause.
+          const payload = ApiErrorResponseSchema.parse(await response.json());
+          throw new Error(payload.error.message);
         }
         showToast('Opening attachment with xdg-open.');
       })
@@ -223,14 +230,7 @@ export default function App() {
     );
   }
 
-  const getCollectionName = () => {
-    if (reconciledCollectionId === 'duplicates') return 'Duplicate Entries';
-    if (reconciledCollectionId === 'no-pdf') return 'No PDF Attachment';
-    if (reconciledCollectionId === 'no-extraction') return 'No Extraction';
-    if (reconciledCollectionId === 'nonstandard-citekey') return 'Nonstandard Citation Key';
-    const found = collections.find(c => c.id === reconciledCollectionId);
-    return found ? found.name : 'My Library';
-  };
+  const getCollectionName = () => selectActiveViewName(collections, reconciledCollectionId);
 
   // --- Commands List for Palette ---
   const commandsList = createAppCommands({

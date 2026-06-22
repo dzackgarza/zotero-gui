@@ -235,6 +235,77 @@ describe('App library loading', () => {
   });
 });
 
+describe('App attachment-open surfaces the server error message', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  function libraryWithAttachment(): Response {
+    return libraryResponse({
+      items: [{
+        id: 'ITEM_ATT',
+        itemType: 'journalArticle',
+        title: 'Paper With Attachment',
+        creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+        date: '1843',
+        publicationTitle: 'Memoirs',
+        tags: [],
+        notes: [],
+        attachments: [{
+          id: 'ATT_NOPATH',
+          title: 'Linked PDF',
+          mimeType: 'application/pdf',
+        }],
+        collections: [],
+        dateAdded: '2026-06-18T00:00:00Z',
+        dateModified: '2026-06-18T00:00:00Z',
+      }],
+      collections: [],
+    });
+  }
+
+  // The route returns its real structured error shape on failure:
+  // { error: { kind, message } } with the matching HTTP status. This mirrors the
+  // server's attachment-open route (e.g. attachment_path_missing -> 400).
+  function attachmentOpenError(): Response {
+    return libraryResponse({
+      error: {
+        kind: 'attachment_path_missing',
+        message: 'Attachment ATT_NOPATH has no local file path',
+      },
+    }, 400);
+  }
+
+  it('shows the server-supplied failure message in the toast, not a bare status code', async () => {
+    const fetchStub = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/startup') return Promise.resolve(startupResponse());
+      if (url === '/api/library') return Promise.resolve(libraryWithAttachment());
+      if (url === '/api/attachments/ATT_NOPATH/open') return Promise.resolve(attachmentOpenError());
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+
+    render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+    );
+
+    // Select the item so the inspector renders its attachment Open control,
+    // then open the attachment via the real App.openAttachment handler.
+    fireEvent.click(await screen.findByText('Paper With Attachment'));
+    fireEvent.click(await screen.findByRole('button', { name: /open/i }));
+
+    // The user must see the server's real reason for the failure. A pre-fix
+    // openAttachment showed only "Attachment open failed with HTTP 400",
+    // dropping the server's message entirely.
+    expect(await screen.findByText('Attachment ATT_NOPATH has no local file path')).toBeInTheDocument();
+  });
+});
+
 describe('App default search-field scoping', () => {
   afterEach(() => {
     vi.restoreAllMocks();
