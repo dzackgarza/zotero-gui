@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
 import { clientStorageKey } from './clientStorage';
 import { DEFAULT_COLUMNS } from './data/samples';
 import { PALETTE_SEARCH_KEYS } from './utils/fuzzy';
+import { KEYBOARD_SHORTCUTS } from './keyboardShortcuts';
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -94,6 +95,7 @@ describe('App library loading', () => {
         collections: ['COLL123'],
         dateAdded: '2026-06-18T00:00:00Z',
         dateModified: '2026-06-18T00:00:00Z',
+        inTrash: false,
       }],
       collections: [{
         kind: 'real',
@@ -132,6 +134,7 @@ describe('App library loading', () => {
         collections: [],
         dateAdded: '2026-06-18T00:00:00Z',
         dateModified: '2026-06-18T00:00:00Z',
+        inTrash: false,
       }],
       collections: [],
     }));
@@ -170,6 +173,7 @@ describe('App library loading', () => {
       attachments: [],
       dateAdded: '2026-06-21T00:00:00Z',
       dateModified: '2026-06-21T00:00:00Z',
+      inTrash: false,
     };
 
     renderAppWithFetchResponses(
@@ -222,6 +226,7 @@ describe('App library loading', () => {
           collections: [],
           dateAdded: '2026-06-21T00:00:00Z',
           dateModified: '2026-06-21T00:00:00Z',
+          inTrash: false,
         }],
         collections: [],
       }),
@@ -261,6 +266,7 @@ describe('App attachment-open surfaces the server error message', () => {
         collections: [],
         dateAdded: '2026-06-18T00:00:00Z',
         dateModified: '2026-06-18T00:00:00Z',
+        inTrash: false,
       }],
       collections: [],
     });
@@ -334,6 +340,7 @@ describe('App default search-field scoping', () => {
         collections: [],
         dateAdded: '2026-06-21T00:00:00Z',
         dateModified: '2026-06-21T00:00:00Z',
+        inTrash: false,
       }],
       collections: [],
     }));
@@ -359,5 +366,136 @@ describe('App default search-field scoping', () => {
       .filter(column => (screen.getByRole('checkbox', { name: column.label }) as HTMLInputElement).checked)
       .map(column => column.key);
     expect(new Set(checkedLabels)).toEqual(canonical);
+  });
+});
+
+// cmdk's command list relies on browser APIs jsdom omits; supplying them lets
+// the real command palette render and be driven exactly as the user would.
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  configurable: true,
+  value: TestResizeObserver,
+});
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  configurable: true,
+  value: () => undefined,
+});
+
+describe('App toast dismissal timing is per-toast, not shared', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  function toastLibrary(): Response {
+    return libraryResponse({
+      items: [{
+        id: 'TOAST_ITEM',
+        itemType: 'journalArticle',
+        title: 'Toast Timing Witness',
+        creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+        date: '1843',
+        publicationTitle: 'Scientific Memoirs',
+        tags: [],
+        notes: [],
+        attachments: [],
+        collections: [],
+        dateAdded: '2026-06-21T00:00:00Z',
+        dateModified: '2026-06-21T00:00:00Z',
+        inTrash: false,
+      }],
+      collections: [],
+    });
+  }
+
+  function openCommandPalette(): void {
+    fireEvent.keyDown(window, {
+      key: KEYBOARD_SHORTCUTS.openCommandPalette.key,
+      ctrlKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('ctrl'),
+      shiftKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('shift'),
+      altKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('alt'),
+      metaKey: KEYBOARD_SHORTCUTS.openCommandPalette.modifiers.includes('meta'),
+    });
+  }
+
+  // Two distinct toasts shown in quick succession via real, non-navigating
+  // command-palette actions (export-backup, then copy-APA for the selected
+  // item). The second toast is shown while the first toast's 3000ms dismissal
+  // timer is still pending. A correctly-scoped timer cancels/resets on each new
+  // toast, so the second toast must remain visible for its OWN full 3000ms — the
+  // first toast's timer must not dismiss it early. The App's own showToast
+  // scheduling is the code under test, not a stand-in.
+  it('keeps a second toast visible for its full duration when shown before the first timer fires', async () => {
+    // Real clipboard surface for the copy-APA path; resolves so showToast runs.
+    Object.assign(navigator, {
+      clipboard: { writeText: () => Promise.resolve() },
+    });
+    // The export-backup command builds a Blob object URL and triggers a download
+    // anchor; jsdom implements neither. These shims let that real action run to
+    // its showToast without faking the App's toast logic.
+    vi.stubGlobal('URL', Object.assign(URL, {
+      createObjectURL: () => 'blob:toast-test',
+      revokeObjectURL: () => undefined,
+    }));
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    const fetchStub = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/startup') return Promise.resolve(startupResponse());
+      if (url === '/api/library') return Promise.resolve(toastLibrary());
+      throw new Error(`Unexpected fetch to ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+
+    render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+    );
+
+    // Select a citable item so the copy-APA command produces its success toast.
+    fireEvent.click(await screen.findByText('Toast Timing Witness'));
+
+    // Switch to fake timers only now: the async mount/load is already settled,
+    // so faking timers cannot stall library loading.
+    vi.useFakeTimers();
+
+    // First toast (t=0): the export-backup command. This stays on the main
+    // screen (unlike sync, which navigates to the loading view).
+    openCommandPalette();
+    fireEvent.click(screen.getByText('Export Stored Database Backup (JSON)'));
+    const firstToast = 'Database backup exported to JSON!';
+    expect(screen.getByText(firstToast)).toBeInTheDocument();
+
+    // Advance partway through the first toast's 3000ms lifetime (t=2000).
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(screen.getByText(firstToast)).toBeInTheDocument();
+
+    // Second toast (t=2000): the real copy-APA command for the selected item.
+    // Its showToast fires from the clipboard write's resolved microtask, so
+    // flush microtasks under fake timers.
+    openCommandPalette();
+    fireEvent.click(screen.getByText('Copy Selected APA Citation'));
+    const secondToast = 'APA Citation copied to clipboard!';
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText(secondToast)).toBeInTheDocument();
+
+    // Advance to the first toast's ORIGINAL deadline (t=3000 = 1000ms into the
+    // second toast). With a shared/uncanceled timer, the first toast's timer
+    // fires here and wrongly dismisses the second toast. A correctly-scoped
+    // timer leaves the second toast visible.
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByText(secondToast)).toBeInTheDocument();
+
+    // Advance to the second toast's own deadline (t=5000 = 3000ms after it was
+    // shown). It dismisses on its own schedule.
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(screen.queryByText(secondToast)).not.toBeInTheDocument();
   });
 });

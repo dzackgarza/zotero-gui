@@ -72,10 +72,28 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeys);
   }, []);
 
+  // A single pending dismissal timer, keyed to the most recent toast. Each new
+  // toast cancels the previous toast's timer so an earlier timer can never
+  // dismiss a later toast: every toast gets its own full 3000ms lifetime.
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (msg: string) => {
+    if (toastTimerRef.current !== null) {
+      clearTimeout(toastTimerRef.current);
+    }
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    toastTimerRef.current = setTimeout(() => {
+      toastTimerRef.current = null;
+      setToast(null);
+    }, 3000);
   };
+
+  // Cancel any pending dismissal timer on unmount so it cannot fire against an
+  // unmounted component.
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) {
+      clearTimeout(toastTimerRef.current);
+    }
+  }, []);
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
