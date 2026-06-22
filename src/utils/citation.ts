@@ -91,6 +91,29 @@ function cslNamesByRole(creators: Creator[]): { author: CslName[]; editor: CslNa
   return { author, editor };
 }
 
+// The two conditions under which itemToCsl refuses to produce a citation.
+// isCitable and itemToCsl BOTH consult these so the predicate and the throw
+// share one source of truth and cannot drift: the predicate is true exactly
+// when neither rejection fires.
+
+// A bibliographic citation form exists for this item TYPE. attachment maps to
+// null (a raw file, not a citable work); every other ItemType maps to a CSL
+// type. This is itemToCsl's first throw condition.
+function hasCitableType(item: ZoteroItem): boolean {
+  return ITEM_TYPE_TO_CSL[item.itemType] !== null;
+}
+
+// The item carries at least one creator CSL recognises as name-bearing
+// (author or editor/serieseditor). An item with no author AND no editor —
+// whether it has no creators at all, or only non-name-bearing roles like
+// translator/contributor/inventor — renders as a nameless entry, which is the
+// authorless-citation error the import gate already rejects. This is
+// itemToCsl's second throw condition.
+function hasNameBearingCreator(item: ZoteroItem): boolean {
+  const { author, editor } = cslNamesByRole(item.creators);
+  return author.length > 0 || editor.length > 0;
+}
+
 // Parse a four-digit year out of the free-form Zotero `date`. If none is
 // present the field is OMITTED — the renderer (APA) supplies its own standard
 // no-date marker; this code never fabricates 'unknown' or 'N.D.'.
@@ -122,23 +145,29 @@ function assignIfPresent(record: CslRecord, key: CslStringField, value: string |
   }
 }
 
-// Whether an item has a bibliographic citation form at all. This is the
-// type-level inverse of itemToCsl's "no CSL type → throw" branch: it reads the
-// SAME ITEM_TYPE_TO_CSL map, so an item is citable exactly when itemToCsl would
-// not reject it on type grounds (a non-null CSL type). The UI consults this to
-// decide whether to offer the copy-citation actions, instead of invoking a
-// citation util on a non-citable item and catching an uncaught throw.
+// Whether a citation can actually be produced for this item. This is the exact
+// inverse of every condition under which itemToCsl throws: it consults the SAME
+// hasCitableType and hasNameBearingCreator predicates itemToCsl uses to decide
+// whether to throw, so the predicate and the throw share one source of truth
+// and cannot drift. The UI consults this to decide whether to offer the
+// copy-citation actions; because it agrees with itemToCsl, the UI never offers
+// an action that would then throw uncaught. (A citable TYPE whose only creator
+// is a non-name-bearing role — translator, contributor, inventor, … — is NOT
+// citable: itemToCsl would throw on it, so isCitable returns false.)
 export function isCitable(item: ZoteroItem): boolean {
-  return ITEM_TYPE_TO_CSL[item.itemType] !== null;
+  return hasCitableType(item) && hasNameBearingCreator(item);
 }
 
 // Map a ZoteroItem to a single CSL-JSON record. This is the ONE place the
 // domain item is translated; both toBibTeX and toFormattedCitation consume it.
 export function itemToCsl(item: ZoteroItem): CslRecord {
-  const cslType = ITEM_TYPE_TO_CSL[item.itemType];
-  if (cslType === null) {
+  // Throw condition 1 (type). hasCitableType reads ITEM_TYPE_TO_CSL; isCitable
+  // consults the same predicate, so the two cannot disagree on this branch.
+  if (!hasCitableType(item)) {
     throw new Error(`Item type "${item.itemType}" has no bibliographic citation form.`);
   }
+  // hasCitableType is true, so the map value is a non-null CSL type string.
+  const cslType = ITEM_TYPE_TO_CSL[item.itemType] as string;
 
   const record: CslRecord = { type: cslType };
 
@@ -148,20 +177,27 @@ export function itemToCsl(item: ZoteroItem): CslRecord {
     record.id = item.citekey.trim();
   }
 
-  // A citation with no name-bearing creator is bibliographically degenerate:
-  // it renders with no author/editor at all. The owner's rule — already enforced
-  // at the import gate (parseBibTeXToMetadata requires at least one author) —
-  // is that an authorless citation is an error. Enforce the same rule here so
-  // both toBibTeX and toFormattedCitation fail loudly rather than emitting a
-  // nameless entry. An edited volume (editor present, no author) IS valid; only
-  // the truly nameless case (no author AND no editor) throws. No placeholder
-  // author is fabricated.
-  const { author, editor } = cslNamesByRole(item.creators);
-  if (author.length === 0 && editor.length === 0) {
+  // Throw condition 2 (name-bearing creator). A citation with no name-bearing
+  // creator is bibliographically degenerate: it renders with no author/editor
+  // at all. The owner's rule — already enforced at the import gate
+  // (parseBibTeXToMetadata requires at least one author) — is that an authorless
+  // citation is an error. Enforce the same rule here, via the same
+  // hasNameBearingCreator predicate isCitable consults, so both toBibTeX and
+  // toFormattedCitation fail loudly rather than emitting a nameless entry. An
+  // edited volume (editor present, no author) IS valid; only the truly nameless
+  // case throws. No placeholder author is fabricated. The message distinguishes
+  // the two ways this can happen — no creators at all, vs. creators present but
+  // none name-bearing — so the error is accurate for an item that visibly HAS
+  // creators (e.g. a translator-only volume).
+  if (!hasNameBearingCreator(item)) {
+    const label = item.title ?? item.id;
     throw new Error(
-      `Item "${item.title ?? item.id}" has no author or editor; a citation requires at least one name-bearing creator.`,
+      item.creators.length === 0
+        ? `Item "${label}" has no creators; a citation requires at least one name-bearing creator (author or editor).`
+        : `Item "${label}" has creators but none are name-bearing; a citation requires at least one author or editor.`,
     );
   }
+  const { author, editor } = cslNamesByRole(item.creators);
   if (author.length > 0) record.author = author;
   if (editor.length > 0) record.editor = editor;
 

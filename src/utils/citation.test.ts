@@ -225,37 +225,78 @@ describe('copying a citation requires a name-bearing creator', () => {
 
 describe('isCitable distinguishes works that have a bibliographic form', () => {
   // The citability predicate the UI consults to decide whether to offer the
-  // copy-citation actions. It is the type-level inverse of itemToCsl's
-  // throw-for-non-citable-type branch: a citable type renders, an attachment
-  // (a raw file, not a citable work) does not.
+  // copy-citation actions. It mirrors itemToCsl exactly: a citable work TYPE
+  // that also carries a name-bearing creator renders, an attachment (a raw
+  // file, not a citable work) does not. The book here carries an author so the
+  // TYPE-level distinction is what this case exercises.
   it('is true for a bibliographic work type and false for an attachment', () => {
-    const book = makeItem({ itemType: 'book', title: 'Citable Work' });
+    const book = makeItem({
+      itemType: 'book',
+      title: 'Citable Work',
+      creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+    });
     const attachment = makeItem({ itemType: 'attachment', title: 'scan.pdf' });
 
     expect(isCitable(book)).toBe(true);
     expect(isCitable(attachment)).toBe(false);
   });
 
-  it('agrees with itemToCsl: a non-citable type throws and a citable type renders', () => {
-    // Prove the predicate is the same throw-vs-render decision, not an
-    // independent hardcoded list. Each item carries a real author so only the
-    // TYPE-level decision is exercised (the nameless-creator throw is separate).
-    const probe = (itemType: ItemType): ZoteroItem => makeItem({
-      itemType,
-      title: 'Probe Title',
-      creators: [{ firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' }],
+  it('is false for a citable TYPE whose only creator is a non-name-bearing role', () => {
+    // The defect this remediation closes: a citable item TYPE (book) whose
+    // only creator is a translator has no bibliographic name, so itemToCsl
+    // throws — yet a type-only isCitable returned true, so the UI offered a
+    // copy action that then threw uncaught. isCitable must agree with EVERY
+    // condition under which itemToCsl throws, not only the type condition.
+    const translatorOnlyBook = makeItem({
+      itemType: 'book',
+      title: 'The Iliad',
+      creators: [{ firstName: 'Emily', lastName: 'Wilson', creatorType: 'translator' }],
+      publisher: 'Norton',
+      date: '2023',
     });
 
-    // The non-citable type: isCitable false, and rendering it throws.
-    const attachment = probe('attachment');
-    expect(isCitable(attachment)).toBe(false);
-    expect(() => toBibTeX(attachment)).toThrow();
+    // The type IS citable, but the item is not: no name-bearing creator.
+    expect(isCitable(translatorOnlyBook)).toBe(false);
+    // And the predicate agrees with the throw: rendering it fails loud.
+    expect(() => toBibTeX(translatorOnlyBook)).toThrow();
+    expect(() => toFormattedCitation(translatorOnlyBook)).toThrow();
+  });
 
-    // Citable types: isCitable true, and rendering them does NOT throw.
-    for (const itemType of ['journalArticle', 'book', 'conferencePaper', 'thesis', 'webpage'] as const) {
-      const item = probe(itemType);
-      expect(isCitable(item), `${itemType} must be citable`).toBe(true);
-      expect(() => toBibTeX(item), `${itemType} must render`).not.toThrow();
+  it('agrees with itemToCsl across BOTH throw conditions (type and name-bearing creator)', () => {
+    // Prove the predicate is the same throw-vs-render decision as itemToCsl,
+    // not an independent hardcoded list. The cases span every way itemToCsl
+    // can throw (non-citable type; citable type but no creators; citable type
+    // but only non-name-bearing creators) and every way it renders (author;
+    // editor-only). Wherever isCitable is false, a direct render MUST throw;
+    // wherever true, it MUST NOT.
+    const author = { firstName: 'Ada', lastName: 'Lovelace', creatorType: 'author' };
+    const translator = { firstName: 'Emily', lastName: 'Wilson', creatorType: 'translator' };
+    const editor = { firstName: 'Timothy', lastName: 'Gowers', creatorType: 'editor' };
+
+    const cases: { item: ZoteroItem; citable: boolean; why: string }[] = [
+      // Non-citable type.
+      { item: makeItem({ itemType: 'attachment', title: 'scan.pdf', creators: [author] }), citable: false, why: 'attachment type' },
+      // Citable types with a name-bearing creator (author): render.
+      ...(['journalArticle', 'book', 'conferencePaper', 'thesis', 'webpage'] as const).map(itemType => ({
+        item: makeItem({ itemType, title: 'Probe', creators: [author] }),
+        citable: true,
+        why: `${itemType} with author`,
+      })),
+      // Citable type, editor-only (name-bearing): renders.
+      { item: makeItem({ itemType: 'book', title: 'Companion', creators: [editor] }), citable: true, why: 'editor-only book' },
+      // Citable type, no creators at all: throws → not citable.
+      { item: makeItem({ itemType: 'book', title: 'Anon Treatise', creators: [] }), citable: false, why: 'book with no creators' },
+      // Citable type, only a non-name-bearing creator: throws → not citable.
+      { item: makeItem({ itemType: 'journalArticle', title: 'Survey', creators: [translator] }), citable: false, why: 'translator-only article' },
+    ];
+
+    for (const { item, citable, why } of cases) {
+      expect(isCitable(item), `isCitable(${why})`).toBe(citable);
+      if (citable) {
+        expect(() => toBibTeX(item), `${why} must render`).not.toThrow();
+      } else {
+        expect(() => toBibTeX(item), `${why} must throw`).toThrow();
+      }
     }
   });
 });
