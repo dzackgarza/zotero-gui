@@ -18,7 +18,7 @@ test.beforeEach(async ({ request }) => {
   await setFixtureScenario(request, 'ready');
 });
 
-test('boots the full Zotero GUI against the fixture API without a render-boundary crash', async ({ page }) => {
+test('boots the full Zotero GUI and renders canonical fixture library data', async ({ page }) => {
   const pageErrors: string[] = [];
   const browserConsoleErrors: string[] = [];
 

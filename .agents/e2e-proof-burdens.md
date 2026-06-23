@@ -3,16 +3,16 @@
 This file is the review contract for the Zotero GUI Playwright suite.
 It is agent-facing test doctrine for this repository, not product documentation.
 
-## Current Failure
+## Replaced Failure
 
-The current suite contains a laundering test:
+The suite previously contained a laundering test:
 
 - `tests/e2e/app-workflows.spec.ts` seeds `localStorage['zotero-gui:columns:v1']` with the old array-shaped column layout.
 - The test expects `Application Render Error` and the absence of the library row.
 - That assertion proves the app can crash.
   It does not prove a supported user story.
 
-That test must not be preserved, renamed, or relabeled.
+That test was replaced by the migration burden below and must not be restored, renamed, or relabeled.
 Its intention is valid: old persisted column layout can exist in a real browser profile after the TanStack table migration.
 The implementation is invalid: a generic React render boundary is not an acceptable product behavior or proof surface.
 
