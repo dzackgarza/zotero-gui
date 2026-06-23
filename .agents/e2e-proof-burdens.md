@@ -36,6 +36,21 @@ They cannot be cited as proof unless the visible state is itself the user-owned 
 
 ## User Stories And Burdens
 
+### Actual App Entrypoint
+
+User story: a user runs the canonical local app entrypoint and searches their real Zotero library in the browser.
+
+Owned boundary: `just dev` -> API server -> Vite proxy -> `/api/startup` -> `/api/library` -> search input -> rendered library table.
+
+Proof burden:
+
+- Start the app through the canonical public recipe, not a fixture API and not an already-running ambient server.
+- Prove `/api/startup` becomes available through the frontend proxy before the browser workflow proceeds.
+- Fetch `/api/library` through that same proxy and validate the production library payload schema.
+- Use a real bibliographic witness from that payload.
+- Navigate the browser through the actual app, search for the witness title, and prove the table renders the same title and creator from the live library.
+- Do not count fixture-backed Playwright coverage, frontend-only Vite liveness, status-only checks, or generic error absence as this proof.
+
 ### Boot With Existing Browser State
 
 User story: a returning user opens the app in the same browser profile after a column-layout persistence migration.
