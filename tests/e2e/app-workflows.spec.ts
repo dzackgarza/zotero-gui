@@ -31,19 +31,34 @@ test('renders library-load failures from the real API route as the App failure v
   await expect(page.getByRole('button', { name: /reload library/i })).toBeVisible();
 });
 
-test('fails loud on outdated persisted column state instead of silently resetting', async ({ page, request }) => {
+test('boots with historical array-shaped persisted column state and rewrites it', async ({ page, request }) => {
   await setFixtureScenario(request, 'ready');
-  await page.addInitScript(() => {
-    localStorage.setItem('zotero-gui:columns:v1', JSON.stringify([
-      { key: 'title', visible: true, width: 280 },
-      { key: 'creators_compact', visible: true, width: 180 },
-    ]));
-  });
+  const historicalColumnLayout = DEFAULT_COLUMNS.map(column => ({
+    key: column.key,
+    visible: column.visible,
+    width: column.width,
+  }));
+  const expectedPersistedLayout = {
+    version: 2,
+    columnVisibility: Object.fromEntries(DEFAULT_COLUMNS.map(column => [column.key, column.visible])),
+    columnOrder: DEFAULT_COLUMNS.map(column => column.key),
+    columnSizing: Object.fromEntries(DEFAULT_COLUMNS.map(column => [column.key, column.width])),
+  };
+  await page.addInitScript(columns => {
+    localStorage.setItem('zotero-gui:columns:v1', JSON.stringify(columns));
+  }, historicalColumnLayout);
 
   await page.goto('/');
 
-  await expect(page.getByText('Application Render Error')).toBeVisible();
-  await expect(page.getByText('Small gaps between primes')).toHaveCount(0);
+  await expect(page.getByText('Small gaps between primes')).toBeVisible();
+  await expect(page.getByText('Maynard')).toBeVisible();
+  await expect(page.getByText('Number theory')).toBeVisible();
+
+  const rewrittenColumnLayout = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('zotero-gui:columns:v1') as string),
+  );
+  expect(rewrittenColumnLayout).toEqual(expectedPersistedLayout);
+  await expect(page.getByText('Application Render Error')).toHaveCount(0);
 });
 
 test('reconciles a selected collection after reload drops it', async ({ page, request }) => {
@@ -53,9 +68,23 @@ test('reconciles a selected collection after reload drops it', async ({ page, re
   await page.getByText('Soon Deleted').first().click();
   await expect(page.getByText('Selected Collection Paper')).toBeVisible();
 
+  const reloadResponse = page.waitForResponse(response =>
+    response.url().endsWith('/api/library') && response.request().method() === 'GET',
+  );
   await page.getByTitle('Sync library now').click();
+  const response = await reloadResponse;
+  expect(response.status()).toBe(200);
+  const payload = await response.json() as {
+    items: Array<{ title: string }>;
+    collections: Array<{ kind: string; id: string; name: string }>;
+  };
+  expect(payload.items.map(item => item.title)).toEqual(['Other Library Paper']);
+  expect(payload.collections).toEqual([{ kind: 'library-root', id: 'all', name: 'My Library' }]);
 
   await expect(page.getByText('Other Library Paper')).toBeVisible();
+  await expect(page.getByText('Selected Collection Paper')).toHaveCount(0);
+  await expect(page.getByText('Soon Deleted')).toHaveCount(0);
+  await expect(page.getByText('Library is empty or filter returned zero matches.')).toHaveCount(0);
   await expect(page.getByText('Application Render Error')).toHaveCount(0);
 });
 
@@ -141,11 +170,16 @@ test('copies APA citations for citable selections and rejects attachment selecti
   await expect(page.getByText('APA Citation copied to clipboard!')).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain('Germain');
+  expect(copied).toContain('1816');
+  expect(copied).toContain('Citable Journal Paper');
 
   await page.getByText('Standalone Attachment File').click();
   await runCommand(page, 'Copy Selected APA Citation');
 
   await expect(page.getByText('This item type cannot be cited.')).toBeVisible();
+  const rejectedClipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(rejectedClipboard).toBe(copied);
+  expect(rejectedClipboard).not.toContain('Standalone Attachment File');
   await expect(page.getByText('Application Render Error')).toHaveCount(0);
 });
 
