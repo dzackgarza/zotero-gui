@@ -183,7 +183,11 @@ function scenario(
 let activeScenario = SCENARIO_FACTORIES.ready();
 
 function nextVersionResponse(): VersionResponse {
-  const response = activeScenario.versionResponses[activeScenario.versionRequestIndex];
+  const responseIndex = Math.min(
+    activeScenario.versionRequestIndex,
+    activeScenario.versionResponses.length - 1,
+  );
+  const response = activeScenario.versionResponses[responseIndex];
   if (response === undefined) {
     throw new Error(`Scenario ${activeScenario.name} has no remaining startup response.`);
   }
