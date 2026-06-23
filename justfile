@@ -11,13 +11,10 @@ build:
     bun run build
 
 dev:
-    bun run dev
+    bun run dev:full
 
 api:
     bun run api
-
-dev-full:
-    bun run dev:full
 
 diagnostic-live-vite-deps:
     bun run diagnostic:live-vite-deps

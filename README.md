@@ -21,18 +21,17 @@ bun install
 Start both the API backend and Vite frontend concurrently:
 
 ```bash
-just dev-full
+just dev
 ```
 
 Open your browser and navigate to `http://localhost:3000` to interact with the GUI.
 
-To run the components separately:
+To run the API server by itself for debugging:
 
 - API server: `just api` (starts on port 3001)
-- Frontend: `just dev` (starts on port 3000)
 
 After dependency changes, restart the frontend with `just dev` and hard-reload the browser tab.
-The frontend recipe runs Vite with forced dependency optimization so stale `/node_modules/.vite/deps/` URLs are regenerated instead of reusing an outdated optimizer cache.
+The frontend implementation runs Vite with forced dependency optimization so stale `/node_modules/.vite/deps/` URLs are regenerated instead of reusing an outdated optimizer cache.
 Use `just diagnostic-live-vite-deps` against the running frontend to verify that the current server is serving every optimized dependency recorded by Vite.
 
 ## Configuration
