@@ -9,7 +9,7 @@ import { isCitable, toFormattedCitation } from './utils/citation';
 import { DEFAULT_SEARCH_FIELDS } from './utils/fuzzy';
 import { useLibraryApi } from './useLibraryApi';
 import { createAppCommands } from './appCommands';
-import { resetColumnLayout, useLibraryTable } from './useLibraryTable';
+import { resetColumnLayout, useLibraryTableState } from './useLibraryTable';
 import { THEME_CLASSES, useThemePreference } from './useThemePreference';
 
 // Top level components
@@ -203,7 +203,11 @@ export default function App() {
 
   // Headless table engine (column visibility/order/sizing/sorting + persistence).
   // Sorting state lives here and orders rows via the columnModel sortingFn.
-  const libraryTable = useLibraryTable(filteredLibraryItems);
+  const {
+    table: libraryTable,
+    columnLayoutStorageError,
+    resetPersistedColumnLayout,
+  } = useLibraryTableState(filteredLibraryItems);
 
   const openPaletteFromToolbar = useCallback(() => {
     const paletteHost = paletteHostRef.current;
@@ -250,6 +254,29 @@ export default function App() {
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Reload Library
+          </button>
+        </section>
+      </div>
+    );
+  }
+
+  if (columnLayoutStorageError !== null) {
+    return (
+      <div className="h-screen bg-[#1e1e1e] text-[#cccccc] flex items-center justify-center p-6">
+        <section className="w-full max-w-2xl border border-amber-500/40 bg-[#252526] p-6 shadow-2xl">
+          <h1 className="text-lg font-semibold text-amber-300">Column Layout Storage Failed</h1>
+          <p className="mt-3 text-sm text-slate-200">
+            {columnLayoutStorageError.message}
+          </p>
+          <p className="mt-3 font-mono text-xs text-amber-100">
+            Layout state: {columnLayoutStorageError.kind}
+          </p>
+          <button
+            onClick={resetPersistedColumnLayout}
+            className="mt-5 inline-flex items-center gap-2 border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reset Column Layout
           </button>
         </section>
       </div>

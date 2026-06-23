@@ -1,13 +1,13 @@
 // This suite exercises the localStorage-backed column persistence layer, so it
 // is a .tsx file to run under the jsdom test project (DOM storage API).
 import { afterEach, describe, expect, it } from 'vitest';
-import { ZodError } from 'zod';
 import {
   COLUMN_LAYOUT_PERSIST_VERSION,
   COLUMN_STORAGE_KEY,
   cellValue,
   defaultColumnLayout,
   readColumnLayout,
+  readColumnLayoutResult,
   writeColumnLayout,
   zoteroSortingFn,
 } from './columnModel';
@@ -88,21 +88,43 @@ describe('column layout persistence', () => {
     expect(readColumnLayout().columnVisibility.title).toBe(true);
   });
 
-  it('throws on an outdated schema version instead of resetting', () => {
+  it('classifies an outdated schema version instead of resetting', () => {
     localStorage.setItem(COLUMN_STORAGE_KEY, storedLayout({ version: 1 }));
-    expect(() => readColumnLayout()).toThrow(ZodError);
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'outdated_version' },
+    });
   });
 
-  it('throws on a layout missing a contract column', () => {
+  it('classifies malformed JSON as invalid storage', () => {
+    localStorage.setItem(COLUMN_STORAGE_KEY, '{not valid json');
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'invalid_json' },
+    });
+  });
+
+  it('classifies an incomplete versioned layout shape', () => {
+    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify({ version: COLUMN_LAYOUT_PERSIST_VERSION }));
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'invalid_shape' },
+    });
+  });
+
+  it('classifies a layout missing a contract column', () => {
     const base = defaultColumnLayout();
     localStorage.setItem(
       COLUMN_STORAGE_KEY,
       storedLayout({ columnOrder: base.columnOrder.filter(id => id !== 'doi') }),
     );
-    expect(() => readColumnLayout()).toThrow(/missing column: doi|does not match the current column contract/);
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'contract_mismatch' },
+    });
   });
 
-  it('throws on a layout naming an unknown column in a state slice', () => {
+  it('classifies a layout naming an unknown column in a state slice', () => {
     const base = defaultColumnLayout();
     localStorage.setItem(
       COLUMN_STORAGE_KEY,
@@ -110,7 +132,10 @@ describe('column layout persistence', () => {
         columnVisibility: { ...base.columnVisibility, phantomColumn: true },
       }),
     );
-    expect(() => readColumnLayout()).toThrow(/unknown column: phantomColumn/);
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'contract_mismatch' },
+    });
   });
 
   it('migrates the historical hand-rolled array shape', () => {
@@ -137,7 +162,7 @@ describe('column layout persistence', () => {
     expect(migrated.columnSizing.publicationTitle).toBe(175);
   });
 
-  it('throws on a partial historical hand-rolled array shape', () => {
+  it('classifies a partial historical hand-rolled array shape', () => {
     localStorage.setItem(
       COLUMN_STORAGE_KEY,
       JSON.stringify([
@@ -145,7 +170,21 @@ describe('column layout persistence', () => {
         { key: 'creators_compact', visible: true, width: 180 },
       ]),
     );
-    expect(() => readColumnLayout()).toThrow(/does not match the current column contract/);
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'contract_mismatch' },
+    });
+  });
+
+  it('classifies a malformed historical hand-rolled array shape', () => {
+    localStorage.setItem(
+      COLUMN_STORAGE_KEY,
+      JSON.stringify([{ key: 'title', visible: 'yes', width: 280 }]),
+    );
+    expect(readColumnLayoutResult()).toMatchObject({
+      status: 'storage_error',
+      error: { kind: 'invalid_shape' },
+    });
   });
 });
 

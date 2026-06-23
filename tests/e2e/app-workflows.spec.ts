@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { COLUMN_STORAGE_KEY } from '../../src/columnModel';
 import { DEFAULT_COLUMNS } from '../../src/data/samples';
 import { PALETTE_SEARCH_KEYS } from '../../src/utils/fuzzy';
 import { fixtureApiUrl, setFixtureScenario } from './helpers';
@@ -59,6 +60,36 @@ test('boots with historical array-shaped persisted column state and rewrites it'
   );
   expect(rewrittenColumnLayout).toEqual(expectedPersistedLayout);
   await expect(page.getByText('Application Render Error')).toHaveCount(0);
+});
+
+test('surfaces corrupt persisted column state with a repair action', async ({ page, request }) => {
+  await setFixtureScenario(request, 'ready');
+  const expectedPersistedLayout = {
+    version: 2,
+    columnVisibility: Object.fromEntries(DEFAULT_COLUMNS.map(column => [column.key, column.visible])),
+    columnOrder: DEFAULT_COLUMNS.map(column => column.key),
+    columnSizing: Object.fromEntries(DEFAULT_COLUMNS.map(column => [column.key, column.width])),
+  };
+  await page.addInitScript(storageKey => {
+    localStorage.setItem(storageKey, '{not valid json');
+  }, COLUMN_STORAGE_KEY);
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'Column Layout Storage Failed' })).toBeVisible();
+  await expect(page.getByText('Layout state: invalid_json')).toBeVisible();
+  await expect(page.getByText('Small gaps between primes')).toHaveCount(0);
+  await expect(page.getByText('Application Render Error')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Reset Column Layout' }).click();
+
+  await expect(page.getByText('Small gaps between primes')).toBeVisible();
+  await expect(page.getByText('Maynard')).toBeVisible();
+  await expect(page.getByText('Number theory')).toBeVisible();
+  const repairedColumnLayout = await page.evaluate(storageKey =>
+    JSON.parse(localStorage.getItem(storageKey) as string),
+  COLUMN_STORAGE_KEY);
+  expect(repairedColumnLayout).toEqual(expectedPersistedLayout);
 });
 
 test('reconciles a selected collection after reload drops it', async ({ page, request }) => {

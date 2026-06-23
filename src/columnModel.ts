@@ -32,13 +32,40 @@ export interface ColumnLayoutState {
   columnSizing: ColumnSizingState;
 }
 
-// --- Persistence schema (versioned, schema-validated, FAIL-LOUD) ---------
+export type ColumnLayoutStorageErrorKind =
+  | 'invalid_json'
+  | 'invalid_shape'
+  | 'outdated_version'
+  | 'contract_mismatch';
+
+export class ColumnLayoutStorageError extends Error {
+  readonly kind: ColumnLayoutStorageErrorKind;
+  readonly cause: unknown;
+
+  constructor(kind: ColumnLayoutStorageErrorKind, message: string, cause: unknown) {
+    super(message);
+    this.name = 'ColumnLayoutStorageError';
+    this.kind = kind;
+    this.cause = cause;
+  }
+}
+
+export type ColumnLayoutReadResult =
+  | { status: 'ready'; layout: ColumnLayoutState }
+  | { status: 'storage_error'; error: ColumnLayoutStorageError };
+
+type StoredJsonParseResult =
+  | { status: 'parsed'; parsed: unknown }
+  | { status: 'storage_error'; error: ColumnLayoutStorageError };
+
+// --- Persistence schema (versioned, schema-validated) --------------------
 //
 // A stored layout is the three TanStack state slices plus a schema version. A
-// malformed stored value must throw, never silently reset. The version is
-// bumped if the persisted shape ever changes. The one admitted unversioned
-// shape is the hand-rolled column array written by this app before the TanStack
-// migration; it is parsed explicitly and converted at this boundary.
+// malformed stored value becomes a ColumnLayoutStorageError, never a silent
+// reset. The version is bumped if the persisted shape ever changes. The one
+// admitted unversioned shape is the hand-rolled column array written by this
+// app before the TanStack migration; it is parsed explicitly and converted at
+// this boundary.
 export const COLUMN_LAYOUT_PERSIST_VERSION = 2;
 
 const HistoricalStoredColumnSchema = z.strictObject({
@@ -61,40 +88,87 @@ const StoredColumnLayoutSchema = z
 export type StoredColumnLayout = z.infer<typeof StoredColumnLayoutSchema>;
 
 const DEFAULT_COLUMN_IDS: SortKey[] = DEFAULT_COLUMNS.map(column => column.key);
+const StoredColumnLayoutVersionProbeSchema = z.object({ version: z.unknown() }).passthrough();
 
-function assertExactColumnOrder(storedOrder: string[], contractIds: ReadonlySet<string>): void {
+function storageReadError(
+  kind: ColumnLayoutStorageErrorKind,
+  cause: unknown,
+): ColumnLayoutStorageError {
+  return new ColumnLayoutStorageError(kind, 'Stored column layout could not be read.', cause);
+}
+
+function contractMismatchError(cause: unknown): ColumnLayoutStorageError {
+  return storageReadError('contract_mismatch', cause);
+}
+
+function ready(layout: ColumnLayoutState): ColumnLayoutReadResult {
+  return { status: 'ready', layout };
+}
+
+function storageError(kind: ColumnLayoutStorageErrorKind, cause: unknown): ColumnLayoutReadResult {
+  return { status: 'storage_error', error: storageReadError(kind, cause) };
+}
+
+function parsedJson(parsed: unknown): StoredJsonParseResult {
+  return { status: 'parsed', parsed };
+}
+
+function parsedJsonError(kind: ColumnLayoutStorageErrorKind, cause: unknown): StoredJsonParseResult {
+  return { status: 'storage_error', error: storageReadError(kind, cause) };
+}
+
+function columnOrderContractError(
+  storedOrder: string[],
+  contractIds: ReadonlySet<string>,
+): ColumnLayoutStorageError | null {
   const storedOrderIds = new Set(storedOrder);
 
   if (storedOrder.length !== contractIds.size) {
-    throw new Error('Stored column layout order does not match the current column contract.');
+    return contractMismatchError('order length mismatch');
   }
   if (storedOrderIds.size !== contractIds.size) {
-    throw new Error('Stored column layout order does not match the current column contract.');
+    return contractMismatchError('duplicate column ids');
   }
   for (const id of contractIds) {
     if (!storedOrderIds.has(id)) {
-      throw new Error(`Stored column layout is missing column: ${id}`);
+      return contractMismatchError(`missing column: ${id}`);
     }
   }
   for (const id of storedOrderIds) {
     if (!contractIds.has(id)) {
-      throw new Error(`Stored column layout contains unknown column: ${id}`);
+      return contractMismatchError(`unknown column: ${id}`);
     }
   }
+  return null;
 }
 
-function assertKnownColumnKeys(keys: Iterable<string>, contractIds: ReadonlySet<string>, label: string): void {
+function knownColumnKeysError(
+  keys: Iterable<string>,
+  contractIds: ReadonlySet<string>,
+  label: string,
+): ColumnLayoutStorageError | null {
   for (const id of keys) {
     if (!contractIds.has(id)) {
-      throw new Error(`Stored column ${label} references unknown column: ${id}`);
+      return contractMismatchError(`${label} references unknown column: ${id}`);
     }
   }
+  return null;
 }
 
-function layoutFromHistoricalColumns(parsed: unknown[], contractIds: ReadonlySet<string>): ColumnLayoutState {
-  const storedColumns = HistoricalStoredColumnsSchema.parse(parsed);
+function layoutFromHistoricalColumns(
+  parsed: unknown[],
+  contractIds: ReadonlySet<string>,
+): ColumnLayoutReadResult {
+  const historicalResult = HistoricalStoredColumnsSchema.safeParse(parsed);
+  if (!historicalResult.success) {
+    return storageError('invalid_shape', historicalResult.error);
+  }
+  const storedColumns = historicalResult.data;
   const columnOrder = storedColumns.map(column => column.key);
-  assertExactColumnOrder(columnOrder, contractIds);
+  const orderError = columnOrderContractError(columnOrder, contractIds);
+  if (orderError !== null) {
+    return { status: 'storage_error', error: orderError };
+  }
 
   const columnVisibility: VisibilityState = {};
   const columnSizing: ColumnSizingState = {};
@@ -104,10 +178,67 @@ function layoutFromHistoricalColumns(parsed: unknown[], contractIds: ReadonlySet
   }
 
   return {
-    columnVisibility,
-    columnOrder,
-    columnSizing,
+    status: 'ready',
+    layout: {
+      columnVisibility,
+      columnOrder,
+      columnSizing,
+    },
   };
+}
+
+function parseStoredJson(raw: string): StoredJsonParseResult {
+  try {
+    return parsedJson(JSON.parse(raw));
+  } catch (error) {
+    return parsedJsonError('invalid_json', error);
+  }
+}
+
+function versionedLayoutContractError(
+  stored: StoredColumnLayout,
+  contractIds: ReadonlySet<string>,
+): ColumnLayoutStorageError | null {
+  const orderError = columnOrderContractError(stored.columnOrder, contractIds);
+  if (orderError !== null) {
+    return orderError;
+  }
+  const visibilityError = knownColumnKeysError(
+    Object.keys(stored.columnVisibility),
+    contractIds,
+    'visibility',
+  );
+  if (visibilityError !== null) {
+    return visibilityError;
+  }
+  return knownColumnKeysError(Object.keys(stored.columnSizing), contractIds, 'sizing');
+}
+
+function layoutFromVersionedObject(
+  parsed: unknown,
+  contractIds: ReadonlySet<string>,
+): ColumnLayoutReadResult {
+  const versionProbe = StoredColumnLayoutVersionProbeSchema.safeParse(parsed);
+  if (versionProbe.success && versionProbe.data.version !== COLUMN_LAYOUT_PERSIST_VERSION) {
+    return storageError('outdated_version', versionProbe.data.version);
+  }
+
+  const storedResult = StoredColumnLayoutSchema.safeParse(parsed);
+  if (!storedResult.success) {
+    return storageError('invalid_shape', storedResult.error);
+  }
+  const stored = storedResult.data;
+  const contractError = versionedLayoutContractError(stored, contractIds);
+  if (contractError !== null) {
+    return { status: 'storage_error', error: contractError };
+  }
+
+  // The locked column can never be persisted as hidden.
+  return ready({
+    columnVisibility: { ...stored.columnVisibility, [LOCKED_COLUMN_ID]: true },
+    columnOrder: stored.columnOrder,
+    columnSizing: stored.columnSizing,
+  });
 }
 
 export function defaultColumnLayout(): ColumnLayoutState {
@@ -127,36 +258,35 @@ export function defaultColumnLayout(): ColumnLayoutState {
   };
 }
 
-// Read persisted layout. Returns defaults ONLY when nothing is stored (first
-// run). Historical app-owned array storage is migrated exactly. Any other
-// stored value that does not match the current contract — wrong version,
-// missing/extra column ids, malformed shape — throws loudly.
-export function readColumnLayout(): ColumnLayoutState {
+export function readColumnLayoutResult(): ColumnLayoutReadResult {
   const raw = localStorage.getItem(COLUMN_STORAGE_KEY);
   if (raw === null) {
-    return defaultColumnLayout();
+    return ready(defaultColumnLayout());
   }
 
-  const parsed: unknown = JSON.parse(raw);
+  const parsedResult = parseStoredJson(raw);
+  if (parsedResult.status === 'storage_error') {
+    return { status: 'storage_error', error: parsedResult.error };
+  }
+  const parsed = parsedResult.parsed;
   const contractIds = new Set<string>(DEFAULT_COLUMN_IDS);
   if (Array.isArray(parsed)) {
     return layoutFromHistoricalColumns(parsed, contractIds);
   }
+  return layoutFromVersionedObject(parsed, contractIds);
+}
 
-  const stored = StoredColumnLayoutSchema.parse(parsed);
-
-  assertExactColumnOrder(stored.columnOrder, contractIds);
-  assertKnownColumnKeys(Object.keys(stored.columnVisibility), contractIds, 'visibility');
-  assertKnownColumnKeys(Object.keys(stored.columnSizing), contractIds, 'sizing');
-
-  // The locked column can never be persisted as hidden.
-  const columnVisibility: VisibilityState = { ...stored.columnVisibility, [LOCKED_COLUMN_ID]: true };
-
-  return {
-    columnVisibility,
-    columnOrder: stored.columnOrder,
-    columnSizing: stored.columnSizing,
-  };
+// Read persisted layout. Returns defaults ONLY when nothing is stored (first
+// run). Historical app-owned array storage is migrated exactly. Any other
+// stored value that does not match the current contract — wrong version,
+// missing/extra column ids, malformed shape — is routed as an owned storage
+// boundary error.
+export function readColumnLayout(): ColumnLayoutState {
+  const result = readColumnLayoutResult();
+  if (result.status === 'storage_error') {
+    throw result.error;
+  }
+  return result.layout;
 }
 
 export function writeColumnLayout(state: ColumnLayoutState): void {

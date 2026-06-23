@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getCoreRowModel,
   getSortedRowModel,
@@ -14,8 +14,9 @@ import {
 import {
   LOCKED_COLUMN_ID,
   ZOTERO_COLUMNS,
+  ColumnLayoutStorageError,
   defaultColumnLayout,
-  readColumnLayout,
+  readColumnLayoutResult,
   writeColumnLayout,
 } from './columnModel';
 import type { ZoteroItem } from './types';
@@ -24,26 +25,59 @@ function applyUpdater<T>(updater: Updater<T>, previous: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(previous) : updater;
 }
 
+interface InitialColumnLayout {
+  layout: ReturnType<typeof defaultColumnLayout>;
+  storageError: ColumnLayoutStorageError | null;
+}
+
+export interface LibraryTableState {
+  table: Table<ZoteroItem>;
+  columnLayoutStorageError: ColumnLayoutStorageError | null;
+  resetPersistedColumnLayout: () => void;
+}
+
+function readInitialColumnLayout(): InitialColumnLayout {
+  const result = readColumnLayoutResult();
+  if (result.status === 'storage_error') {
+    return { layout: defaultColumnLayout(), storageError: result.error };
+  }
+  return { layout: result.layout, storageError: null };
+}
+
 // Owns the headless table engine for the library view: column visibility,
 // order, sizing, and sorting are all TanStack-managed and persisted under the
-// existing versioned localStorage key. The initial state is read loudly from
-// storage (a malformed/outdated value throws during render, surfacing the
-// ErrorBoundary rather than silently resetting).
-export function useLibraryTable(items: ZoteroItem[]): Table<ZoteroItem> {
-  const initialLayout = useMemo(readColumnLayout, []);
+// existing versioned localStorage key. Invalid storage is returned as an owned
+// storage-boundary error so App can render a repair action instead of the
+// generic ErrorBoundary.
+export function useLibraryTableState(items: ZoteroItem[]): LibraryTableState {
+  const initialLayout = useMemo(readInitialColumnLayout, []);
 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
-    initialLayout.columnVisibility,
+    initialLayout.layout.columnVisibility,
   );
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(initialLayout.columnOrder);
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(initialLayout.columnSizing);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(initialLayout.layout.columnOrder);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(initialLayout.layout.columnSizing);
   const [sorting, setSorting] = useState<SortingState>([{ id: LOCKED_COLUMN_ID, desc: false }]);
+  const [columnLayoutStorageError, setColumnLayoutStorageError] =
+    useState<ColumnLayoutStorageError | null>(initialLayout.storageError);
 
   useEffect(() => {
+    if (columnLayoutStorageError !== null) {
+      return;
+    }
     writeColumnLayout({ columnVisibility, columnOrder, columnSizing });
-  }, [columnVisibility, columnOrder, columnSizing]);
+  }, [columnLayoutStorageError, columnVisibility, columnOrder, columnSizing]);
 
-  return useReactTable<ZoteroItem>({
+  const resetPersistedColumnLayout = useCallback(() => {
+    const layout = defaultColumnLayout();
+    setColumnVisibility(layout.columnVisibility);
+    setColumnOrder(layout.columnOrder);
+    setColumnSizing(layout.columnSizing);
+    writeColumnLayout(layout);
+    setColumnLayoutStorageError(null);
+  }, []);
+
+  const table = useReactTable<ZoteroItem>({
     data: items,
     columns: ZOTERO_COLUMNS,
     state: { columnVisibility, columnOrder, columnSizing, sorting },
@@ -62,6 +96,12 @@ export function useLibraryTable(items: ZoteroItem[]): Table<ZoteroItem> {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  return { table, columnLayoutStorageError, resetPersistedColumnLayout };
+}
+
+export function useLibraryTable(items: ZoteroItem[]): Table<ZoteroItem> {
+  return useLibraryTableState(items).table;
 }
 
 // All leaf columns (visible and hidden) in the current columnOrder. The
