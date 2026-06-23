@@ -1,0 +1,650 @@
+[
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LGol4",
+    "path": "src/server/liveDiagnostics.ts",
+    "line": 81,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T16:44:13Z",
+        "databaseId": 3448744185,
+        "body": "### [Slop Review][tier1] SLOP\n<!-- ai-review-fingerprint: de012989ea1a0453af169a9534d8b82f74d3a2b9754961e72fb6efada9ad9af3 -->\n\n**Location:** `src/server/liveDiagnostics.ts:85-106`\n**Violated invariant:** Every diagnostic that writes side effects must provide a cleanup mechanism or be idempotent; timing assumptions must be poll-based rather than hard-coded delays.\n**Proof:** `rg 'importBibTeXToZotero' src/server/liveDiagnostics.ts -A 20 | head -25`\n**Pattern:** side-effect-without-cleanup + hard-coded-timing\n**Why this matters:** Running the diagnostic multiple times accumulates unstoppable stale items in the user's Zotero library. Under I/O load or slow storage, the 1500ms window may be insufficient, causing a false diagnostic failure that the user cannot distinguish from a genuine Zotero connectivity problem.\n**Evidence:** `src/server/liveDiagnostics.ts:85-106` (file-read)"
+      },
+      {
+        "author": "dzackgarza",
+        "createdAt": "2026-06-21T17:26:05Z",
+        "databaseId": 3448796503,
+        "body": "Accepted.\n\nClaim disposition: Aligned. src/server/liveDiagnostics.ts runAddItemDiagnostic (85-106) writes a real, timestamped item into the live Zotero library on every run and never removes it, so repeated diagnostic runs accumulate diagnostic records in the user real library with no cleanup or identification-for-removal path. This is the owner-affecting half of the finding (durable side effects in real user data without a cleanup/idempotence mechanism).\nRemediation disposition: Deferred to the remediation round.\nPolicy basis: test-guidelines Live Test Data Lifecycle (real-boundary side effects must be markable and cleanable); bespoke-software-policy (do not leave debris in the owner real data). Note: the secondary fixed-1500ms-delay concern fails loud today (it throws if the item is not visible), so the load-bearing accepted concern here is the missing cleanup, not the timing.\nCode/action taken: Accepted policy-aligned issue, remediation to follow. No fix detail recorded; thread remains open.\nAudit anchor: src/server/liveDiagnostics.ts:85-106 (runAddItemDiagnostic)."
+      },
+      {
+        "author": "dzackgarza",
+        "createdAt": "2026-06-21T19:57:28Z",
+        "databaseId": 3448984948,
+        "body": "**Accepted (policy-aligned defect, to be remediated).**\n\nDisposition (independent disposition subagent):\n- Claim disposition: true; defect still present in HEAD.\n- Policy basis: anti-slop hard-coded-timing in a proof path. `runAddItemDiagnostic` writes a real item to the user's Zotero library and then waits a fixed `await delay(1500)` (src/server/liveDiagnostics.ts:94) before reloading it from the eventually-consistent DB. A hard-coded sleep racing an eventually-consistent boundary can produce a false diagnostic failure (item not yet visible) that is indistinguishable from a genuine connectivity problem. (Note: 09d3964 touched this file only for a CONFIG_PATH import refactor and did not alter this logic.)\n- Audit anchor: src/server/liveDiagnostics.ts:82-103, specifically the `await delay(1500)` at line 94 before `reloadItem`.\n\nThis thread is left OPEN as an accepted policy-aligned defect for the remediation round. No fix is prescribed here.\n"
+      },
+      {
+        "author": "dzackgarza",
+        "createdAt": "2026-06-21T21:09:10Z",
+        "databaseId": 3449067028,
+        "body": "Disposition (independent disposition subagent): Claim true \u2014 the add-item diagnostic uses a hard-coded 1500ms window (false-failure risk under I/O load) and writes a Zotero item with no cleanup (repeat runs accumulate stale items).\n\nStatus: BLOCKED / deferred. Remediation (poll-with-deadline visibility check + per-run identifiable item with cleanup) is a real code change, but verifying it end-to-end requires running the live Add-Item diagnostic, which performs a write/delete against the user's real Zotero library. That live write is not authorized in this session, so the fix cannot be proven at its boundary and will not be closed on an unverified change. Tracked as open until an authorized live-diagnostic run can prove the poll + cleanup behavior."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHDv9",
+    "path": "resolver-plugins/isbn-lib.mjs",
+    "line": 73,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T18:42:36Z",
+        "databaseId": 3448887776,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nGenerated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/45)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHDv_",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 175,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T18:42:36Z",
+        "databaseId": 3448887779,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nSubprocess stderr output must not be forwarded to API error responses, as it may contain file paths, environment variables, or sensitive intermediate data from resolver scripts.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/47)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHDwA",
+    "path": "resolver-plugins/isbn-lib.mjs",
+    "line": 26,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T18:42:36Z",
+        "databaseId": 3448887780,
+        "body": "## ai-review/slop / A shared utility function must be defined in exactly one owned location and imported by all consumers, not independently defined in every plugin and server module, to prevent silent divergence when on\n\nA shared utility function must be defined in exactly one owned location and imported by all consumers, not independently defined in every plugin and server module, to prevent silent divergence when one copy is corrected and others are not.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/54)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHDwB",
+    "path": "src/server/main.ts",
+    "line": 10,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T18:42:36Z",
+        "databaseId": 3448887781,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nA configuration constant that is used across multiple modules must be defined in exactly one shared location; duplicating it in two files creates a maintenance hazard where one copy can silently diverge from the other.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/52)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHDwZ",
+    "path": "resolver-plugins/isbn-lib.mjs",
+    "line": 19,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T18:42:37Z",
+        "databaseId": 3448887817,
+        "body": "### [Slop Review][tier2] SLOP SUSPECT\n<!-- ai-review-fingerprint: 3fb1f8b7f7d189f25b0f4a2cefae3dbf6bd751e78176e443bee18c6e27a43eb8 -->\n\n**Location:** `resolver-plugins/isbn-lib.mjs:19-26`\n**Violated invariant:** A shared utility function must be defined in exactly one owned location and imported by all consumers, not independently defined in every plugin and server module, to prevent silent divergence when one copy is corrected and others are not.\n**Proof:** `grep -rn 'function citeName' resolver-plugins/`\n**Pattern:** Two resolver library files (isbn-lib.mjs and zbmath-lib.mjs) each define a private citeName(name) function with identical brace-checking logic (reject author names containing `{` or `}`). Only the error message text differs. The PR extracted invariant, text, and readRawStdin into utils.mjs but left citeName duplicated. Both serve Citation.js brace-escaping as the same downstream consumer, so a future fix to one copy's brace-checking semantics (e.g., which BibTeX-special characters to reject) would silently diverge from the other.\n**Why this matters:** If the brace-rejection criterion needs to change (e.g., also reject $, \\, % which are BibTeX-special but currently pass through both citeName functions), correcting only isbn-lib.mjs produces silent divergence until a malformed zbMATH author hits the validation gate. The two copies would emit different error messages for the same class of invalid data, eroding the predictability of the fail-loud boundary.\n**Evidence:** `resolver-plugins/isbn-lib.mjs:19-26` (code), `resolver-plugins/zbmath-lib.mjs:27-34` (code), `resolver-plugins/utils.mjs:1-19` (code)\n\n**Possible duplicate disposition required:** a prior PR thread has this category/path fingerprint. Compare invariant, source, consequence, and evidence before resolving; do not suppress this finding by similarity alone."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHcED",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 410,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T20:26:16Z",
+        "databaseId": 3449017926,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Filter trashed child notes**\n\nWhen a child note is moved to Zotero Trash, Zotero records that note item in `deletedItems`, but this query still returns every child note with a parent. In that scenario the UI continues to surface the trashed note in note counts, expanded rows, the inspector, and note search even though the corresponding attachment query below now excludes deleted child items; apply the same deleted-item exclusion here before attaching notes to their parents.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHe6e",
+    "path": "resolver-plugins.json",
+    "line": 53,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T20:39:36Z",
+        "databaseId": 3449032982,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Strip query before arXiv .pdf suffix**\n\nThis URL pattern accepts common arXiv PDF links with query strings, such as `https://arxiv.org/pdf/2401.01234.pdf?download=1`, but `resolver-plugins/arxiv.mjs` removes the `.pdf` suffix before it drops `?`/`#`. For those accepted inputs the normalized ID becomes `2401.01234.pdf`, so the resolver asks arXiv for `/bibtex/2401.01234.pdf` instead of `/bibtex/2401.01234` and the import fails. Either narrow this accepted URL shape or strip query/fragment before removing the PDF suffix.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHfR9",
+    "path": "src/server/liveDiagnostics.ts",
+    "line": 106,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:41:19Z",
+        "databaseId": 3449034925,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nEvery diagnostic that writes side effects must provide a cleanup mechanism or be idempotent; timing assumptions must be poll-based rather than hard-coded delays.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/55)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHfR-",
+    "path": "zotero-gui.config.json",
+    "line": 16,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:41:19Z",
+        "databaseId": 3449034926,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nA committed config file with hard-coded developer machine paths prevents the application from running on any other machine, blocking PR review and CI validation without manual editing.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/57)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHfSG",
+    "path": "zotero-gui.config.json",
+    "line": 1,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T20:41:20Z",
+        "databaseId": 3449034939,
+        "body": "### [Slop Review][tier1] SLOP\n<!-- ai-review-fingerprint: 51e5b5515d23edca3b4464864bbd38b889142d76458fe8bbbf5d3ae32536df06 -->\n\n**Location:** `zotero-gui.config.json:1-16`\n**Violated invariant:** A committed config file with hard-coded developer machine paths prevents the application from running on any other machine, blocking PR review and CI validation without manual editing.\n**Proof:** `rg '/home/dzack/' zotero-gui.config.json`\n**Pattern:** hardcoded-path\n**Why this matters:** The reviewer cannot run 'just test' or 'just dev' without first editing the config. CI cannot validate the application because the paths do not exist. Every new contributor must discover which paths need changing by reading the file or crashing at startup.\n**Evidence:** `zotero-gui.config.json:1-16` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHfSH",
+    "path": "src/App.tsx",
+    "line": 205,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T20:41:20Z",
+        "databaseId": 3449034940,
+        "body": "### [Slop Review][tier1] SLOP\n<!-- ai-review-fingerprint: 32b865e5d03fe82870c2714b82df60b955a812c3ce304b6c13df2790ebaffc72 -->\n\n**Location:** `src/App.tsx:198-207`\n**Violated invariant:** Structured error responses from the server (with error kind and message) must be forwarded to the user, not replaced with a client-generated generic message that discards the server's classification.\n**Proof:** `rg -A 10 'const openAttachment' src/App.tsx`\n**Pattern:** error-suppression\n**Why this matters:** The server carefully classifies errors into kinds (attachment_not_found, upstream_boundary_failed, attachment_path_missing) with descriptive messages. The client discards every structured detail, leaving the user with a generic HTTP status number that disappears in 3 seconds. Debugging a failed attachment open requires reading the server log.\n**Evidence:** `src/App.tsx:198-207` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHfSI",
+    "path": "src/server/resolverPlugins.test.ts",
+    "line": 169,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T20:41:20Z",
+        "databaseId": 3449034941,
+        "body": "### [Slop Review][tier2] SLOP\n<!-- ai-review-fingerprint: e4a0029141248cfba4463ee99330f55e1060d5a92d739d33f2d78045f551d7f7 -->\n\n**Location:** `src/server/resolverPlugins.test.ts:169-190`\n**Violated invariant:** Each independent failure mode of a resolver plugin process (timeout, output limit, empty output, invalid BibTeX, multiple entries) must have its own named test so that a failure in one mode does not hide failures or regressions in others.\n**Proof:** `rg -n 'rejects timeout' src/server/resolverPlugins.test.ts`\n**Pattern:** coarse-grained-test-grouping\n**Why this matters:** When the test breaks, the developer must bisect the five failure modes manually because the single test name and single assertion framework cannot indicate which mode failed. The tight grouping also means that adding a sixth mode to the list is a low-friction decision that further dilutes diagnostic value.\n**Evidence:** `src/server/resolverPlugins.test.ts:169-190` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHiwP",
+    "path": "zotero-gui.config.json",
+    "line": 6,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T20:57:05Z",
+        "databaseId": 3449053559,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Remove immutable from the live Zotero DB URI**\n\nThis default tells SQLite the database file is immutable. When the live Zotero DB is in WAL mode and Zotero has committed rows that are still only in `zotero.sqlite-wal`, a new `DatabaseSync('file://\u2026?immutable=1')` reader does not read those frames, so `/api/library` can stay stale or even fail against an older main file right after Zotero writes despite opening a fresh connection. Use a normal read-only URI such as `mode=ro`, or read from an explicitly copied/checkpointed snapshot instead of the live WAL database.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHiwQ",
+    "path": "resolver-plugins/zbmath-lib.mjs",
+    "line": 17,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T20:57:05Z",
+        "databaseId": 3449053560,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Strip ZBMath AN prefixes case-insensitively**\n\nThe server accepts resolver inputs with case-insensitive patterns, so `AN:0139.24606` passes validation, but this branch only strips the lowercase `an:` prefix. For that accepted input the resolver searches ZBMath for `an:AN:0139.24606` and fails before import; normalize or strip the prefix case-insensitively before building the search query.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9l",
+    "path": "src/App.tsx",
+    "line": 215,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:07Z",
+        "databaseId": 3449054656,
+        "body": "## ai-review/slop / Character transformation in citekey computation must either succeed deterministically or fail loud with an error that prevents silent data loss. The replacement-character fallback followed by silent r\n\nStructured error responses from the server (with error kind and message) must be forwarded to the user, not replaced with a client-generated generic message that discards the server's classification.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/60)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9n",
+    "path": "package.json",
+    "line": 38,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:08Z",
+        "databaseId": 3449054658,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nEvery dependency declared in package.json must be provably imported or required at its declared boundary before a PR that introduces it is complete. A dependency with zero import sites is dead infrastructure: it wastes install time, increases lock-file surface area, expands the attack surface for supply-chain vulnerabilities, and misleads future maintainers about what the project actually depends on.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/64)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9q",
+    "path": "package.json",
+    "line": 37,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:08Z",
+        "databaseId": 3449054662,
+        "body": "## ai-review/slop / Server configuration must not leak into the frontend bundle \u2014 frontend code must import only what it needs, not a file containing database URIs, storage paths, and write endpoints.\n\nEvery dependency declared in package.json must be provably imported or required in source code before a PR that introduces it is complete. A dependency with zero import sites is dead infrastructure that increases install time, bundle size, and supply-chain surface with no benefit.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/63)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9t",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 99,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:08Z",
+        "databaseId": 3449054665,
+        "body": "## ai-review/slop / Every dependency declared in package.json must be provably imported or required at its declared boundary before a PR that introduces it is complete. A dependency with zero import sites is dead infrast\n\nA validated resource must carry its derived work product forward instead of discarding and recomputing it on every consumer invocation\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/66)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9v",
+    "path": "src/utils/fuzzy.ts",
+    "line": 4,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:08Z",
+        "databaseId": 3449054667,
+        "body": "## ai-review/slop / A single owned capability (fuzzy string matching) should use one dependency, not two overlapping libraries with different APIs and bundle costs.\n\nA single owned capability (fuzzy string matching) should use one dependency, not two overlapping libraries with different APIs and bundle costs.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/65)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi9w",
+    "path": "src/utils/fuzzy.ts",
+    "line": 14,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T20:58:08Z",
+        "databaseId": 3449054668,
+        "body": "## ai-review/slop / Character transformation in citekey computation must either succeed deterministically or fail loud with an error that prevents silent data loss. The replacement-character fallback followed by silent r\n\nCharacter transformation in citekey computation must either succeed deterministically or fail loud with an error that prevents silent data loss. The replacement-character fallback followed by silent removal at fuzzy.ts:77 violates the 'no silent data transformation' invariant.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/61)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHi-N",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 96,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T20:58:12Z",
+        "databaseId": 3449054713,
+        "body": "### [Slop Review][tier2] SLOP SUSPECT\n<!-- ai-review-fingerprint: 70e71118e0115c52547a7db4179b6f6fb7e89fdd9205e25ee8aa030558943682 -->\n\n**Location:** `src/server/resolverPlugins.ts:96-99`\n**Violated invariant:** A validated resource must carry its derived work product forward instead of discarding and recomputing it on every consumer invocation\n**Proof:** `rg 'new RegExp' src/server/resolverPlugins.ts --line-number`\n**Pattern:** compiled-regex validation discards the compiled regex; hot-path recompiles it on every call\n**Why this matters:** Each resolver input check compiles the pattern regex from scratch instead of using a cached compiled regex, incurring O(n) regex compilation per invocation with no benefit\n**Evidence:** `src/server/resolverPlugins.ts:96-99` (file-read), `src/server/resolverPlugins.ts:113-115` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHjWs",
+    "path": "src/utils/fuzzy.ts",
+    "line": 189,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "kilo-code-bot",
+        "createdAt": "2026-06-21T21:00:03Z",
+        "databaseId": 3449056767,
+        "body": "**SUGGESTION:** Stale advanced-search comment references removed Fuse threshold\n\n`src/utils/fuzzy.ts:189` still describes advanced search as using \"Fuse threshold + token all/any ranking\", but this diff removes `fuse.js`, `fuzzyThreshold`, and all Fuse usage from advanced search. Update the comment to describe the current fzf token all/any behavior so the docs do not preserve the old implementation contract.\n---\nReply with `@kilocode-bot fix it` to have Kilo Code address this issue."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHmaU",
+    "path": "src/utils/citation.ts",
+    "line": 133,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T21:14:09Z",
+        "databaseId": 3449072888,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Hide citation actions for non-author creator roles**\n\nWhen a supported Zotero type has only name-bearing roles other than author/editor, such as a patent with `inventor` or a film with `director`, this predicate returns true and the UI offers the BibTeX/APA copy actions. `itemToCsl()` then drops those roles in `cslNamesByRole()` and throws the new \u201cno author or editor\u201d error, so clicking the advertised citation action raises an uncaught UI error instead of being unavailable or handled. Make the affordance predicate match all throw conditions, or map the relevant Zotero creator roles into CSL names.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHmaW",
+    "path": "src/components/LibraryTable.tsx",
+    "line": 104,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T21:14:09Z",
+        "databaseId": 3449072890,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Encode DOI cells before opening doi.org**\n\nWhen the DOI column is visible and a stored DOI suffix contains reserved URL characters such as `?` or `#`, interpolating the raw cell value into `https://doi.org/${cellVal}` makes the browser treat the suffix tail as a query/fragment instead of DOI path data. Those valid DOI values open the wrong identifier even though the resolver path now preserves them by encoding the suffix; the table click handler should use the same DOI URL construction instead of raw concatenation.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHonm",
+    "path": "src/columnModel.ts",
+    "line": 177,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084606,
+        "body": "## ai-review/general / A type assertion must not substitute for runtime input validation when downstream consumers rely on the asserted type for correct behavior. Casting value as ZoteroSearchKey after checking Set<string>.\n\nEvery column key from DEFAULT_COLUMNS must be a valid SortKey at compile time; the `columnId as SortKey` cast at line 177 removes this guarantee, allowing non-SortKey keys to compile and silently produce empty sort values.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/74)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHonr",
+    "path": "src/libraryViews.ts",
+    "line": 17,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084612,
+        "body": "## ai-review/general / Expensive side effects (localStorage read, JSON.parse, Zod schema validation, column key iteration) in readStoredColumns must not execute on every React component render. The lazy initializer form of \n\nAdding a new view sentinel requires coordinated changes in at least three independent locations (LIBRARY_VIEW_SENTINELS, selectItemsForCollection switch, getCollectionName if-else chains); adding a sentinel to only some locations produces incorrect UI behavior without any compiler error.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/76)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHonv",
+    "path": "src/schemas.ts",
+    "line": 37,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084617,
+        "body": "## ai-review/general / A type assertion must not substitute for runtime input validation when downstream consumers rely on the asserted type for correct behavior. Casting value as ZoteroSearchKey after checking Set<string>.\n\nPOLICY.NO_RUNTIME_DEFAULT \u2014 a required domain field that fails preflight checks must not be allowed to pass through the Zod boundary as undefined only to be silently replaced with empty string by every downstream consumer\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/67)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHonz",
+    "path": "src/server/libraryApi.test.ts",
+    "line": 180,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084622,
+        "body": "## ai-review/general / Route-level tests must exercise the production code path (loadLibraryFromDatabaseUri -> assertZoteroDatabaseContract -> queryLibrary), not bypass the contract preflight by passing queryLibrary(db) dir\n\nRoute-level tests must exercise the production code path (loadLibraryFromDatabaseUri -> assertZoteroDatabaseContract -> queryLibrary), not bypass the contract preflight by passing queryLibrary(db) directly.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/71)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHon4",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 291,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084626,
+        "body": "## ai-review/general / assertZoteroDatabaseContract must not execute the full queryLibrary data pipeline only to discard the result, forcing the caller to repeat every SQL query and row parse.\n\nassertZoteroDatabaseContract must not execute the full queryLibrary data pipeline only to discard the result, forcing the caller to repeat every SQL query and row parse.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/73)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHon7",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 561,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084629,
+        "body": "## ai-review/general / A request with a malformed JSON body sent to any POST endpoint must return HTTP 400 with kind invalid_request, not HTTP 500 with kind internal_error. The error middleware must distinguish client-level\n\nEvery non-synthetic collection from the repository must carry a Zotero collection key at the import boundary, but both the runtime schema (CollectionSchema) and the type interface (Collection) declare key as optional, so a future schema change that drops key would not be caught at compile time.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/75)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHon_",
+    "path": "src/appCommands.test.ts",
+    "line": 28,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084634,
+        "body": "## ai-review/general / Route-level tests must exercise the production code path (loadLibraryFromDatabaseUri -> assertZoteroDatabaseContract -> queryLibrary), not bypass the contract preflight by passing queryLibrary(db) dir\n\nPOLICY.NO_MOCK_PROOF \u2014 a test that proves only the shape of a command registration list (ID strings) does not prove any behavioral contract: the actions could be dead callbacks, miswired closures, or silently throwing functions and the test would still pass\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/69)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHooB",
+    "path": "src/server/server.ts",
+    "line": 114,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084636,
+        "body": "## ai-review/general / A request with a malformed JSON body sent to any POST endpoint must return HTTP 400 with kind invalid_request, not HTTP 500 with kind internal_error. The error middleware must distinguish client-level\n\nA request with a malformed JSON body sent to any POST endpoint must return HTTP 400 with kind invalid_request, not HTTP 500 with kind internal_error. The error middleware must distinguish client-level parse errors from server bugs.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/72)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHooG",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 230,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084641,
+        "body": "## ai-review/general / Route-level tests must exercise the production code path (loadLibraryFromDatabaseUri -> assertZoteroDatabaseContract -> queryLibrary), not bypass the contract preflight by passing queryLibrary(db) dir\n\nItem types should be validated exactly once against a definitive contract. Calling parseItemType during preflight (line 230) and then LibraryPayloadSchema.parse (line 564) on the same data duplicates the same validation without providing a distinct fault domain.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/77)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHooK",
+    "path": "src/utils/fuzzy.ts",
+    "line": 247,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:00Z",
+        "databaseId": 3449084645,
+        "body": "## ai-review/general / A type assertion must not substitute for runtime input validation when downstream consumers rely on the asserted type for correct behavior. Casting value as ZoteroSearchKey after checking Set<string>.\n\nA type assertion must not substitute for runtime input validation when downstream consumers rely on the asserted type for correct behavior. Casting value as ZoteroSearchKey after checking Set<string>.has() provides no guarantee the value matches any literal member of the union type.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/68)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHooP",
+    "path": "src/utils/fuzzy.ts",
+    "line": 283,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:01Z",
+        "databaseId": 3449084650,
+        "body": "## ai-review/general / Expensive side effects (localStorage read, JSON.parse, Zod schema validation, column key iteration) in readStoredColumns must not execute on every React component render. The lazy initializer form of \n\nWhen all search fields are disabled and a non-empty query exists, the user expects zero filtering (no fields to filter on = show everything) rather than zero results. An empty search-keys list should short-circuit to the full items list, not to an empty list.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/70)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHooU",
+    "path": "src/utils/fuzzy.ts",
+    "line": 285,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-21T21:24:01Z",
+        "databaseId": 3449084656,
+        "body": "## ai-review/general / Route-level tests must exercise the production code path (loadLibraryFromDatabaseUri -> assertZoteroDatabaseContract -> queryLibrary), not bypass the contract preflight by passing queryLibrary(db) dir\n\nTwo code paths that construct identical Fzf instances from the same document type should share a factory or builder rather than independently duplicating the configuration.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/79)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo3",
+    "path": "src/columnModel.ts",
+    "line": 177,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:04Z",
+        "databaseId": 3449084712,
+        "body": "### [General Review][tier1] TYPE_ESCAPE_HATCH\n<!-- ai-review-fingerprint: cd26f319188e8d46daf1e2c51dab5169f48782ba739d121364cb37a690c571f9 -->\n\n**Location:** `src/columnModel.ts:177-177`\n**Violated invariant:** Every column key from DEFAULT_COLUMNS must be a valid SortKey at compile time; the `columnId as SortKey` cast at line 177 removes this guarantee, allowing non-SortKey keys to compile and silently produce empty sort values.\n**Proof:** `grep -n 'as SortKey' src/columnModel.ts && grep -n 'creators_compact' src/utils/fuzzy.ts | head -3`\n**Symptom:** A new column added to DEFAULT_COLUMNS with a key not listed in SortKey compiles without error but sorts all items to the empty string for that column, producing a non-reproducible ordering.\n**Source:** zoteroSortingFn at columnModel.ts:177 casts columnId (a generic string from TanStack) as SortKey via `columnId as SortKey`. There is no runtime guard that columnId is actually in the SortKey union before the cast.\n**Consequence:** Column sorting degrades silently when new columns lack an explicit SortKey entry. No compile error or test failure announces the gap.\n**Evidence:** `src/columnModel.ts:170-184` (file-read), `src/librarySelectors.ts:1-5` (file-read)\n\n**Possible duplicate disposition required:** a prior PR thread has this category/path fingerprint. Compare invariant, source, consequence, and evidence before resolving; do not suppress this finding by similarity alone."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo5",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 550,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:04Z",
+        "databaseId": 3449084714,
+        "body": "### [General Review][tier1] NULL_UNSAFE\n<!-- ai-review-fingerprint: 4f1d748eea4ae8e062d84795d0ce81514136faef57b31f9ad82c04626c6884e6 -->\n\n**Location:** `src/server/zoteroRepository.ts:550-561`\n**Violated invariant:** Every non-synthetic collection from the repository must carry a Zotero collection key at the import boundary, but both the runtime schema (CollectionSchema) and the type interface (Collection) declare key as optional, so a future schema change that drops key would not be caught at compile time.\n**Proof:** `grep -n 'key' src/server/zoteroRepository.ts | tail -5 && grep -n 'key' src/schemas.ts | grep Collection && grep -n 'key' src/types.ts | grep Collection`\n**Symptom:** If queryLibrary ever stops populating the key field (e.g., SQL column rename), selectModalImportCollections at libraryViews.ts:64 throws a generic error instead of a typed contract violation, and the error surfaces at runtime rather than during schema validation.\n**Source:** CollectionSchema at schemas.ts:35 declares key as z.string().optional(); Collection interface at types.ts:147 has key?: string. The contract that real (non-synthetic) collections must carry a populated key is an unwritten convention enforced only by a runtime throw at libraryViews.ts:64.\n**Consequence:** The repository-to-import-module contract for collection keys has no type-level enforcement. A future regression that drops the key value is invisible until a user triggers the import path.\n**Evidence:** `src/server/zoteroRepository.ts:550-562` (file-read), `src/libraryViews.ts:58-68` (file-read), `src/schemas.ts:27-36` (file-read), `src/types.ts:140-148` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo6",
+    "path": "src/libraryViews.ts",
+    "line": 11,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:04Z",
+        "databaseId": 3449084715,
+        "body": "### [General Review][tier1] DUPLICATED_CONTRACT\n<!-- ai-review-fingerprint: fdd78005c939ee63b03abe37baff8db1e4506d6c34b267642e9d8c206bf63da7 -->\n\n**Location:** `src/libraryViews.ts:11-17`\n**Violated invariant:** Adding a new view sentinel requires coordinated changes in at least three independent locations (LIBRARY_VIEW_SENTINELS, selectItemsForCollection switch, getCollectionName if-else chains); adding a sentinel to only some locations produces incorrect UI behavior without any compiler error.\n**Proof:** `grep -n 'duplicates\\|no-pdf\\|no-extraction\\|nonstandard-citekey' src/libraryViews.ts src/librarySelectors.ts src/App.tsx`\n**Symptom:** A new sentinel added to LIBRARY_VIEW_SENTINELS and selectItemsForCollection but omitted from getCollectionName silently shows 'My Library' as its collection name instead of the expected label.\n**Source:** LIBRARY_VIEW_SENTINELS (libraryViews.ts:11-17) is the canonical definition, but selectItemsForCollection (librarySelectors.ts:116-126) independently enumerates each sentinel in a switch statement, and getCollectionName (App.tsx:226-233) independently enumerates each sentinel with if-else branches. The default branch in selectItemsForCollection at least throws on unknown ids, but getCollectionName has no guard and falls through to 'My Library'.\n**Consequence:** A new view sentinel added incompletely produces a misleading collection name in the sidebar header. The bug is silent \u2014 no compiler error, no test failure unless a test explicitly checks the new sentinel's name.\n**Evidence:** `src/libraryViews.ts:11-17` (file-read), `src/librarySelectors.ts:111-135` (file-read), `src/App.tsx:226-233` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo7",
+    "path": "src/utils/citation.ts",
+    "line": 82,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:05Z",
+        "databaseId": 3449084716,
+        "body": "### [General Review][tier2] SILENT_IGNORE\n<!-- ai-review-fingerprint: c474c2a342b89470b55d885fefc9ae45aac8fac7800bca9c62b6a115f865ab5f -->\n\n**Location:** `src/utils/citation.ts:82-92`\n**Violated invariant:** Creator roles beyond author, editor, and serieseditor must either be mapped to a CSL name field or explicitly excluded with a diagnostic; silent dropping of known Zotero roles (translator, inventor, contributor, etc.) produces a misleading error downstream.\n**Proof:** `grep -n 'creatorType' src/types.ts && grep -n 'cslNamesByRole' src/utils/citation.ts && echo 'Roles handled:' && sed -n '82,92p' src/utils/citation.ts`\n**Symptom:** An item with translator or inventor as its only creator triggers 'Item has no author or editor' (citation.ts:160-163) even though it has creators \u2014 the misleading error masks the real issue (unhandled Zotero creator role).\n**Source:** cslNamesByRole at citation.ts:82-92 only recognizes 'author', 'editor', and 'serieseditor'. All other Creator.creatorType values (including 'translator', 'inventor', 'contributor', 'bookAuthor', 'attorneyAgent') are silently dropped from both author and editor arrays.\n**Consequence:** Users cannot distinguish 'item has no creators at all' from 'item has creators with an unsupported role'. The error message is actively misleading, as it claims 'no author or editor' when the item may have creators of other Zotero roles.\n**Evidence:** `src/utils/citation.ts:78-92` (file-read), `src/utils/citation.ts:155-165` (file-read)\n\n**Possible duplicate disposition required:** a prior PR thread has this category/path fingerprint. Compare invariant, source, consequence, and evidence before resolving; do not suppress this finding by similarity alone."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo8",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 230,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:05Z",
+        "databaseId": 3449084717,
+        "body": "### [General Review][tier2] REDUNDANT_VALIDATION\n<!-- ai-review-fingerprint: 31a3297f671fd19b1814e17f63b4b34c0be6cbc6c68e86b65b84b72874a66f71 -->\n\n**Location:** `src/server/zoteroRepository.ts:230-230`\n**Violated invariant:** Item types should be validated exactly once against a definitive contract. Calling parseItemType during preflight (line 230) and then LibraryPayloadSchema.parse (line 564) on the same data duplicates the same validation without providing a distinct fault domain.\n**Proof:** `grep -n 'parseItemType\\|LibraryPayloadSchema.parse' src/server/zoteroRepository.ts`\n**Symptom:** Each library load validates every observed item type twice \u2014 once in assertObservedItemTypes via parseItemType (line 230) and again when LibraryPayloadSchema.parse validates every item's itemType field against ItemTypeSchema (line 564).\n**Source:** assertObservedItemTypes at zoteroRepository.ts:216-232 runs parseItemType on every distinct item type from the DB. Then the full pipeline at line 564 passes all items through LibraryPayloadSchema.parse, which validates the same itemType field via its own ItemTypeSchema enum. Both enforce the same 'must be in ITEM_TYPES' contract.\n**Consequence:** Unnecessary double computation on every library load. If the two validations ever diverge (one allows a type the other rejects), the behavior is inconsistent \u2014 the preflight would throw before any item is returned, while the schema parse would throw inside a later-boundary parse.\n**Evidence:** `src/server/zoteroRepository.ts:216-232` (file-read), `src/server/zoteroRepository.ts:564-565` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo9",
+    "path": "package.json",
+    "line": 41,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:05Z",
+        "databaseId": 3449084718,
+        "body": "### [General Review][tier2] DEAD_CODE\n<!-- ai-review-fingerprint: 7d007c9da5f0c18d2ff909d2082c3631b4fbdecbb7479109691efbadaedefd72 -->\n\n**Location:** `package.json:41-41`\n**Violated invariant:** Every declared runtime dependency must be imported by at least one owned source file, or it should be removed to avoid misleading maintainers about the app's actual dependency surface.\n**Proof:** `grep -rn 'from.*motion' src/ 2>/dev/null; echo '---'; grep -rn 'from.*@radix-ui/react-select' src/ 2>/dev/null; echo '---'; grep -rn 'from.*@radix-ui/react-tabs' src/ 2>/dev/null; echo '---'; grep -rn 'autoprefixer' src/ 2>/dev/null; echo '---'; grep -rn 'esbuild' src/ 2>/dev/null; echo '---'; echo 'vite in both dependencies and devDependencies:' grep -c 'vite' package.json`\n**Symptom:** The package.json declares 'motion' (line 41), '@radix-ui/react-select' (line 26), '@radix-ui/react-tabs' (line 27), 'autoprefixer' (line 57), and 'esbuild' (line 58), but none is imported by any file under src/. Additionally, 'vite' appears in both dependencies (line 45) and devDependencies (line 63).\n**Source:** package.json dependency declarations that are not consumed by owned source code.\n**Consequence:** Unnecessary install-time overhead and misleading documentation of what the app actually depends on. The dual vite listing is confusing but harmless since both resolve to the same version.\n**Evidence:** `package.json:18-65` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHoo_",
+    "path": "src/utils/fuzzy.ts",
+    "line": 281,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-21T21:24:05Z",
+        "databaseId": 3449084720,
+        "body": "### [General Review][tier2] DUPLICATED_LOGIC\n<!-- ai-review-fingerprint: 9b97b48fc906e0bd0f3c4d406544f86fcaadf1bf7a60caf2c3ba06d5ae89accd -->\n\n**Location:** `src/utils/fuzzy.ts:281-285`\n**Violated invariant:** Two code paths that construct identical Fzf instances from the same document type should share a factory or builder rather than independently duplicating the configuration.\n**Proof:** `grep -n 'new Fzf' src/utils/fuzzy.ts`\n**Symptom:** rankDocuments (line 281-285) and rankPaletteDocuments (line 304-308) each construct a new Fzf instance with identical configuration (selector document key projection, casing 'case-insensitive' or configurable, normalize true) from the same ZoteroSearchDocument type.\n**Source:** Both functions accept ZoteroSearchDocument[] and independently configure Fzf with the same selector function (closure over searchText with the caller's keys), the same casing behavior (or configurable vs hardcoded), and the same normalize flag.\n**Consequence:** Any future change to Fzf configuration (e.g., adding a custom scoring function, changing normalize behavior) must be applied in two places. The divergence potential increases with each Fzf configuration option added.\n**Evidence:** `src/utils/fuzzy.ts:271-311` (file-read)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LHo-P",
+    "path": "src/utils/fuzzy.ts",
+    "line": 221,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-21T21:25:38Z",
+        "databaseId": 3449086432,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Index all creator names for author search**\n\nWhen a user searches by a creator name that is not present in the compact display string\u2014such as a first name or a third author hidden behind \u201cet al.\u201d\u2014the top-bar search, command palette, and Advanced Search \u201cCreators\u201d target no longer find the item. The only UI-exposed creator search key is `creators_compact` (from the default columns/search keys), but this projection stores only `formatCreatorsCompact(...)` while the full `creators` projection is not selectable, so common author searches regress for multi-author or first-name queries. Populate the searchable creator key with all creator names or wire the full creators projection into the UI.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  }
+]

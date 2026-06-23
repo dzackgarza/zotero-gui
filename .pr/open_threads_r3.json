@@ -1,0 +1,142 @@
+[
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPN6K",
+    "path": "resolver-plugins/doi.mjs",
+    "line": 36,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-22T11:18:18Z",
+        "databaseId": 3451779169,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Preserve reserved characters in bare DOI suffixes**\n\nWhen the user enters a bare DOI whose suffix contains `?` or `#` (the manifest accepts this via `\\S+`, and the resolver comment says these are valid suffix characters), these splits truncate the actual identifier before `doiRequestUrl` can percent-encode it. For example, `10.1234/foo?bar` is resolved as `10.1234/foo`, so the resolver can import the wrong record; strip query/fragment only for URL-form inputs.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPN6R",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 228,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "chatgpt-codex-connector",
+        "createdAt": "2026-06-22T11:18:18Z",
+        "databaseId": 3451779176,
+        "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Wrap write-endpoint fetch failures as upstream errors**\n\nIf the Zotero write API is unreachable at this point (for example Zotero quits after the startup check, or the route is called directly), `fetchImpl` rejects before a `Response` exists. That rejection is not converted to `ZoteroImportError`, so the route's classifier falls through to `internal_error` 500 instead of the upstream/Zotero failure kind used for HTTP failures from the same boundary.\n\nUseful? React with \ud83d\udc4d\u00a0/ \ud83d\udc4e."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUSp",
+    "path": "src/App.tsx",
+    "line": 207,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814115,
+        "body": "## ai-review/slop / Character transformation in citekey computation must either succeed deterministically or fail loud with an error that prevents silent data loss. The replacement-character fallback followed by silent r\n\nStructured error responses from the server (with error kind and message) must be forwarded to the user, not replaced with a client-generated generic message that discards the server's classification.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/103)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUS3",
+    "path": "src/server/main.ts",
+    "line": 10,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814129,
+        "body": "## ai-review/slop / Generated BibTeX must be well-formed \u2014 field values wrapped in braces must have braces escaped so the output is always parseable by the BibTeX parser.\n\nA configuration constant that is used across multiple modules must be defined in exactly one shared location; duplicating it in two files creates a maintenance hazard where one copy can silently diverge from the other.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/105)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUS8",
+    "path": "src/server/main.ts",
+    "line": 44,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814137,
+        "body": "## ai-review/slop / A shared utility function must be defined in exactly one owned location and imported by all consumers, not independently defined in every plugin and server module, to prevent silent divergence when on\n\nA startup fail-fast should run the minimum validation needed to prove the dependency is available; the full library query (SQL scans + Zod parsing of every row) must not execute at module scope with the result discarded.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/101)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUTI",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 99,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814151,
+        "body": "## ai-review/slop / Every dependency declared in package.json must be provably imported or required at its declared boundary before a PR that introduces it is complete. A dependency with zero import sites is dead infrast\n\nA validated resource must carry its derived work product forward instead of discarding and recomputing it on every consumer invocation\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/104)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUTP",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 227,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814159,
+        "body": "## ai-review/slop / Every validation boundary must be necessary \u2014 redundant parsing on the production path is dead validation that masks whether the second check actually guards a distinct code path.\n\nEvery validation boundary must be necessary \u2014 redundant parsing on the production path is dead validation that masks whether the second check actually guards a distinct code path.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/107)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUTQ",
+    "path": "src/server/resolverPlugins.ts",
+    "line": 205,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-actions",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814158,
+        "body": "### [Slop Review][tier2] SLOP\n<!-- ai-review-fingerprint: c4d87244824672e5d59d9ced1a93e868ff26247c8d64b6b4fbd9e4776b3ae1ea -->\n\n**Location:** `src/server/resolverPlugins.ts:205-227`\n**Violated invariant:** Every validation boundary must be necessary \u2014 redundant parsing on the production path is dead validation that masks whether the second check actually guards a distinct code path.\n**Proof:** `rg 'parseBibTeXToMetadata' src/server/resolverPlugins.ts`\n**Pattern:** REDUNDANT_VALIDATION\n**Why this matters:** The second parse provides no actual safety margin because no code path between the two calls modifies the BibTeX string. If `parseBibTeXToMetadata` has a bug, both parses share it. A future change that adds a third validation step looks like defense-in-depth but continues the pattern of dead validation boundaries, making the pipeline harder to reason about without increasing correctness.\n**Evidence:** `src/server/resolverPlugins.ts:205-206` (file-read), `src/server/resolverPlugins.ts:227-227` (file-read), `src/server/resolverPlugins.ts:253-254` (file-read)\n\n**Possible duplicate disposition required:** a prior PR thread has this category/path fingerprint. Compare invariant, source, consequence, and evidence before resolving; do not suppress this finding by similarity alone."
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUTa",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 171,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:04Z",
+        "databaseId": 3451814172,
+        "body": "## ai-review/slop / An error crossing a system boundary must preserve its original type identification so the downstream observer can discriminate different failure modes.\n\nA date that fails semantic validation must not be silently converted to a simpler form that omits the failure signal.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/99)"
+      }
+    ]
+  },
+  {
+    "thread_id": "PRRT_kwDOS-nFnM6LPUTn",
+    "path": "src/server/zoteroRepository.ts",
+    "line": 332,
+    "outdated": false,
+    "comments": [
+      {
+        "author": "github-advanced-security",
+        "createdAt": "2026-06-22T11:25:05Z",
+        "databaseId": 3451814186,
+        "body": "## ai-review/slop / An error crossing a system boundary must preserve its original type identification so the downstream observer can discriminate different failure modes.\n\nAn error crossing a system boundary must preserve its original type identification so the downstream observer can discriminate different failure modes.\n\n[Show more details](https://github.com/dzackgarza/zotero-gui/security/code-scanning/100)"
+      }
+    ]
+  }
+]
