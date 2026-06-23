@@ -113,7 +113,31 @@ describe('column layout persistence', () => {
     expect(() => readColumnLayout()).toThrow(/unknown column: phantomColumn/);
   });
 
-  it('throws on the outdated hand-rolled array shape', () => {
+  it('migrates the historical hand-rolled array shape', () => {
+    const historical = DEFAULT_COLUMNS.map(column => ({
+      key: column.key,
+      visible: column.key === 'doi' ? true : column.visible,
+      width: column.key === 'publicationTitle' ? 175 : column.width,
+    }));
+    historical.sort((left, right) => {
+      if (left.key === 'creators_compact') return -1;
+      if (right.key === 'creators_compact') return 1;
+      if (left.key === 'title') return -1;
+      if (right.key === 'title') return 1;
+      return 0;
+    });
+
+    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(historical));
+
+    const migrated = readColumnLayout();
+
+    expect(migrated.columnOrder.slice(0, 2)).toEqual(['creators_compact', 'title']);
+    expect(migrated.columnVisibility.doi).toBe(true);
+    expect(migrated.columnVisibility.title).toBe(true);
+    expect(migrated.columnSizing.publicationTitle).toBe(175);
+  });
+
+  it('throws on a partial historical hand-rolled array shape', () => {
     localStorage.setItem(
       COLUMN_STORAGE_KEY,
       JSON.stringify([
@@ -121,7 +145,7 @@ describe('column layout persistence', () => {
         { key: 'creators_compact', visible: true, width: 180 },
       ]),
     );
-    expect(() => readColumnLayout()).toThrow(ZodError);
+    expect(() => readColumnLayout()).toThrow(/does not match the current column contract/);
   });
 });
 

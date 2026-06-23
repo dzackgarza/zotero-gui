@@ -35,10 +35,19 @@ export interface ColumnLayoutState {
 // --- Persistence schema (versioned, schema-validated, FAIL-LOUD) ---------
 //
 // A stored layout is the three TanStack state slices plus a schema version. A
-// malformed or outdated stored value must throw, never silently reset — the
-// crash surfaces an upstream/contract change instead of hiding it behind
-// defaults. The version is bumped if the persisted shape ever changes.
+// malformed stored value must throw, never silently reset. The version is
+// bumped if the persisted shape ever changes. The one admitted unversioned
+// shape is the hand-rolled column array written by this app before the TanStack
+// migration; it is parsed explicitly and converted at this boundary.
 export const COLUMN_LAYOUT_PERSIST_VERSION = 2;
+
+const HistoricalStoredColumnSchema = z.strictObject({
+  key: z.string(),
+  visible: z.boolean(),
+  width: z.number().positive(),
+});
+
+const HistoricalStoredColumnsSchema = z.array(HistoricalStoredColumnSchema);
 
 const StoredColumnLayoutSchema = z
   .object({
@@ -82,6 +91,25 @@ function assertKnownColumnKeys(keys: Iterable<string>, contractIds: ReadonlySet<
   }
 }
 
+function layoutFromHistoricalColumns(parsed: unknown[], contractIds: ReadonlySet<string>): ColumnLayoutState {
+  const storedColumns = HistoricalStoredColumnsSchema.parse(parsed);
+  const columnOrder = storedColumns.map(column => column.key);
+  assertExactColumnOrder(columnOrder, contractIds);
+
+  const columnVisibility: VisibilityState = {};
+  const columnSizing: ColumnSizingState = {};
+  for (const column of storedColumns) {
+    columnVisibility[column.key] = column.key === LOCKED_COLUMN_ID ? true : column.visible;
+    columnSizing[column.key] = Math.max(MIN_COLUMN_WIDTH, column.width);
+  }
+
+  return {
+    columnVisibility,
+    columnOrder,
+    columnSizing,
+  };
+}
+
 export function defaultColumnLayout(): ColumnLayoutState {
   const columnVisibility: VisibilityState = {};
   const columnSizing: ColumnSizingState = {};
@@ -100,8 +128,9 @@ export function defaultColumnLayout(): ColumnLayoutState {
 }
 
 // Read persisted layout. Returns defaults ONLY when nothing is stored (first
-// run). Any stored value that does not match the current contract — wrong
-// version, missing/extra column ids, malformed shape — throws loudly.
+// run). Historical app-owned array storage is migrated exactly. Any other
+// stored value that does not match the current contract — wrong version,
+// missing/extra column ids, malformed shape — throws loudly.
 export function readColumnLayout(): ColumnLayoutState {
   const raw = localStorage.getItem(COLUMN_STORAGE_KEY);
   if (raw === null) {
@@ -109,9 +138,13 @@ export function readColumnLayout(): ColumnLayoutState {
   }
 
   const parsed: unknown = JSON.parse(raw);
+  const contractIds = new Set<string>(DEFAULT_COLUMN_IDS);
+  if (Array.isArray(parsed)) {
+    return layoutFromHistoricalColumns(parsed, contractIds);
+  }
+
   const stored = StoredColumnLayoutSchema.parse(parsed);
 
-  const contractIds = new Set<string>(DEFAULT_COLUMN_IDS);
   assertExactColumnOrder(stored.columnOrder, contractIds);
   assertKnownColumnKeys(Object.keys(stored.columnVisibility), contractIds, 'visibility');
   assertKnownColumnKeys(Object.keys(stored.columnSizing), contractIds, 'sizing');
