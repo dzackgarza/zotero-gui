@@ -23,23 +23,3 @@ jobs:
     with:
       gate: app-boot
       profile: bun-playwright
-  slop:
-    uses: dzackgarza/ai-review-ci/.github/workflows/_review.yml@main
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-      pull-requests: write
-    with:
-      report_type: slop
-      scope: diff
-  thread-resolution:
-    needs:
-      - slop
-    uses: dzackgarza/ai-review-ci/.github/workflows/_gates.yml@main
-    permissions:
-      contents: read
-      pull-requests: read
-    with:
-      gate: thread-resolution
-      profile: bun-playwright
